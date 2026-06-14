@@ -232,4 +232,36 @@ final class FormatsTests: XCTestCase {
         let entry = try XCTUnwrap(try Tar.listEntries(in: tar).first { $0.path == "hola.txt" })
         XCTAssertEqual(String(decoding: try Tar.entryData(for: entry, in: tar), as: UTF8.self), "hola bz2")
     }
+
+    // MARK: 7z (libarchive)
+
+    func testSevenZipRoundTrip() throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("out.7z")
+        try LibArchive.write7z([
+            .init(path: "a.txt", data: Data("primero 7z".utf8), modifiedAt: nil, isDirectory: false),
+            .init(path: "dir", data: Data(), modifiedAt: nil, isDirectory: true),
+            .init(path: "dir/b.bin", data: Data((0..<400).map { UInt8($0 & 0xFF) }), modifiedAt: nil, isDirectory: false),
+        ], to: url)
+
+        let data = try Data(contentsOf: url)
+        XCTAssertEqual(Array(data.prefix(2)), [0x37, 0x7A])   // "7z" magic (37 7A BC AF 27 1C)
+        let (entries, encrypted) = try LibArchive.listEntries(in: data)
+        XCTAssertFalse(encrypted)
+        XCTAssertTrue(Set(entries.map(\.path)).isSuperset(of: ["a.txt", "dir/b.bin"]))
+        XCTAssertEqual(String(decoding: try LibArchive.extractEntry(path: "a.txt", in: data), as: UTF8.self), "primero 7z")
+        XCTAssertEqual(try LibArchive.extractEntry(path: "dir/b.bin", in: data).count, 400)
+    }
+
+    func testBsdtarReadsOur7z() throws {
+        // Cross-check con el front-end bsdtar (misma libarchive del sistema).
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/tar"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("ours.7z")
+        try LibArchive.write7z([
+            .init(path: "leeme.txt", data: Data("escrito por FilePackr".utf8), modifiedAt: nil, isDirectory: false),
+        ], to: url)
+        let content = String(decoding: try run("/usr/bin/tar", ["-xOf", url.path, "leeme.txt"]), as: UTF8.self)
+        XCTAssertEqual(content, "escrito por FilePackr")
+    }
 }

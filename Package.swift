@@ -10,8 +10,10 @@ let package = Package(
     targets: [
         // Acceso a la libbz2 del sistema (header en el SDK, dylib vía -lbz2).
         .systemLibrary(name: "Cbz2", path: "Sources/Cbz2"),
-        // Lectura/escritura de archivos comprimidos en Swift puro (ZIP/tar/gzip/xz/bzip2, cifrado).
-        .target(name: "ArchiveBrowser", dependencies: ["Cbz2"]),
+        // Acceso a la libarchive del sistema (7z/rar/iso… vía -larchive; cabeceras propias).
+        .systemLibrary(name: "Carchive", path: "Sources/Carchive"),
+        // Lectura/escritura de archivos comprimidos (ZIP/tar/gzip/xz/bzip2 en Swift puro; 7z/rar vía libarchive).
+        .target(name: "ArchiveBrowser", dependencies: ["Cbz2", "Carchive"]),
 
         .testTarget(
             name: "ArchiveBrowserTests",
