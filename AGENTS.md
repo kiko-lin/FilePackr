@@ -75,6 +75,11 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   **bidireccional** verificada contra `tar`/`gzip`/`gunzip` del sistema.
   `Tar.swift` (ustar + PAX `x` + GNU `L`), `Gzip.swift` (RFC 1952), `Deflate.deflate`.
   La app detecta el formato al abrir y reconstruye el contenido al guardar en otro.
+- **xz / tar.xz (Tier 2)**: lectura y escritura en Swift puro vía la *Compression
+  framework* (`COMPRESSION_LZMA`, cuya salida es `.xz` estándar). `Xz.swift`
+  (compress/decompress en streaming + parseo del Index para el tamaño). Interop
+  **bidireccional** verificada: `.xz` contra `python3 lzma` (liblzma) y `.tar.xz`
+  contra `bsdtar -J` (liblzma 5.4.3). `ArchiveFormat.isSingleFileOnly` agrupa gz/xz.
 - **Volúmenes** (división por bytes): `Volumes.swift` (split/join + naming, testeado).
   Esquema `nombre.zip`, `nombre_001.zip`, `nombre_002.zip`… (1ª parte = nombre base).
   Diálogo Guardar con toggle "Dividir en volúmenes" + tamaño/unidad, por formato
@@ -119,8 +124,9 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
       no tiene esas herramientas). Si falla, revisar `ZipAES` (PBKDF2/CTR/HMAC,
       campo extra 0x9901, AE-2 CRC=0).
 - [x] ~~tar/gz/tar.gz en Swift puro~~ (Tier 1, hecho — ver "Hecho").
-- [ ] **Más formatos**: 7z/rar/dmg/bzip2/xz con **libarchive** (vendorizar C —
-      esfuerzo grande). El selector de formato del diálogo ya está montado.
+- [x] ~~xz/tar.xz~~ (Tier 2, hecho — `Compression` LZMA, ver "Hecho").
+- [ ] **Más formatos**: bzip2 (`libbz2` ya viene en macOS, esfuerzo medio); luego
+      7z/rar/dmg con **libarchive** (vendorizar C — esfuerzo grande). Selector ya montado.
 - [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
       `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
 - [ ] **Cambiar cifrado/contraseña al re-guardar** ("Guardar como…"): hoy re-guardar
@@ -152,6 +158,10 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - gzip (RFC 1952): `1F 8B 08` + FLG + MTIME + (FNAME opcional) + DEFLATE +
   CRC32 + ISIZE(LE). `.tar.gz` = TAR envuelto en gzip; un `.gz` "suelto" se
   distingue de un tar.gz comprobando la firma `ustar` tras descomprimir.
+- xz: firma `FD 37 7A 58 5A 00`. La *Compression framework* (`COMPRESSION_LZMA`)
+  produce/consume `.xz` estándar. El tamaño descomprimido se lee del **Index** del
+  pie (Backward Size → Index → suma de "Uncompressed Size", todo en VLI) sin
+  descomprimir. `.tar.xz` = TAR + xz; `.xz` suelto vs tar.xz: firma `ustar` tras inflar.
 - Volúmenes: división **por bytes** (no spanning PKWARE nativo). La primera parte
   conserva el nombre base (`nombre.zip`) y las siguientes llevan `_NNN` antes de la
   extensión (`nombre_001.zip`, `nombre_002.zip`…). Reconstrucción = concatenar en
