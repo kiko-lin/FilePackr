@@ -23,6 +23,16 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - **Compilar la app**: `xcodebuild -project Cifrador/FilePackr.xcodeproj -scheme FilePackr -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build`.
   - El agente **no puede ejecutar la GUI** ni verificar comportamiento visual:
     solo compilar. El usuario prueba en Xcode (⌘R) y reporta.
+  - ⚠️ **No compiles con `CODE_SIGNING_ALLOWED=NO` en el DerivedData de Xcode**:
+    deja el `.app` sin firmar y al pulsar ▶ en Xcode falla con *"Unable to obtain a
+    task name port right … (os/kern) failure 0x5"* (el depurador no puede
+    adjuntarse: falta `get-task-allow`). Para verificación usa un DerivedData aparte:
+    `xcodebuild … -derivedDataPath /tmp/fp-verify CODE_SIGNING_ALLOWED=NO build`.
+    Si ya se ensució: recompila firmado (sin esa flag) o el usuario hace Clean Build
+    Folder (⇧⌘K) y ▶. Firma: automática, equipo `J5HQ9TN2HX`, bundle `com.kiko.FilePackr`.
+  - **Índice de SourceKit**: al crear ficheros nuevos por fuera de Xcode (grupos
+    sincronizados, objectVersion 77) el editor puede mostrar "Cannot find X in scope"
+    aunque compile; se arregla borrando el DerivedData del proyecto y reabriendo.
 - **Caché de Xcode**: tras renombrar o cambiar el icono, suele hacer falta
   **Clean Build Folder (⇧⌘K)** y a veces `killall Dock`. La resolución de paquetes
   se atasca a veces → File → Packages → Reset Package Caches.
@@ -83,6 +93,18 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - Diálogo de extracción compacto (destino = carpeta del zip; "Elegir…" abre el
   navegador; contraseña si hace falta).
 - Icono de app (full-bleed macOS 26). Lectura `.fpkz` legacy.
+- **Ajustes** (`SettingsView.swift` + `AppSettings.swift`): el engranaje de la barra
+  abre una **hoja modal** (no menú). `AppSettings` (@MainActor, ObservableObject,
+  UserDefaults, en caliente): **tema** (sistema/claro/oscuro → `preferredColorScheme`),
+  **formato por defecto**, **cifrado por defecto** (se aplican a documentos nuevos en
+  `saveDocument`), **destino de extracción** (carpeta del archivo o carpeta fija, se
+  aplica en `extract`), e **icono de app**. El idioma sigue en `Localizer`.
+- **Iconos de app** (5: naranja/verde/morado/azul/rojo): image sets en
+  `Assets.xcassets` (`AppIconOrange/Green/Purple/Blue/Red`), catálogo en
+  `AppIconOption.all`. Se aplican al **Dock** con `NSApp.applicationIconImage`
+  (recortado a esquinas redondeadas; se reaplica al arrancar). Nota: el icono del
+  **bundle** (Finder, `AppIcon`) es fijo y no cambia en caliente. Para añadir uno
+  nuevo: image set + entrada en `AppIconOption.all`.
 - **i18n** (`Localization.swift`): `Localizer` (@MainActor, ObservableObject) con
   catálogo EN/ES en memoria y cambio de idioma **en caliente** (recordado en
   UserDefaults). **Inglés por defecto**. Icono de ajustes (engranaje) en la barra →
