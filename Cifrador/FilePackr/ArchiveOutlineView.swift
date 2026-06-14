@@ -18,6 +18,8 @@ extension NSUserInterfaceItemIdentifier {
 /// Quick Look con barra espaciadora y renombrado en línea.
 struct ArchiveOutlineView: NSViewRepresentable {
     @ObservedObject var doc: ArchiveDocument
+    /// Idioma actual: al cambiar, se re-titulan columnas y menú contextual.
+    var language: Language
     /// Lanza el flujo de extracción de SwiftUI (con su diálogo de conflictos).
     var onExtract: (FileNode) -> Void
     /// Pide la contraseña (cuando el archivo está cifrado y aún no la tenemos).
@@ -42,13 +44,13 @@ struct ArchiveOutlineView: NSViewRepresentable {
             return column
         }
 
-        let nameColumn = makeColumn(.nameColumn, "Nombre", width: 240, min: 160)
+        let nameColumn = makeColumn(.nameColumn, Localizer.shared("column.name"), width: 240, min: 160)
         outline.addTableColumn(nameColumn)
         outline.outlineTableColumn = nameColumn
-        outline.addTableColumn(makeColumn(.dateColumn, "Fecha", width: 150, min: 110))
-        outline.addTableColumn(makeColumn(.sizeColumn, "Tamaño", width: 90, min: 70))
-        outline.addTableColumn(makeColumn(.kindColumn, "Clase", width: 130, min: 90))
-        outline.addTableColumn(makeColumn(.csizeColumn, "Comprimido", width: 100, min: 80))
+        outline.addTableColumn(makeColumn(.dateColumn, Localizer.shared("column.date"), width: 150, min: 110))
+        outline.addTableColumn(makeColumn(.sizeColumn, Localizer.shared("column.size"), width: 90, min: 70))
+        outline.addTableColumn(makeColumn(.kindColumn, Localizer.shared("column.kind"), width: 130, min: 90))
+        outline.addTableColumn(makeColumn(.csizeColumn, Localizer.shared("column.compressed"), width: 100, min: 80))
 
         outline.dataSource = coordinator
         outline.delegate = coordinator
@@ -81,6 +83,13 @@ struct ArchiveOutlineView: NSViewRepresentable {
         coordinator.onExtract = onExtract
         coordinator.onNeedPassword = onNeedPassword
         guard let outline = nsView.documentView as? FileOutlineView else { return }
+
+        if coordinator.lastLanguage != language {
+            coordinator.lastLanguage = language
+            coordinator.applyColumnTitles(outline)
+            outline.menu = coordinator.makeContextMenu()
+            outline.reloadData()   // refresca la columna "Clase" (kindDescription localizado)
+        }
 
         if coordinator.lastRevision != doc.revision {
             coordinator.lastRevision = doc.revision
@@ -124,6 +133,7 @@ extension ArchiveOutlineView {
         weak var outline: FileOutlineView?
 
         var lastRevision = -1
+        var lastLanguage: Language?
         var expandedNodeIDs: Set<UUID> = []
         var currentSort: (key: String, ascending: Bool)?
         private var draggedNodes: [FileNode] = []
@@ -378,12 +388,26 @@ extension ArchiveOutlineView {
 
         func makeContextMenu() -> NSMenu {
             let menu = NSMenu()
-            menu.addItem(NSMenuItem(title: "Renombrar", action: #selector(menuRename), keyEquivalent: ""))
-            menu.addItem(NSMenuItem(title: "Extraer…", action: #selector(menuExtract), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: Localizer.shared("menu.rename"), action: #selector(menuRename), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: Localizer.shared("menu.extract"), action: #selector(menuExtract), keyEquivalent: ""))
             menu.addItem(.separator())
-            menu.addItem(NSMenuItem(title: "Eliminar", action: #selector(menuDelete), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: Localizer.shared("menu.delete"), action: #selector(menuDelete), keyEquivalent: ""))
             menu.items.forEach { $0.target = self }
             return menu
+        }
+
+        /// Re-titula las columnas con el idioma actual.
+        func applyColumnTitles(_ outline: NSOutlineView) {
+            for column in outline.tableColumns {
+                switch column.identifier {
+                case .nameColumn: column.title = Localizer.shared("column.name")
+                case .dateColumn: column.title = Localizer.shared("column.date")
+                case .sizeColumn: column.title = Localizer.shared("column.size")
+                case .kindColumn: column.title = Localizer.shared("column.kind")
+                case .csizeColumn: column.title = Localizer.shared("column.compressed")
+                default: break
+                }
+            }
         }
 
         private func clickedNode() -> FileNode? {
@@ -461,7 +485,7 @@ extension ArchiveOutlineView {
         // MARK: - NSFilePromiseProviderDelegate (extraer al Finder)
 
         func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String) -> String {
-            (filePromiseProvider.userInfo as? FileNode)?.name ?? "archivo"
+            (filePromiseProvider.userInfo as? FileNode)?.name ?? Localizer.shared("promise.fallback")
         }
 
         func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, writePromiseTo url: URL,

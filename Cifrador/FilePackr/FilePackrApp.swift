@@ -6,6 +6,7 @@ struct FilePackrApp: App {
         WindowGroup {
             ContentView()
                 .frame(minWidth: 760, minHeight: 480)
+                .environmentObject(Localizer.shared)
         }
         .windowStyle(.titleBar)
     }

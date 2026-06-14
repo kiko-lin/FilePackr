@@ -20,8 +20,8 @@ private enum PasswordRequest: Identifiable {
         case .open(let url): return "open:" + url.path
         }
     }
-    var title: String { "Contraseña para abrir el archivo" }
-    var confirmLabel: String { "Abrir" }
+    var titleKey: String { "password.openTitle" }
+    var confirmKey: String { "password.open" }
 }
 
 /// Unidad de tamaño de volumen.
@@ -39,6 +39,7 @@ enum VolumeUnit: String, CaseIterable, Identifiable {
 
 /// Hoja "Guardar archivo": formato, cifrado, contraseña y división en volúmenes.
 private struct SaveOptionsSheet: View {
+    @EnvironmentObject var loc: Localizer
     @Binding var format: ArchiveFormat
     @Binding var encryption: ZipEncryption
     @Binding var password: String
@@ -63,32 +64,32 @@ private struct SaveOptionsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Guardar archivo").font(.headline)
+            Text(loc("save.title")).font(.headline)
             Form {
-                Picker("Formato", selection: $format) {
+                Picker(loc("save.format"), selection: $format) {
                     ForEach(formats, id: \.self) { fmt in
-                        Text(fmt.displayName).tag(fmt)
+                        Text(loc(fmt.nameKey)).tag(fmt)
                     }
                 }
                 if format.supportsEncryption {
-                    Picker("Cifrado", selection: $encryption) {
-                        Text("No cifrado").tag(ZipEncryption.none)
-                        Text("Débil (PKZip2 compatible)").tag(ZipEncryption.zipCrypto)
-                        Text("Fuerte (AES-256)").tag(ZipEncryption.aes256)
+                    Picker(loc("save.encryption"), selection: $encryption) {
+                        Text(loc("save.encryption.none")).tag(ZipEncryption.none)
+                        Text(loc("save.encryption.weak")).tag(ZipEncryption.zipCrypto)
+                        Text(loc("save.encryption.strong")).tag(ZipEncryption.aes256)
                     }
                     if encryption != .none {
-                        SecureField("Contraseña", text: $password)
+                        SecureField(loc("save.password"), text: $password)
                             .onSubmit { if canSave { onSave() } }
                     }
                 } else {
-                    Text("Este formato no admite cifrado.")
+                    Text(loc("save.noEncryption"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 if format.supportsVolumeSplit {
-                    Toggle("Dividir en volúmenes", isOn: $splitEnabled)
+                    Toggle(loc("save.split"), isOn: $splitEnabled)
                     if splitEnabled {
                         HStack {
-                            Text("Tamaño de cada volumen")
+                            Text(loc("save.volumeSize"))
                             Spacer()
                             TextField("", value: $volumeSize, format: .number)
                                 .frame(width: 70)
@@ -100,7 +101,7 @@ private struct SaveOptionsSheet: View {
                             .labelsHidden()
                             .frame(width: 70)
                         }
-                        Text("Se generarán «nombre.\(format.fileExtension)», «nombre_001.\(format.fileExtension)»… Para abrirlo, selecciona cualquiera de las partes.")
+                        Text(loc("save.split.hint", format.fileExtension, format.fileExtension))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -108,8 +109,8 @@ private struct SaveOptionsSheet: View {
             .formStyle(.grouped)
             HStack {
                 Spacer()
-                Button("Cancelar", role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
-                Button("Guardar…", action: onSave)
+                Button(loc("button.cancel"), role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
+                Button(loc("button.saveEllipsis"), action: onSave)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSave)
             }
@@ -122,6 +123,7 @@ private struct SaveOptionsSheet: View {
 /// Hoja compacta de extracción: destino (carpeta del zip por defecto) + contraseña.
 /// El navegador de carpetas solo aparece al pulsar "Elegir…".
 private struct ExtractOptionsSheet: View {
+    @EnvironmentObject var loc: Localizer
     let nodeName: String
     let needsPassword: Bool
     @Binding var destination: URL
@@ -133,28 +135,28 @@ private struct ExtractOptionsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Extraer «\(nodeName)»").font(.headline)
+            Text(loc("extract.title", nodeName)).font(.headline)
             HStack(spacing: 6) {
-                Text("En:").foregroundStyle(.secondary)
+                Text(loc("extract.in")).foregroundStyle(.secondary)
                 Image(nsImage: NSWorkspace.shared.icon(for: .folder))
                     .resizable().frame(width: 16, height: 16)
                 Text(destination.lastPathComponent)
                     .lineLimit(1).truncationMode(.middle)
                 Spacer()
-                Button("Elegir…", action: onChooseFolder)
+                Button(loc("extract.choose"), action: onChooseFolder)
             }
             if needsPassword {
-                SecureField("Contraseña del archivo", text: $password)
+                SecureField(loc("extract.password"), text: $password)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { if !password.isEmpty { onExtract() } }
                 if passwordWrong {
-                    Text("Contraseña incorrecta.").font(.callout).foregroundStyle(.red)
+                    Text(loc("extract.wrongPassword")).font(.callout).foregroundStyle(.red)
                 }
             }
             HStack {
                 Spacer()
-                Button("Cancelar", role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
-                Button("Extraer", action: onExtract)
+                Button(loc("button.cancel"), role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
+                Button(loc("button.extract"), action: onExtract)
                     .keyboardShortcut(.defaultAction)
                     .disabled(needsPassword && password.isEmpty)
             }
@@ -166,6 +168,7 @@ private struct ExtractOptionsSheet: View {
 
 /// Hoja de introducción de contraseña.
 private struct PasswordSheet: View {
+    @EnvironmentObject var loc: Localizer
     let title: String
     let confirmLabel: String
     @Binding var password: String
@@ -176,7 +179,7 @@ private struct PasswordSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title).font(.headline)
-            SecureField("Contraseña", text: $password)
+            SecureField(loc("password.field"), text: $password)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 280)
                 .onSubmit { if !password.isEmpty { onConfirm() } }
@@ -185,7 +188,7 @@ private struct PasswordSheet: View {
             }
             HStack {
                 Spacer()
-                Button("Cancelar", role: .cancel, action: onCancel)
+                Button(loc("button.cancel"), role: .cancel, action: onCancel)
                     .keyboardShortcut(.cancelAction)
                 Button(confirmLabel, action: onConfirm)
                     .keyboardShortcut(.defaultAction)
@@ -199,6 +202,7 @@ private struct PasswordSheet: View {
 /// Gestor de archivos comprimidos: barra superior + barra de documento + cuerpo
 /// central (zona de arrastre cuando está vacío, o el navegador `NSOutlineView`).
 struct ContentView: View {
+    @EnvironmentObject private var loc: Localizer
     @StateObject private var doc = ArchiveDocument()
     @State private var errorMessage: String?
     @State private var conflict: ExtractionConflict?
@@ -230,41 +234,41 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .toolbar { toolbarContent }
-        .confirmationDialog("Hay cambios sin guardar en «\(doc.documentName)»",
+        .confirmationDialog(loc("close.title", doc.documentName),
                             isPresented: $confirmingClose, titleVisibility: .visible) {
-            Button("Cerrar sin guardar", role: .destructive) { doc.close() }
-            Button("Cancelar", role: .cancel) {}
+            Button(loc("close.discard"), role: .destructive) { doc.close() }
+            Button(loc("button.cancel"), role: .cancel) {}
         } message: {
-            Text("Si cierras ahora perderás los cambios no guardados.")
+            Text(loc("close.message"))
         }
-        .alert("No se pudo completar la operación",
+        .alert(loc("error.title"),
                isPresented: Binding(get: { errorMessage != nil },
                                     set: { if !$0 { errorMessage = nil } }),
                presenting: errorMessage) { _ in
-            Button("Aceptar") {}
+            Button(loc("button.ok")) {}
         } message: { Text($0) }
         .confirmationDialog(
-            conflict.map { "Ya existe «\($0.destination.lastPathComponent)» en el destino" } ?? "",
+            conflict.map { loc("conflict.title", $0.destination.lastPathComponent) } ?? "",
             isPresented: Binding(get: { conflict != nil },
                                  set: { if !$0 { conflict = nil } }),
             presenting: conflict
         ) { item in
-            Button("Sobrescribir", role: .destructive) {
+            Button(loc("conflict.overwrite"), role: .destructive) {
                 let plan = item.plan, destination = item.destination
                 conflict = nil
                 Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: true) } }
             }
-            Button("Guardar como \(item.alternative.lastPathComponent)") {
+            Button(loc("conflict.saveAs", item.alternative.lastPathComponent)) {
                 let plan = item.plan, destination = item.alternative
                 conflict = nil
                 Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) } }
             }
-            Button("Cancelar", role: .cancel) { conflict = nil }
+            Button(loc("button.cancel"), role: .cancel) { conflict = nil }
         }
         .overlay { progressOverlay }
         .sheet(item: $passwordRequest) { request in
-            PasswordSheet(title: request.title,
-                          confirmLabel: request.confirmLabel,
+            PasswordSheet(title: loc(request.titleKey),
+                          confirmLabel: loc(request.confirmKey),
                           password: $passwordInput,
                           onConfirm: { confirmPassword(request) },
                           onCancel: { dismissPassword() })
@@ -281,10 +285,10 @@ struct ContentView: View {
                              onCancel: { showingSaveOptions = false })
         }
         .sheet(isPresented: $showingEntryPassword) {
-            PasswordSheet(title: "Contraseña del archivo",
-                          confirmLabel: "Abrir",
+            PasswordSheet(title: loc("password.entryTitle"),
+                          confirmLabel: loc("password.open"),
                           password: $entryPasswordInput,
-                          note: entryPasswordWrong ? "Contraseña incorrecta." : nil,
+                          note: entryPasswordWrong ? loc("password.wrong") : nil,
                           onConfirm: { confirmEntryPassword() },
                           onCancel: { showingEntryPassword = false })
         }
@@ -355,6 +359,7 @@ struct ContentView: View {
                 }
         } else {
             ArchiveOutlineView(doc: doc,
+                               language: loc.language,
                                onExtract: { extract($0) },
                                onNeedPassword: { promptEntryPassword() })
         }
@@ -373,21 +378,21 @@ struct ContentView: View {
             if doc.isEncrypted || doc.saveEncryption != .none {
                 Image(systemName: "lock.fill")
                     .foregroundStyle(.secondary)
-                    .help("Archivo cifrado")
+                    .help(loc("doc.encrypted.help"))
             }
             if doc.saveVolumeSize != nil {
                 Image(systemName: "rectangle.split.3x1")
                     .foregroundStyle(.secondary)
-                    .help("Guardado en volúmenes")
+                    .help(loc("doc.volumes.help"))
             }
             if doc.hasUnsavedChanges {
-                Text("— sin guardar")
+                Text(loc("doc.unsaved"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Cerrar") { attemptClose() }
-            Button("Guardar") { saveDocument() }
+            Button(loc("button.close")) { attemptClose() }
+            Button(loc("button.save")) { saveDocument() }
                 .disabled(!doc.hasUnsavedChanges)
                 .keyboardShortcut("s", modifiers: .command)
         }
@@ -401,10 +406,10 @@ struct ContentView: View {
             Image(systemName: "arrow.down.doc")
                 .font(.system(size: 52, weight: .light))
                 .foregroundStyle(.secondary)
-            Text("Arrastra archivos aquí")
+            Text(loc("drop.title"))
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text("Un .zip, .tar, .tar.gz o .gz se abrirá para editarlo; otros archivos crearán uno nuevo.")
+            Text(loc("drop.subtitle"))
                 .font(.callout)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
@@ -420,26 +425,38 @@ struct ContentView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup {
             Button(action: addAction) {
-                Label("Añadir", systemImage: "plus")
+                Label(loc("toolbar.add"), systemImage: "plus")
             }
-            .help("Añadir archivos, o abrir un .zip si es el primero")
+            .help(loc("toolbar.add.help"))
 
             Button { editGuarded { doc.removeSelected() } } label: {
-                Label("Eliminar", systemImage: "trash")
+                Label(loc("toolbar.delete"), systemImage: "trash")
             }
             .disabled(doc.selection == nil)
-            .help("Eliminar el elemento seleccionado")
+            .help(loc("toolbar.delete.help"))
 
             Button { editGuarded { doc.createFolder() } } label: {
-                Label("Crear carpeta", systemImage: "folder.badge.plus")
+                Label(loc("toolbar.newFolder"), systemImage: "folder.badge.plus")
             }
-            .help("Crear una carpeta")
+            .help(loc("toolbar.newFolder.help"))
 
             Button(action: extractAction) {
-                Label("Extraer", systemImage: "square.and.arrow.up")
+                Label(loc("toolbar.extract"), systemImage: "square.and.arrow.up")
             }
             .disabled(doc.selection == nil)
-            .help("Extraer el elemento seleccionado a una ubicación")
+            .help(loc("toolbar.extract.help"))
+
+            Menu {
+                Picker(loc("settings.language"), selection: $loc.language) {
+                    ForEach(Language.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Label(loc("toolbar.settings"), systemImage: "gearshape")
+            }
+            .help(loc("toolbar.settings"))
         }
     }
 
@@ -456,7 +473,7 @@ struct ContentView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
-        panel.prompt = "Añadir"
+        panel.prompt = loc("panel.add")
         if panel.runModal() == .OK {
             handleOpen(panel.urls)
         }
@@ -507,7 +524,7 @@ struct ContentView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.prompt = "Elegir"
+        panel.prompt = loc("panel.choose")
         panel.directoryURL = extractDestination
         if panel.runModal() == .OK, let url = panel.url {
             extractDestination = url
@@ -571,7 +588,7 @@ struct ContentView: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = format == .zip ? [.zip] : []
         panel.nameFieldStringValue = "\(strippedBaseName(doc.documentName)).\(format.fileExtension)"
-        panel.prompt = "Guardar"
+        panel.prompt = loc("panel.save")
         if panel.runModal() == .OK, let url = panel.url {
             Task { await runAsync {
                 try await doc.save(to: url, format: format, encryption: encryption,
@@ -610,4 +627,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+        .environmentObject(Localizer.shared)
 }

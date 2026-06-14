@@ -15,12 +15,13 @@ enum NodeSource {
 enum ArchiveFormat: Sendable, CaseIterable, Hashable {
     case zip, tar, tarGzip, gzip
 
-    var displayName: String {
+    /// Clave de localización del nombre mostrado en el selector de formato.
+    var nameKey: String {
         switch self {
-        case .zip: return "ZIP"
-        case .tar: return "TAR"
-        case .tarGzip: return "TAR.GZ (comprimido)"
-        case .gzip: return "GZIP (un fichero)"
+        case .zip: return "format.zip"
+        case .tar: return "format.tar"
+        case .tarGzip: return "format.tarGzip"
+        case .gzip: return "format.gzip"
         }
     }
 
@@ -97,12 +98,13 @@ final class FileNode: Identifiable {
 
     /// Descripción del tipo ("Carpeta", "Imagen PNG", …), como la "Clase" del Finder.
     var kindDescription: String {
-        if isDirectory { return "Carpeta" }
+        if isDirectory { return Localizer.shared("kind.folder") }
         let ext = (name as NSString).pathExtension
         if !ext.isEmpty, let type = UTType(filenameExtension: ext), let desc = type.localizedDescription {
             return desc.prefix(1).uppercased() + desc.dropFirst()
         }
-        return ext.isEmpty ? "Documento" : "Documento \(ext.uppercased())"
+        return ext.isEmpty ? Localizer.shared("kind.document")
+                           : Localizer.shared("kind.documentExt", ext.uppercased())
     }
 
     /// Ruta completa "carpeta/subcarpeta/nombre" para mostrar en menús.
@@ -153,7 +155,7 @@ final class ArchiveDocument: ObservableObject {
     /// Contraseña para descifrar las entradas del archivo abierto.
     private var entryPassword: String?
 
-    static let untitledName = "Sin título"
+    static var untitledName: String { Localizer.shared("doc.untitled") }
     static let encryptedExtension = "fpkz"
 
     private(set) var sourceArchiveData: Data?
@@ -188,7 +190,7 @@ final class ArchiveDocument: ObservableObject {
         let parts = volumeParts(for: url)
         let baseURL = parts.first ?? url
         let detected = detectFormat(for: baseURL)
-        progress = ProgressState(label: "Abriendo \(baseURL.lastPathComponent)…",
+        progress = ProgressState(label: Localizer.shared("progress.opening", baseURL.lastPathComponent),
                                  fraction: detected == .zip ? 0 : nil)
         defer { progress = nil }
 
@@ -301,7 +303,7 @@ final class ArchiveDocument: ObservableObject {
     /// Abre un archivo cifrado: descifra (en segundo plano) y muestra su contenido.
     func openEncrypted(_ url: URL, password: String) async throws {
         let container = try Data(contentsOf: url)
-        progress = ProgressState(label: "Descifrando…", fraction: nil)
+        progress = ProgressState(label: Localizer.shared("progress.decrypting"), fraction: nil)
         defer { progress = nil }
 
         let crypto = self.crypto
@@ -370,7 +372,7 @@ final class ArchiveDocument: ObservableObject {
         if documentName.isEmpty { beginNewDocument() }
         let parent = folderForNewFolder()
         let siblings = parent?.children ?? roots
-        let name = uniqueName("Nueva carpeta", among: siblings)
+        let name = uniqueName(Localizer.shared("doc.newFolder"), among: siblings)
         let node = FileNode(name: name, isDirectory: true, source: .folder)
         insert(node, into: parent)
         selection = node.id
@@ -484,7 +486,7 @@ final class ArchiveDocument: ObservableObject {
             try FileManager.default.removeItem(at: destination)
         }
         let total = max(1, plan.fileCount())
-        progress = ProgressState(label: "Extrayendo…", fraction: 0)
+        progress = ProgressState(label: Localizer.shared("progress.extracting"), fraction: 0)
         defer { progress = nil }
         try await runExtraction(plan, to: destination, total: total)
     }
@@ -559,8 +561,8 @@ final class ArchiveDocument: ObservableObject {
         let cipher = outputFormat.supportsEncryption ? encryption : .none
         let pwd = outputFormat.supportsEncryption ? password : nil
         if outputFormat == .zip { saveEncryption = cipher; savePassword = pwd }
-        progress = ProgressState(label: cipher == .none ? "Comprimiendo \(documentName)…"
-                                                         : "Cifrando \(documentName)…",
+        progress = ProgressState(label: cipher == .none ? Localizer.shared("progress.compressing", documentName)
+                                                         : Localizer.shared("progress.encrypting", documentName),
                                  fraction: outputFormat == .zip ? 0 : nil)
         defer { progress = nil }
 
@@ -588,7 +590,7 @@ final class ArchiveDocument: ObservableObject {
             }
             // 2) Colocar el resultado: un solo fichero o dividido en volúmenes.
             if let volumes {
-                progress = ProgressState(label: "Dividiendo en volúmenes…", fraction: nil)
+                progress = ProgressState(label: Localizer.shared("progress.splitting"), fraction: nil)
                 try await splitFile(work, base: url, volumeSize: volumes)
                 try? FileManager.default.removeItem(at: work)
             } else {
