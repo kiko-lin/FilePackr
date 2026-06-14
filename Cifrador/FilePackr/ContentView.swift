@@ -11,19 +11,6 @@ private struct ExtractionConflict: Identifiable {
     let alternative: URL    // nombre libre propuesto (p.ej. "3d_2.svg")
 }
 
-/// Petición de contraseña: para abrir un archivo cifrado o para guardar cifrando.
-private enum PasswordRequest: Identifiable {
-    case open(URL)
-
-    var id: String {
-        switch self {
-        case .open(let url): return "open:" + url.path
-        }
-    }
-    var titleKey: String { "password.openTitle" }
-    var confirmKey: String { "password.open" }
-}
-
 /// Unidad de tamaño de volumen.
 enum VolumeUnit: String, CaseIterable, Identifiable {
     case kilobytes = "KB", megabytes = "MB", gigabytes = "GB"
@@ -209,8 +196,6 @@ struct ContentView: View {
     @State private var showingSettings = false
     @State private var conflict: ExtractionConflict?
     @State private var confirmingClose = false
-    @State private var passwordRequest: PasswordRequest?
-    @State private var passwordInput = ""
     @State private var showingSaveOptions = false
     @State private var saveFormatChoice: ArchiveFormat = .zip
     @State private var saveEncryptionChoice: ZipEncryption = .none
@@ -273,13 +258,6 @@ struct ContentView: View {
             Button(loc("button.cancel"), role: .cancel) { conflict = nil }
         }
         .overlay { progressOverlay }
-        .sheet(item: $passwordRequest) { request in
-            PasswordSheet(title: loc(request.titleKey),
-                          confirmLabel: loc(request.confirmKey),
-                          password: $passwordInput,
-                          onConfirm: { confirmPassword(request) },
-                          onCancel: { dismissPassword() })
-        }
         .sheet(isPresented: $showingSaveOptions) {
             SaveOptionsSheet(format: $saveFormatChoice,
                              encryption: $saveEncryptionChoice,
@@ -382,7 +360,7 @@ struct ContentView: View {
                 .fontWeight(.medium)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            if doc.isEncrypted || doc.saveEncryption != .none {
+            if doc.saveEncryption != .none {
                 Image(systemName: "lock.fill")
                     .foregroundStyle(.secondary)
                     .help(loc("doc.encrypted.help"))
@@ -479,28 +457,9 @@ struct ContentView: View {
         }
     }
 
-    /// Abre lo seleccionado; si es un único archivo cifrado, pide contraseña.
+    /// Abre/añade lo seleccionado.
     private func handleOpen(_ urls: [URL]) {
-        if doc.isEmpty, urls.count == 1, doc.isEncryptedFile(urls[0]) {
-            passwordInput = ""
-            passwordRequest = .open(urls[0])
-        } else {
-            Task { await runAsync { try await doc.handleIncoming(urls) } }
-        }
-    }
-
-    private func confirmPassword(_ request: PasswordRequest) {
-        let password = passwordInput
-        dismissPassword()
-        switch request {
-        case .open(let url):
-            Task { await runAsync { try await doc.openEncrypted(url, password: password) } }
-        }
-    }
-
-    private func dismissPassword() {
-        passwordRequest = nil
-        passwordInput = ""
+        Task { await runAsync { try await doc.handleIncoming(urls) } }
     }
 
     private func extractAction() {
@@ -607,11 +566,11 @@ struct ContentView: View {
         }
     }
 
-    /// Nombre base sin la extensión de archivo conocida (zip/tar/tar.gz/tgz/gz/fpkz).
+    /// Nombre base sin la extensión de archivo conocida (zip/tar/tar.gz/tgz/gz).
     private func strippedBaseName(_ name: String) -> String {
         if name == ArchiveDocument.untitledName { return name }
         let lower = name.lowercased()
-        for ext in [".tar.gz", ".tgz", ".tar", ".zip", ".gz", ".fpkz"] where lower.hasSuffix(ext) {
+        for ext in [".tar.gz", ".tgz", ".tar", ".zip", ".gz"] where lower.hasSuffix(ext) {
             return String(name.dropLast(ext.count))
         }
         return (name as NSString).deletingPathExtension

@@ -2,7 +2,6 @@ import Foundation
 import Combine
 import UniformTypeIdentifiers
 import ArchiveBrowser
-import CryptoCore
 
 /// Origen del contenido de un nodo del árbol.
 enum NodeSource {
@@ -139,8 +138,6 @@ final class ArchiveDocument: ObservableObject {
     @Published private(set) var revision = 0
     /// Operación larga en curso (comprimir/extraer): muestra la barra de progreso.
     @Published var progress: ProgressState?
-    /// El documento está protegido con contraseña (se abrió o se guardó cifrado).
-    @Published private(set) var isEncrypted = false
     /// Cifrado elegido al guardar (se recuerda para el botón Guardar).
     @Published private(set) var saveEncryption: ZipEncryption = .none
     private var savePassword: String?
@@ -156,14 +153,10 @@ final class ArchiveDocument: ObservableObject {
     private var entryPassword: String?
 
     static var untitledName: String { Localizer.shared("doc.untitled") }
-    static let encryptedExtension = "fpkz"
 
     private(set) var sourceArchiveData: Data?
-    /// Contraseña en memoria para volver a cifrar al guardar sin volver a pedirla.
-    private var encryptionPassword: String?
 
     private let writer = ZipWriter()
-    private let crypto = CryptoCore()
 
     var isEmpty: Bool { roots.isEmpty }
 
@@ -236,8 +229,6 @@ final class ArchiveDocument: ObservableObject {
         selection = nil
         sourceURL = baseURL
         documentName = baseURL.lastPathComponent
-        isEncrypted = false
-        encryptionPassword = nil
         entryPassword = nil
         // Solo ZIP cifra entradas; tar/gz nunca piden contraseña.
         requiresEntryPassword = result.0 == .zip && result.2.contains { $0.isEncrypted }
@@ -295,52 +286,11 @@ final class ArchiveDocument: ObservableObject {
         return nil
     }
 
-    /// `true` si el fichero está cifrado por FilePackr (extensión `.fpkz` o cabecera CIFR).
-    func isEncryptedFile(_ url: URL) -> Bool {
-        if url.pathExtension.lowercased() == Self.encryptedExtension { return true }
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
-        defer { try? handle.close() }
-        let magic = try? handle.read(upToCount: 4)
-        return magic.map { Array($0) == Array("CIFR".utf8) } ?? false
-    }
-
-    /// Abre un archivo cifrado: descifra (en segundo plano) y muestra su contenido.
-    func openEncrypted(_ url: URL, password: String) async throws {
-        let container = try Data(contentsOf: url)
-        progress = ProgressState(label: Localizer.shared("progress.decrypting"), fraction: nil)
-        defer { progress = nil }
-
-        let crypto = self.crypto
-        let result = try await Task.detached(priority: .userInitiated) { () -> (Data, [ArchiveEntry]) in
-            let zipData = try crypto.decrypt(container, password: password)
-            return (zipData, try ZipReader().listEntries(in: zipData))
-        }.value
-
-        sourceArchiveData = result.0
-        roots = buildTree(from: result.1)
-        selection = nil
-        sourceURL = url
-        documentName = url.lastPathComponent
-        isEncrypted = true
-        encryptionPassword = password
-        entryPassword = nil
-        requiresEntryPassword = result.1.contains { $0.isEncrypted }
-        format = .zip
-        saveFormat = .zip
-        saveVolumeSize = nil
-        saveEncryption = detectedEncryption(in: result.1)
-        savePassword = nil
-        hasUnsavedChanges = false
-        changed()
-    }
-
     /// Empieza un documento nuevo, aún sin guardar.
     func beginNewDocument() {
         sourceURL = nil
         documentName = Self.untitledName
         hasUnsavedChanges = false
-        isEncrypted = false
-        encryptionPassword = nil
         entryPassword = nil
         requiresEntryPassword = false
         saveEncryption = .none
@@ -463,8 +413,6 @@ final class ArchiveDocument: ObservableObject {
         sourceURL = nil
         documentName = ""
         hasUnsavedChanges = false
-        isEncrypted = false
-        encryptionPassword = nil
         entryPassword = nil
         requiresEntryPassword = false
         saveEncryption = .none

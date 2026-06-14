@@ -129,7 +129,6 @@ private extension Localizer {
 
         // Passwords
         "password.field": "Password",
-        "password.openTitle": "Password to open the archive",
         "password.open": "Open",
         "password.entryTitle": "Archive password",
         "password.wrong": "Wrong password.",
@@ -171,7 +170,6 @@ private extension Localizer {
         "doc.untitled": "Untitled",
         "doc.newFolder": "New folder",
         "progress.opening": "Opening %@…",
-        "progress.decrypting": "Decrypting…",
         "progress.compressing": "Compressing %@…",
         "progress.encrypting": "Encrypting %@…",
         "progress.splitting": "Splitting into volumes…",
@@ -255,7 +253,6 @@ private extension Localizer {
 
         // Passwords
         "password.field": "Contraseña",
-        "password.openTitle": "Contraseña para abrir el archivo",
         "password.open": "Abrir",
         "password.entryTitle": "Contraseña del archivo",
         "password.wrong": "Contraseña incorrecta.",
@@ -297,7 +294,6 @@ private extension Localizer {
         "doc.untitled": "Sin título",
         "doc.newFolder": "Nueva carpeta",
         "progress.opening": "Abriendo %@…",
-        "progress.decrypting": "Descifrando…",
         "progress.compressing": "Comprimiendo %@…",
         "progress.encrypting": "Cifrando %@…",
         "progress.splitting": "Dividiendo en volúmenes…",

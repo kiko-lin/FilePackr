@@ -8,9 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A97D1DD22FDEC223004667A6 /* ArchiveBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = A97D1DD12FDEC223004667A6 /* ArchiveBrowser */; };
-		A97D1DD42FDEC223004667A6 /* CryptoCore in Frameworks */ = {isa = PBXBuildFile; productRef = A97D1DD32FDEC223004667A6 /* CryptoCore */; };
 		A97D1DE12FDEC4C6004667A6 /* ArchiveBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = A97D1DE02FDEC4C6004667A6 /* ArchiveBrowser */; };
-		A97D1DE32FDEC4C6004667A6 /* CryptoCore in Frameworks */ = {isa = PBXBuildFile; productRef = A97D1DE22FDEC4C6004667A6 /* CryptoCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,8 +28,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A97D1DE32FDEC4C6004667A6 /* CryptoCore in Frameworks */,
-				A97D1DD42FDEC223004667A6 /* CryptoCore in Frameworks */,
 				A97D1DD22FDEC223004667A6 /* ArchiveBrowser in Frameworks */,
 				A97D1DE12FDEC4C6004667A6 /* ArchiveBrowser in Frameworks */,
 			);
@@ -77,9 +73,7 @@
 			name = FilePackr;
 			packageProductDependencies = (
 				A97D1DD12FDEC223004667A6 /* ArchiveBrowser */,
-				A97D1DD32FDEC223004667A6 /* CryptoCore */,
 				A97D1DE02FDEC4C6004667A6 /* ArchiveBrowser */,
-				A97D1DE22FDEC4C6004667A6 /* CryptoCore */,
 			);
 			productName = FilePackr;
 			productReference = A97D1DBE2FDEC134004667A6 /* FilePackr.app */;
@@ -358,17 +352,9 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = ArchiveBrowser;
 		};
-		A97D1DD32FDEC223004667A6 /* CryptoCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = CryptoCore;
-		};
 		A97D1DE02FDEC4C6004667A6 /* ArchiveBrowser */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ArchiveBrowser;
-		};
-		A97D1DE22FDEC4C6004667A6 /* CryptoCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = CryptoCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

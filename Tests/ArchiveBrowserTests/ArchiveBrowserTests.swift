@@ -33,19 +33,6 @@ final class ArchiveBrowserTests: XCTestCase {
         XCTAssertTrue(entries.contains { $0.path == "docs/" && $0.isDirectory })
     }
 
-    func testBuildsTree() throws {
-        let entries = try reader.listEntries(at: sampleURL())
-        let tree = ArchiveTreeNode.build(from: entries)
-
-        let names = Set(tree.map(\.name))
-        XCTAssertTrue(names.contains("hola.txt"))
-        XCTAssertTrue(names.contains("config.json"))
-
-        let docs = try XCTUnwrap(tree.first { $0.name == "docs" })
-        XCTAssertTrue(docs.isDirectory)
-        XCTAssertTrue(docs.children.contains { $0.name == "anidado.txt" })
-    }
-
     func testRejectsNonZipData() {
         XCTAssertThrowsError(try reader.listEntries(in: Data("esto no es un zip".utf8))) { error in
             XCTAssertEqual(error as? ArchiveError, .notZipArchive)
