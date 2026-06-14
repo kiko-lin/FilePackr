@@ -98,7 +98,7 @@ private extension Localizer {
 
         // Drop prompt
         "drop.title": "Drag files here",
-        "drop.subtitle": "A .zip, .tar, .tar.gz, .tar.xz, .gz or .xz opens for editing; other files create a new one.",
+        "drop.subtitle": "A .zip, .tar, .tar.gz/.xz/.bz2, .gz, .xz or .bz2 opens for editing; other files create a new one.",
 
         // Save sheet
         "save.title": "Save Archive",
@@ -118,8 +118,10 @@ private extension Localizer {
         "format.tar": "TAR",
         "format.tarGzip": "TAR.GZ (compressed)",
         "format.tarXz": "TAR.XZ (compressed)",
+        "format.tarBzip2": "TAR.BZ2 (compressed)",
         "format.gzip": "GZIP (single file)",
         "format.xz": "XZ (single file)",
+        "format.bzip2": "BZIP2 (single file)",
 
         // Extract sheet
         "extract.title": "Extract “%@”",
@@ -224,7 +226,7 @@ private extension Localizer {
 
         // Drop prompt
         "drop.title": "Arrastra archivos aquí",
-        "drop.subtitle": "Un .zip, .tar, .tar.gz, .tar.xz, .gz o .xz se abrirá para editarlo; otros archivos crearán uno nuevo.",
+        "drop.subtitle": "Un .zip, .tar, .tar.gz/.xz/.bz2, .gz, .xz o .bz2 se abrirá para editarlo; otros archivos crearán uno nuevo.",
 
         // Save sheet
         "save.title": "Guardar archivo",
@@ -244,8 +246,10 @@ private extension Localizer {
         "format.tar": "TAR",
         "format.tarGzip": "TAR.GZ (comprimido)",
         "format.tarXz": "TAR.XZ (comprimido)",
+        "format.tarBzip2": "TAR.BZ2 (comprimido)",
         "format.gzip": "GZIP (un fichero)",
         "format.xz": "XZ (un fichero)",
+        "format.bzip2": "BZIP2 (un fichero)",
 
         // Extract sheet
         "extract.title": "Extraer «%@»",

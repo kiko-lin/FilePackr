@@ -12,7 +12,7 @@ enum NodeSource {
 
 /// Formato del contenedor abierto o de salida.
 enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
-    case zip, tar, tarGzip, tarXz, gzip, xz
+    case zip, tar, tarGzip, tarXz, tarBzip2, gzip, xz, bzip2
 
     /// Clave de localización del nombre mostrado en el selector de formato.
     var nameKey: String {
@@ -21,8 +21,10 @@ enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
         case .tar: return "format.tar"
         case .tarGzip: return "format.tarGzip"
         case .tarXz: return "format.tarXz"
+        case .tarBzip2: return "format.tarBzip2"
         case .gzip: return "format.gzip"
         case .xz: return "format.xz"
+        case .bzip2: return "format.bzip2"
         }
     }
 
@@ -33,8 +35,10 @@ enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
         case .tar: return "tar"
         case .tarGzip: return "tar.gz"
         case .tarXz: return "tar.xz"
+        case .tarBzip2: return "tar.bz2"
         case .gzip: return "gz"
         case .xz: return "xz"
+        case .bzip2: return "bz2"
         }
     }
 
@@ -45,8 +49,8 @@ enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
     /// vale para todos los formatos de salida que escribimos.
     var supportsVolumeSplit: Bool { true }
 
-    /// Formatos de un solo fichero (gzip/xz): solo se ofrecen si el documento es un fichero.
-    var isSingleFileOnly: Bool { self == .gzip || self == .xz }
+    /// Formatos de un solo fichero (gzip/xz/bzip2): solo si el documento es un fichero.
+    var isSingleFileOnly: Bool { self == .gzip || self == .xz || self == .bzip2 }
 }
 
 /// Nodo del árbol editable que se muestra en el cuerpo central.
@@ -223,6 +227,9 @@ final class ArchiveDocument: ObservableObject {
             case .tarXz:
                 let tar = try Xz.decompress(data)
                 return (.tarXz, tar, try Tar.listEntries(in: tar))
+            case .tarBzip2:
+                let tar = try Bzip2.decompress(data)
+                return (.tarBzip2, tar, try Tar.listEntries(in: tar))
             case .gzip:
                 // Un `.gz` puede ser un fichero suelto o un tar.gz: lo distinguimos al descomprimir.
                 let inner = try Gzip.decompress(data)
@@ -237,6 +244,13 @@ final class ArchiveDocument: ObservableObject {
                     return (.tarXz, inner, try Tar.listEntries(in: inner))
                 }
                 return (.xz, data, Xz.entries(in: data, fallbackName: fallbackName))
+            case .bzip2:
+                // Un `.bz2` puede ser un fichero suelto o un tar.bz2.
+                let inner = try Bzip2.decompress(data)
+                if Self.isUstar(inner) {
+                    return (.tarBzip2, inner, try Tar.listEntries(in: inner))
+                }
+                return (.bzip2, data, Bzip2.entries(in: data, fallbackName: fallbackName))
             }
         }.value
 
@@ -514,9 +528,10 @@ final class ArchiveDocument: ObservableObject {
             guard let archive = sourceArchiveData else { return nil }
             switch format {
             case .zip: return try? ZipExtractor().extractedData(for: entry, in: archive, password: entryPassword)
-            case .tar, .tarGzip, .tarXz: return try? Tar.entryData(for: entry, in: archive)
+            case .tar, .tarGzip, .tarXz, .tarBzip2: return try? Tar.entryData(for: entry, in: archive)
             case .gzip: return try? Gzip.decompress(archive)
             case .xz: return try? Xz.decompress(archive)
+            case .bzip2: return try? Bzip2.decompress(archive)
             }
         }
     }
@@ -554,6 +569,9 @@ final class ArchiveDocument: ObservableObject {
             case .tarXz:
                 let items = makeTarItems()
                 try await writeData({ Xz.compress(Tar.write(items)) }, to: work)
+            case .tarBzip2:
+                let items = makeTarItems()
+                try await writeData({ Bzip2.compress(Tar.write(items)) }, to: work)
             case .gzip:
                 guard let node = roots.first(where: { !$0.isDirectory }), let data = nodeData(node) else {
                     throw CocoaError(.fileWriteUnknown)
@@ -565,6 +583,11 @@ final class ArchiveDocument: ObservableObject {
                     throw CocoaError(.fileWriteUnknown)
                 }
                 try await writeData({ Xz.compress(data) }, to: work)
+            case .bzip2:
+                guard let node = roots.first(where: { !$0.isDirectory }), let data = nodeData(node) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+                try await writeData({ Bzip2.compress(data) }, to: work)
             }
             // 2) Colocar el resultado: un solo fichero o dividido en volúmenes.
             if let volumes {
@@ -858,6 +881,7 @@ final class ArchiveDocument: ObservableObject {
         name.hasSuffix(".zip") || name.hasSuffix(".tar")
             || name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") || name.hasSuffix(".gz")
             || name.hasSuffix(".tar.xz") || name.hasSuffix(".txz") || name.hasSuffix(".xz")
+            || name.hasSuffix(".tar.bz2") || name.hasSuffix(".tbz") || name.hasSuffix(".tbz2") || name.hasSuffix(".bz2")
     }
 
     /// Volúmenes que forman el archivo, en orden (nombre.zip, nombre_001.zip…). Si
@@ -901,9 +925,11 @@ final class ArchiveDocument: ObservableObject {
         let name = url.lastPathComponent.lowercased()
         if name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") { return .tarGzip }
         if name.hasSuffix(".tar.xz") || name.hasSuffix(".txz") { return .tarXz }
+        if name.hasSuffix(".tar.bz2") || name.hasSuffix(".tbz") || name.hasSuffix(".tbz2") { return .tarBzip2 }
         if name.hasSuffix(".tar") { return .tar }
         if name.hasSuffix(".gz") { return .gzip }
         if name.hasSuffix(".xz") { return .xz }
+        if name.hasSuffix(".bz2") { return .bzip2 }
         return .zip
     }
 
@@ -990,9 +1016,10 @@ struct ExportPlan: Sendable {
             let data: Data
             switch format {
             case .zip: data = try ZipExtractor().extractedData(for: entry, in: archive, password: password)
-            case .tar, .tarGzip, .tarXz: data = try Tar.entryData(for: entry, in: archive)
+            case .tar, .tarGzip, .tarXz, .tarBzip2: data = try Tar.entryData(for: entry, in: archive)
             case .gzip: data = try Gzip.decompress(archive)
             case .xz: data = try Xz.decompress(archive)
+            case .bzip2: data = try Bzip2.decompress(archive)
             }
             try data.write(to: destination, options: .atomic)
             onFile()
