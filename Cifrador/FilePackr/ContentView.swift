@@ -63,6 +63,51 @@ private struct SaveOptionsSheet: View {
     }
 }
 
+/// Hoja compacta de extracción: destino (carpeta del zip por defecto) + contraseña.
+/// El navegador de carpetas solo aparece al pulsar "Elegir…".
+private struct ExtractOptionsSheet: View {
+    let nodeName: String
+    let needsPassword: Bool
+    @Binding var destination: URL
+    @Binding var password: String
+    var passwordWrong: Bool
+    var onChooseFolder: () -> Void
+    var onExtract: () -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Extraer «\(nodeName)»").font(.headline)
+            HStack(spacing: 6) {
+                Text("En:").foregroundStyle(.secondary)
+                Image(nsImage: NSWorkspace.shared.icon(for: .folder))
+                    .resizable().frame(width: 16, height: 16)
+                Text(destination.lastPathComponent)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer()
+                Button("Elegir…", action: onChooseFolder)
+            }
+            if needsPassword {
+                SecureField("Contraseña del archivo", text: $password)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { if !password.isEmpty { onExtract() } }
+                if passwordWrong {
+                    Text("Contraseña incorrecta.").font(.callout).foregroundStyle(.red)
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Cancelar", role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Extraer", action: onExtract)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(needsPassword && password.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+}
+
 /// Hoja de introducción de contraseña.
 private struct PasswordSheet: View {
     let title: String
@@ -110,6 +155,10 @@ struct ContentView: View {
     @State private var showingEntryPassword = false
     @State private var entryPasswordInput = ""
     @State private var entryPasswordWrong = false
+    @State private var extractNode: FileNode?
+    @State private var extractDestination = FileManager.default.homeDirectoryForCurrentUser
+    @State private var extractPassword = ""
+    @State private var extractPasswordWrong = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -173,6 +222,16 @@ struct ContentView: View {
                           note: entryPasswordWrong ? "Contraseña incorrecta." : nil,
                           onConfirm: { confirmEntryPassword() },
                           onCancel: { showingEntryPassword = false })
+        }
+        .sheet(item: $extractNode) { node in
+            ExtractOptionsSheet(nodeName: node.name,
+                                needsPassword: doc.requiresEntryPassword,
+                                destination: $extractDestination,
+                                password: $extractPassword,
+                                passwordWrong: extractPasswordWrong,
+                                onChooseFolder: { chooseExtractFolder() },
+                                onExtract: { performExtract() },
+                                onCancel: { extractNode = nil })
         }
         .onChange(of: doc.requiresEntryPassword) { _, requires in
             if requires { promptEntryPassword() }
@@ -357,34 +416,43 @@ struct ContentView: View {
     }
 
     /// Extrae un nodo concreto: pide carpeta destino y gestiona conflictos de nombre.
+    /// Abre el diálogo compacto de extracción (destino por defecto: carpeta del zip).
     private func extract(_ node: FileNode) {
+        extractDestination = doc.sourceURL?.deletingLastPathComponent()
+            ?? FileManager.default.homeDirectoryForCurrentUser
+        extractPassword = ""
+        extractPasswordWrong = false
+        extractNode = node
+    }
+
+    /// "Elegir…": abre el navegador de carpetas solo si se quiere cambiar el destino.
+    private func chooseExtractFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.prompt = "Extraer aquí"
-        panel.message = "Elige dónde extraer «\(node.name)»"
-        // Por defecto, la carpeta donde está el zip.
-        if let folder = doc.sourceURL?.deletingLastPathComponent() {
-            panel.directoryURL = folder
+        panel.prompt = "Elegir"
+        panel.directoryURL = extractDestination
+        if panel.runModal() == .OK, let url = panel.url {
+            extractDestination = url
         }
-        // Si el archivo está cifrado y aún no hay contraseña, pedirla aquí mismo.
-        let passwordField = NSSecureTextField()
+    }
+
+    /// Confirma la extracción del nodo del diálogo al destino elegido.
+    private func performExtract() {
+        guard let node = extractNode else { return }
         if doc.requiresEntryPassword {
-            panel.accessoryView = passwordAccessory(passwordField)
-        }
-
-        guard panel.runModal() == .OK, let dir = panel.url else { return }
-
-        if doc.requiresEntryPassword, !passwordField.stringValue.isEmpty {
-            guard doc.provideEntryPassword(passwordField.stringValue) else {
-                errorMessage = "Contraseña incorrecta."
+            guard doc.provideEntryPassword(extractPassword) else {
+                extractPasswordWrong = true
+                extractPassword = ""
                 return
             }
         }
+        let destinationFolder = extractDestination
+        extractNode = nil
 
         let plan = doc.exportPlan(for: node)
-        let destination = dir.appendingPathComponent(node.name)
+        let destination = destinationFolder.appendingPathComponent(node.name)
         if FileManager.default.fileExists(atPath: destination.path) {
             conflict = ExtractionConflict(plan: plan,
                                           destination: destination,
@@ -392,28 +460,6 @@ struct ContentView: View {
         } else {
             Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) } }
         }
-    }
-
-    /// Campo accesorio (etiqueta + contraseña) para el panel de extracción.
-    private func passwordAccessory(_ field: NSSecureTextField) -> NSView {
-        field.translatesAutoresizingMaskIntoConstraints = false
-        field.placeholderString = "Contraseña del archivo"
-        let label = NSTextField(labelWithString: "Contraseña:")
-        label.translatesAutoresizingMaskIntoConstraints = false
-        let container = NSView()
-        container.addSubview(label)
-        container.addSubview(field)
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
-            label.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            field.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 8),
-            field.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
-            field.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            field.widthAnchor.constraint(greaterThanOrEqualToConstant: 240),
-            container.heightAnchor.constraint(equalToConstant: 46),
-            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 380),
-        ])
-        return container
     }
 
     /// Guarda: si ya tiene fichero, re-guarda con los ajustes; si es nuevo, abre el
