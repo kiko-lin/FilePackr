@@ -60,7 +60,12 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - Operaciones en segundo plano con barra de progreso; guardado en streaming.
 - Cifrado ZIP estándar: **ZipCrypto (Débil)** — interop verificada contra
   `zip`/`unzip`; **AES-256 WinZip (Fuerte)** — round-trip propio verificado.
-- Diálogo de guardar: formato (ZIP) + cifrado (none/débil/fuerte) + contraseña.
+- Diálogo de guardar: selector de formato (ZIP/TAR/TAR.GZ/GZIP) + cifrado
+  (none/débil/fuerte, solo ZIP) + contraseña. GZIP solo si el documento es un único fichero.
+- **tar / gzip / tar.gz (Tier 1)**: lectura y escritura en Swift puro, interop
+  **bidireccional** verificada contra `tar`/`gzip`/`gunzip` del sistema.
+  `Tar.swift` (ustar + PAX `x` + GNU `L`), `Gzip.swift` (RFC 1952), `Deflate.deflate`.
+  La app detecta el formato al abrir y reconstruye el contenido al guardar en otro.
 - **Pedir contraseña al abrir** un zip cifrado (de otra app): valida la clave
   extrayendo la primera entrada y la recuerda (`entryPassword`) para extraer/
   previsualizar/arrastrar. `ExportPlan.zipEntry` lleva la contraseña.
@@ -79,9 +84,9 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - [ ] **Verificar interop AES-256 en Keka/7-Zip** (lo prueba el usuario; el agente
       no tiene esas herramientas). Si falla, revisar `ZipAES` (PBKDF2/CTR/HMAC,
       campo extra 0x9901, AE-2 CRC=0).
-- [ ] **Más formatos**: tar/gz/tar.gz en Swift puro (asequible); luego 7z/rar/dmg
-      con **libarchive** (vendorizar C — esfuerzo grande). El diálogo de guardar
-      ya tiene el hueco del selector de formato.
+- [x] ~~tar/gz/tar.gz en Swift puro~~ (Tier 1, hecho — ver "Hecho").
+- [ ] **Más formatos**: 7z/rar/dmg/bzip2/xz con **libarchive** (vendorizar C —
+      esfuerzo grande). El selector de formato del diálogo ya está montado.
 - [ ] **Limpieza legacy**: decidir si se retira `.fpkz` (CryptoCore, `openEncrypted`,
       `isEncryptedFile`, `encryptionPassword`), `CipherView.swift` (pantalla vieja
       sin usar) y `ArchiveTree.swift` (solo lo usa un test).
@@ -104,3 +109,11 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   little-endian que empieza en 1. PBKDF2-HMAC-SHA1, 1000 vueltas.
 - ZIP64: el lector sigue EOCD64 + locator si el EOCD de 32 bits está saturado, y
   el campo extra 0x0001 por entrada. El escritor lo emite cuando hace falta.
+- TAR (ustar): bloques de 512 B; `size`/`mtime` en octal; carpetas typeflag `5`.
+  `bsdtar` de macOS emite **PAX** (typeflag `x`, registros `len key=value\n`) solo
+  cuando un campo no cabe en ustar (rutas largas, mtime sub-segundo) y a veces
+  prefija `./`. Nombres largos GNU = typeflag `L`. El escritor emite PAX `path=`
+  para rutas > 100 B. tar **no** cifra (cifrado solo en ZIP).
+- gzip (RFC 1952): `1F 8B 08` + FLG + MTIME + (FNAME opcional) + DEFLATE +
+  CRC32 + ISIZE(LE). `.tar.gz` = TAR envuelto en gzip; un `.gz` "suelto" se
+  distingue de un tar.gz comprobando la firma `ustar` tras descomprimir.
