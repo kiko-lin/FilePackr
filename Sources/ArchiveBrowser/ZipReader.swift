@@ -48,45 +48,70 @@ public struct ZipReader: Sendable {
         return try listEntries(in: data)
     }
 
-    /// Lista las entradas a partir del contenido en memoria de un ZIP.
+    /// Lista las entradas de un ZIP en memoria. Para no copiar el fichero entero
+    /// (que puede ser de varios GB), sólo lee la **cola** (EOCD + ZIP64) y la
+    /// región del **central directory**; lo demás no se toca.
     public func listEntries(in data: Data, progress: ((Double) -> Void)? = nil) throws -> [ArchiveEntry] {
-        let bytes = [UInt8](data)
-        guard let eocd = findEOCD(bytes) else { throw ArchiveError.notZipArchive }
+        let fileSize = data.count
+        guard fileSize >= 22 else { throw ArchiveError.notZipArchive }
 
-        let (entryCount, cdOffset) = centralDirectoryInfo(bytes, eocd: eocd)
+        // 1. Cola: EOCD + comentario (≤64 KB) + posible EOCD64 record (56) y locator (20).
+        let tailLen = min(fileSize, 22 + 0xFFFF + 20 + 56)
+        let tail = [UInt8](data.subdata(in: (fileSize - tailLen)..<fileSize))
+        let tailBase = fileSize - tailLen
+        guard let eocd = findEOCD(tail) else { throw ArchiveError.notZipArchive }
 
+        // 2. Número de entradas, tamaño y offset del central directory (con ZIP64).
+        var entryCount = Int(readU16(tail, eocd + 10))
+        var cdSize = UInt64(readU32(tail, eocd + 12))
+        var cdOffset = UInt64(readU32(tail, eocd + 16))
+
+        if entryCount == 0xFFFF || cdSize == 0xFFFF_FFFF || cdOffset == 0xFFFF_FFFF,
+           eocd >= 20, readU32(tail, eocd - 20) == 0x0706_4b50,
+           let record = zip64Record(in: data, at: Int(readU64(tail, eocd - 20 + 8)), tail: tail, tailBase: tailBase) {
+            entryCount = Int(readU64(record, 24))   // total de entradas
+            cdSize = readU64(record, 40)
+            cdOffset = readU64(record, 48)
+        }
+
+        // 3. Leer SOLO la región del central directory.
+        let cdStart = Int(cdOffset)
+        let cdEnd = min(cdStart + Int(cdSize), fileSize)
+        guard cdStart >= 0, cdStart <= cdEnd else { throw ArchiveError.corruptCentralDirectory }
+        let cd = [UInt8](data.subdata(in: cdStart..<cdEnd))
+
+        // 4. Parsear las entradas (offsets relativos a `cd`).
         var entries: [ArchiveEntry] = []
         entries.reserveCapacity(entryCount)
-
-        var p = cdOffset
+        var p = 0
         for index in 0..<entryCount {
-            guard p + 46 <= bytes.count, readU32(bytes, p) == 0x0201_4b50 else {
+            guard p + 46 <= cd.count, readU32(cd, p) == 0x0201_4b50 else {
                 throw ArchiveError.corruptCentralDirectory
             }
-            let method = readU16(bytes, p + 10)
-            let modTime = readU16(bytes, p + 12)
-            let modDate = readU16(bytes, p + 14)
-            let crc = readU32(bytes, p + 16)
-            let raw32Comp = readU32(bytes, p + 20)
-            let raw32Uncomp = readU32(bytes, p + 24)
-            let nameLen = Int(readU16(bytes, p + 28))
-            let extraLen = Int(readU16(bytes, p + 30))
-            let commentLen = Int(readU16(bytes, p + 32))
-            let raw32Offset = readU32(bytes, p + 42)
+            let method = readU16(cd, p + 10)
+            let modTime = readU16(cd, p + 12)
+            let modDate = readU16(cd, p + 14)
+            let crc = readU32(cd, p + 16)
+            let raw32Comp = readU32(cd, p + 20)
+            let raw32Uncomp = readU32(cd, p + 24)
+            let nameLen = Int(readU16(cd, p + 28))
+            let extraLen = Int(readU16(cd, p + 30))
+            let commentLen = Int(readU16(cd, p + 32))
+            let raw32Offset = readU32(cd, p + 42)
 
             let nameStart = p + 46
-            guard nameStart + nameLen + extraLen <= bytes.count else {
+            guard nameStart + nameLen + extraLen <= cd.count else {
                 throw ArchiveError.corruptCentralDirectory
             }
-            let name = String(decoding: bytes[nameStart..<(nameStart + nameLen)], as: UTF8.self)
+            let name = String(decoding: cd[nameStart..<(nameStart + nameLen)], as: UTF8.self)
 
-            // ZIP64: si algún campo de 32 bits está saturado (0xFFFFFFFF), el valor
-            // real de 64 bits está en el campo extra (header id 0x0001).
+            // ZIP64: si algún campo de 32 bits está saturado, el valor real está
+            // en el campo extra (id 0x0001).
             var compSize = UInt64(raw32Comp)
             var uncompSize = UInt64(raw32Uncomp)
             var localOffset = UInt64(raw32Offset)
             if raw32Comp == 0xFFFF_FFFF || raw32Uncomp == 0xFFFF_FFFF || raw32Offset == 0xFFFF_FFFF {
-                let z = zip64Extra(bytes, start: nameStart + nameLen, length: extraLen,
+                let z = zip64Extra(cd, start: nameStart + nameLen, length: extraLen,
                                    needUncomp: raw32Uncomp == 0xFFFF_FFFF,
                                    needComp: raw32Comp == 0xFFFF_FFFF,
                                    needOffset: raw32Offset == 0xFFFF_FFFF)
@@ -111,24 +136,19 @@ public struct ZipReader: Sendable {
         return entries
     }
 
-    /// Devuelve (número de entradas, offset del central directory), siguiendo el
-    /// registro ZIP64 cuando los campos de 32 bits del EOCD están saturados.
-    private func centralDirectoryInfo(_ bytes: [UInt8], eocd: Int) -> (count: Int, offset: Int) {
-        let count16 = readU16(bytes, eocd + 10)
-        let size32 = readU32(bytes, eocd + 12)
-        let offset32 = readU32(bytes, eocd + 16)
-
-        if count16 == 0xFFFF || size32 == 0xFFFF_FFFF || offset32 == 0xFFFF_FFFF,
-           eocd >= 20, readU32(bytes, eocd - 20) == 0x0706_4b50 {
-            let recordOffset = Int(readU64(bytes, eocd - 20 + 8))
-            if recordOffset >= 0, recordOffset + 56 <= bytes.count,
-               readU32(bytes, recordOffset) == 0x0606_4b50 {
-                let count = Int(readU64(bytes, recordOffset + 32))
-                let offset = Int(readU64(bytes, recordOffset + 48))
-                return (count, offset)
-            }
+    /// Lee el registro ZIP64 EOCD (56 bytes) en `offset`, de la cola si está ahí
+    /// o del fichero en otro caso. `nil` si la firma no cuadra.
+    private func zip64Record(in data: Data, at offset: Int, tail: [UInt8], tailBase: Int) -> [UInt8]? {
+        guard offset >= 0 else { return nil }
+        let record: [UInt8]
+        if offset >= tailBase, offset - tailBase + 56 <= tail.count {
+            record = Array(tail[(offset - tailBase)..<(offset - tailBase + 56)])
+        } else if offset + 56 <= data.count {
+            record = [UInt8](data.subdata(in: offset..<(offset + 56)))
+        } else {
+            return nil
         }
-        return (Int(count16), Int(offset32))
+        return readU32(record, 0) == 0x0606_4b50 ? record : nil
     }
 
     /// Lee del campo extra ZIP64 (id 0x0001) los valores de 64 bits presentes,
