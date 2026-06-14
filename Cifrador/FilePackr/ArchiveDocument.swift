@@ -365,28 +365,28 @@ final class ArchiveDocument: ObservableObject {
         }
     }
 
-    /// Construye y guarda el ZIP final en `url` (compresión en segundo plano con progreso).
-    /// Si el documento es cifrado, vuelve a cifrar con la contraseña en memoria.
+    /// Guarda el ZIP en `url`, en **streaming a disco** (sin cargarlo entero en
+    /// memoria) y en segundo plano con progreso. Si es cifrado, re-cifra.
     func save(to url: URL) async throws {
         if isEncrypted, let password = encryptionPassword {
             try await saveEncrypted(to: url, password: password)
             return
         }
-        let plan = makeSavePlan()
+        let inputs = makeSaveInputs()
         progress = ProgressState(label: "Comprimiendo \(documentName)…", fraction: 0)
         defer { progress = nil }
-        let data = try await buildZip(plan: plan, writer: writer)
-        try data.write(to: url, options: .atomic)
+        try await streamZip(inputs, to: url, writer: writer)
         markSaved(as: url)
     }
 
-    /// Comprime y cifra el archivo en `url` (todo en segundo plano).
+    /// Comprime y cifra el archivo en `url`. El cifrado necesita los bytes en
+    /// memoria, así que aquí no hay streaming (construye y luego cifra).
     func saveEncrypted(to url: URL, password: String) async throws {
-        let plan = makeSavePlan()
+        let inputs = makeSaveInputs()
         progress = ProgressState(label: "Cifrando \(documentName)…", fraction: 0)
         defer { progress = nil }
 
-        let zipData = try await buildZip(plan: plan, writer: writer)
+        let zipData = try await buildZipData(inputs, writer: writer)
         await MainActor.run { progress?.fraction = nil } // cifrado: indeterminado
 
         let crypto = self.crypto
@@ -400,20 +400,25 @@ final class ArchiveDocument: ObservableObject {
         markSaved(as: url)
     }
 
-    /// Plan de guardado ligero y `Sendable` (sin leer datos), construido en el hilo
-    /// principal; la lectura y compresión ocurren luego en segundo plano.
-    private func makeSavePlan() -> [SaveItem] {
-        var items: [SaveItem] = []
+    /// Construye las entradas a escribir. Es ligero: los ficheros nuevos van como
+    /// `.file(url)` (se leen al vuelo) y las entradas de un zip abierto como bytes
+    /// comprimidos en crudo (rebanada barata del archivo origen ya mapeado).
+    private func makeSaveInputs() -> [ZipEntryInput] {
+        let extractor = ZipExtractor()
+        var items: [ZipEntryInput] = []
         func walk(_ nodes: [FileNode], prefix: String) {
             for node in nodes {
                 let path = prefix + node.name
                 if node.isDirectory {
-                    items.append(SaveItem(path: path + "/", date: node.modificationDate, source: .directory))
+                    items.append(ZipEntryInput(path: path + "/", modifiedAt: node.modificationDate, source: .directory))
                     walk(node.children, prefix: path + "/")
                 } else if case .diskFile(let url) = node.source {
-                    items.append(SaveItem(path: path, date: node.modificationDate, source: .diskFile(url)))
-                } else if case .zipEntry(let entry) = node.source, let archive = sourceArchiveData {
-                    items.append(SaveItem(path: path, date: entry.modificationDate, source: .zipRaw(entry: entry, archive: archive)))
+                    items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .file(url)))
+                } else if case .zipEntry(let entry) = node.source, let archive = sourceArchiveData,
+                          let raw = try? extractor.rawCompressedData(for: entry, in: archive) {
+                    items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate,
+                        source: .rawEntry(method: entry.compressionMethod, crc32: entry.crc32,
+                                          compressed: raw, uncompressedSize: entry.uncompressedSize)))
                 }
             }
         }
@@ -421,25 +426,33 @@ final class ArchiveDocument: ObservableObject {
         return items
     }
 
-    nonisolated private func buildZip(plan: [SaveItem], writer: ZipWriter) async throws -> Data {
+    nonisolated private func streamZip(_ inputs: [ZipEntryInput], to url: URL, writer: ZipWriter) async throws {
         try await Task.detached(priority: .userInitiated) {
-            let extractor = ZipExtractor()
-            var writeItems: [ZipWriteItem] = []
-            writeItems.reserveCapacity(plan.count)
-            for item in plan {
-                switch item.source {
-                case .directory:
-                    writeItems.append(.directory(path: item.path, modifiedAt: item.date))
-                case .diskFile(let url):
-                    writeItems.append(.file(path: item.path, data: try Data(contentsOf: url), modifiedAt: item.date))
-                case .zipRaw(let entry, let archive):
-                    let raw = try extractor.rawCompressedData(for: entry, in: archive)
-                    writeItems.append(.rawEntry(path: item.path, method: entry.compressionMethod,
-                                                crc32: entry.crc32, compressed: raw,
-                                                uncompressedSize: entry.uncompressedSize, modifiedAt: item.date))
+            // Escribe a un temporal y luego reemplaza, para no dejar a medias el destino.
+            let tmp = url.deletingLastPathComponent()
+                .appendingPathComponent(".\(UUID().uuidString).filepackr.tmp")
+            FileManager.default.createFile(atPath: tmp.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: tmp)
+            do {
+                try writer.write(inputs, to: handle) { fraction in
+                    Task { @MainActor in self.progress?.fraction = fraction }
                 }
+                try handle.close()
+            } catch {
+                try? handle.close()
+                try? FileManager.default.removeItem(at: tmp)
+                throw error
             }
-            return writer.build(writeItems) { fraction in
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            try FileManager.default.moveItem(at: tmp, to: url)
+        }.value
+    }
+
+    nonisolated private func buildZipData(_ inputs: [ZipEntryInput], writer: ZipWriter) async throws -> Data {
+        try await Task.detached(priority: .userInitiated) {
+            try writer.build(inputs) { fraction in
                 Task { @MainActor in self.progress?.fraction = fraction }
             }
         }.value
@@ -639,15 +652,3 @@ struct ProgressState {
     var fraction: Double?   // nil = indeterminado
 }
 
-/// Elemento del plan de guardado, `Sendable` para procesarse en segundo plano.
-struct SaveItem: Sendable {
-    let path: String
-    let date: Date?
-    let source: SaveSource
-}
-
-enum SaveSource: Sendable {
-    case directory
-    case diskFile(URL)
-    case zipRaw(entry: ArchiveEntry, archive: Data)
-}
