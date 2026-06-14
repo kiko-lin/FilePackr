@@ -193,7 +193,8 @@ final class ArchiveDocument: ObservableObject {
         defer { progress = nil }
 
         let fallbackName = baseURL.deletingPathExtension().lastPathComponent
-        let result = try await Task.detached(priority: .userInitiated) { [weak self] () -> (ArchiveFormat, Data, [ArchiveEntry]) in
+        let report = makeProgressReporter()
+        let result = try await Task.detached(priority: .userInitiated) { () -> (ArchiveFormat, Data, [ArchiveEntry]) in
             let data = parts.count == 1
                 ? try Data(contentsOf: parts[0], options: .mappedIfSafe)
                 : Volumes.join(try parts.map { try Data(contentsOf: $0) })
@@ -204,7 +205,7 @@ final class ArchiveDocument: ObservableObject {
                     // Limitamos los saltos a la UI (cada ~1%) para no inundar el hilo principal.
                     if fraction - lastReported >= 0.01 || fraction >= 1 {
                         lastReported = fraction
-                        Task { @MainActor in self?.progress?.fraction = fraction }
+                        report(fraction)
                     }
                 }
                 return (.zip, data, entries)
@@ -902,6 +903,14 @@ final class ArchiveDocument: ObservableObject {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
     }
 
+    /// Reporter `@Sendable` para actualizar la barra de progreso desde tareas en
+    /// segundo plano sin capturar `self` directamente en el código concurrente.
+    private func makeProgressReporter() -> @Sendable (Double) -> Void {
+        { fraction in
+            Task { @MainActor in self.progress?.fraction = fraction }
+        }
+    }
+
     /// Las mutaciones tocan nodos (clases); subir `revision` (publicado) avisa a
     /// SwiftUI y le dice a la vista de lista que debe recargar.
     private func changed() { revision &+= 1 }
@@ -925,13 +934,13 @@ struct ExportPlan: Sendable {
         case archiveEntry(entry: ArchiveEntry, archive: Data, password: String?, format: ArchiveFormat)
     }
 
-    var isDirectory: Bool {
+    nonisolated var isDirectory: Bool {
         if case .folder = payload { return true }
         return false
     }
 
     /// Extrae el contenido a una carpeta temporal y devuelve la URL resultante.
-    func materialize() throws -> URL {
+    nonisolated func materialize() throws -> URL {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("CifradorExport-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -941,7 +950,7 @@ struct ExportPlan: Sendable {
     }
 
     /// Número de ficheros (hojas) que contiene, para calcular el progreso.
-    func fileCount() -> Int {
+    nonisolated func fileCount() -> Int {
         switch payload {
         case .folder(let children): return children.reduce(0) { $0 + $1.fileCount() }
         case .diskFile, .archiveEntry: return 1
@@ -950,7 +959,7 @@ struct ExportPlan: Sendable {
 
     /// Escribe el contenido en la ruta `destination` (nombre final incluido).
     /// Llama a `onFile` tras escribir cada fichero (para reportar progreso).
-    func writeContents(to destination: URL, onFile: () -> Void = {}) throws {
+    nonisolated func writeContents(to destination: URL, onFile: () -> Void = {}) throws {
         switch payload {
         case .folder(let children):
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
