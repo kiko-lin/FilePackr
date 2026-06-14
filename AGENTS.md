@@ -126,12 +126,13 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - [ ] **Cambiar cifrado/contraseña al re-guardar** ("Guardar como…"): hoy re-guardar
       conserva el cifrado y la contraseña originales; no hay UI para cambiarlos.
 - [ ] **Opciones de fuerza AES** (128/192) además de 256; ZipCrypto ya está.
-- [ ] **Distribución**: reactivar App Sandbox correctamente (paneles de guardado +
-      security-scoped bookmarks), notarización, `.dmg`.
 - [ ] **Streaming de compresión** de un único fichero enorme (hoy cada fichero se
       carga entero en memoria para comprimir).
 - [x] ~~Localización~~ (hecho: EN/ES con selector de idioma — ver "Hecho"). Pendiente
       menor: más idiomas, y que "Clase" use el idioma de la app y no el del SO.
+- [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
+      reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
+      notarización, `.dmg`.
 
 ## Notas de formato/cifrado (para no re-investigar)
 
