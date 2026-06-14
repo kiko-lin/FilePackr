@@ -85,6 +85,15 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   `Bzip2.swift` usa `BZ2_bzBuffToBuff*` (descompresión con búfer creciente porque
   bzip2 no guarda el tamaño). Interop verificada: `.bz2` vs `bzip2`/`bunzip2`,
   `.tar.bz2` vs `bsdtar -j`. `ArchiveFormat.isSingleFileOnly` agrupa gz/xz/bz2.
+- **7z (lectura+escritura) / rar (solo lectura) (Tier 4)**: vía la **`libarchive`
+  del sistema** (NO vendorizada; Apple la mantiene). Target SwiftPM `Carchive` =
+  systemLibrary con `shim.h` de prototipos **propios** (Apple no trae las cabeceras
+  pero sí el stub `libarchive.tbd`) + `link "archive"`. `LibArchive.swift`:
+  `listEntries`/`extractEntry` (iterador en streaming, re-abre para extraer por ruta)
+  y `write7z`. **El escritor de 7z de libarchive NO cifra** → 7z se escribe en claro;
+  el **descifrado de 7z solo en lectura** (passphrase). 7z con cabeceras cifradas →
+  `requiresOpenPassword`/`provideOpenPassword`. `ArchiveFormat.isWritable` (rar=false)
+  y `.usesLibArchive`. rar se excluye del diálogo Guardar.
 - **Volúmenes** (división por bytes): `Volumes.swift` (split/join + naming, testeado).
   Esquema `nombre.zip`, `nombre_001.zip`, `nombre_002.zip`… (1ª parte = nombre base).
   Diálogo Guardar con toggle "Dividir en volúmenes" + tamaño/unidad, por formato
@@ -131,8 +140,10 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - [x] ~~tar/gz/tar.gz en Swift puro~~ (Tier 1, hecho — ver "Hecho").
 - [x] ~~xz/tar.xz~~ (Tier 2, hecho — `Compression` LZMA, ver "Hecho").
 - [x] ~~bzip2/tar.bz2~~ (Tier 3, hecho — `libbz2` del sistema, ver "Hecho").
-- [ ] **Más formatos**: 7z/rar/dmg con **libarchive** (vendorizar C — esfuerzo
-      grande; lectura de 7z con cifrado AES, rar solo lectura). Selector ya montado.
+- [x] ~~7z/rar~~ (Tier 4, hecho — `libarchive` del sistema SIN vendorizar, ver "Hecho").
+- [ ] **Formatos extra casi gratis** vía la misma libarchive: iso/cpio/xar/lha/cab
+      (lectura), xar/iso (escritura). Solo falta añadir el case en `ArchiveFormat`.
+- [ ] **7z cifrado al escribir**: libarchive no lo soporta; haría falta otra librería.
 - [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
       `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
 - [ ] **Cambiar cifrado/contraseña al re-guardar** ("Guardar como…"): hoy re-guardar
@@ -171,6 +182,12 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - bzip2: firma `BZh`. `libbz2` del sistema (`-lbz2`, header en el SDK). One-shot
   `BZ2_bzBuffToBuffCompress/Decompress`; al descomprimir bzip2 NO guarda el tamaño,
   así que se reintenta con búfer ×2 si devuelve `BZ_OUTBUFF_FULL`. `.tar.bz2` = TAR + bz2.
+- libarchive: la del sistema (macOS, 3.7.x) es **enlazable** (`libarchive.tbd` en el
+  SDK) pero **sin cabeceras** → las declaramos en `Sources/Carchive/shim.h`. API de
+  **iterador en streaming**: `archive_read_next_header` + `archive_read_data`; para
+  extraer una entrada concreta se re-abre desde memoria y se itera hasta su ruta
+  (no hay acceso aleatorio). 7z firma `37 7A BC AF 27 1C`. Riesgo bajo (API 3.x
+  estable; Apple la actualiza). NO soportado: multivolumen nativo 7z (`.7z.001`).
 - Volúmenes: división **por bytes** (no spanning PKWARE nativo). La primera parte
   conserva el nombre base (`nombre.zip`) y las siguientes llevan `_NNN` antes de la
   extensión (`nombre_001.zip`, `nombre_002.zip`…). Reconstrucción = concatenar en
