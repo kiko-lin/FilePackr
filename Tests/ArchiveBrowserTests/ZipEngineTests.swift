@@ -18,9 +18,9 @@ final class ZipEngineTests: XCTestCase {
         let binario = Data((0..<32).map { UInt8($0) })
 
         let zip = writer.build([
-            .file(path: "nota.txt", data: texto),
-            .directory(path: "datos/"),
-            .file(path: "datos/raw.bin", data: binario),
+            .file(path: "nota.txt", data: texto, modifiedAt: nil),
+            .directory(path: "datos/", modifiedAt: nil),
+            .file(path: "datos/raw.bin", data: binario, modifiedAt: nil),
         ])
 
         let entries = try reader.listEntries(in: zip)
@@ -37,9 +37,20 @@ final class ZipEngineTests: XCTestCase {
 
     func testCrcMatchesAfterRoundTrip() throws {
         let data = Data("verificación de integridad".utf8)
-        let zip = writer.build([.file(path: "x.txt", data: data)])
+        let zip = writer.build([.file(path: "x.txt", data: data, modifiedAt: nil)])
         let entry = try XCTUnwrap(try reader.listEntries(in: zip).first)
         XCTAssertEqual(entry.crc32, CRC32.checksum(data))
+    }
+
+    func testWritesAndReadsBackModificationDate() throws {
+        // Fecha sin fracciones de segundo y con segundos pares (resolución DOS = 2 s).
+        let reference = Date(timeIntervalSince1970: 1_700_000_000).addingTimeInterval(-1)
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reference)
+        let zip = writer.build([.file(path: "f.txt", data: Data("x".utf8), modifiedAt: reference)])
+        let entry = try XCTUnwrap(try reader.listEntries(in: zip).first)
+        let read = try XCTUnwrap(entry.modificationDate)
+        let readComponents = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: read)
+        XCTAssertEqual(components, readComponents, "la fecha debe sobrevivir al guardar y releer")
     }
 
     func testExtractFromExternalZip() throws {
@@ -61,7 +72,8 @@ final class ZipEngineTests: XCTestCase {
         let rebuilt = writer.build([
             .rawEntry(path: source.path, method: source.compressionMethod,
                       crc32: source.crc32, compressed: rawBytes,
-                      uncompressedSize: source.uncompressedSize)
+                      uncompressedSize: source.uncompressedSize,
+                      modifiedAt: source.modificationDate)
         ])
 
         let copied = try XCTUnwrap(try reader.listEntries(in: rebuilt).first)

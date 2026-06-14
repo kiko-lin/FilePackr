@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UniformTypeIdentifiers
 import ArchiveBrowser
 
 /// Origen del contenido de un nodo del árbol.
@@ -17,6 +18,8 @@ final class FileNode: Identifiable {
     var source: NodeSource
     var children: [FileNode]
     weak var parent: FileNode?
+    /// Fecha que trae la entrada del ZIP (ficheros y carpetas). `nil` si no procede de un ZIP.
+    var zipDate: Date?
 
     init(name: String, isDirectory: Bool, source: NodeSource, children: [FileNode] = []) {
         self.name = name
@@ -29,10 +32,56 @@ final class FileNode: Identifiable {
     /// la lista de hijos en carpetas.
     var childrenOrNil: [FileNode]? { isDirectory ? children : nil }
 
-    /// Tamaño descomprimido conocido sin extraer, si aplica.
-    var displaySize: UInt64? {
-        if case .zipEntry(let e) = source, !isDirectory { return e.uncompressedSize }
+    /// Tamaño real (descomprimido). Carpetas: nil.
+    var fileSize: UInt64? {
+        guard !isDirectory else { return nil }
+        switch source {
+        case .zipEntry(let e): return e.uncompressedSize
+        case .diskFile(let url):
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+            return size.map(UInt64.init)
+        case .folder: return nil
+        }
+    }
+
+    /// Tamaño comprimido dentro del archivo (solo se conoce para entradas del ZIP).
+    var compressedSize: UInt64? {
+        if case .zipEntry(let e) = source, !isDirectory { return e.compressedSize }
         return nil
+    }
+
+    /// Fecha de modificación: del ZIP, del disco (ficheros nuevos) o, para carpetas
+    /// sin fecha propia (zips sin entrada de carpeta), la del contenido más reciente.
+    var modificationDate: Date? {
+        if let zipDate { return zipDate }
+        if case .diskFile(let url) = source {
+            return (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        }
+        if isDirectory {
+            return children.compactMap(\.modificationDate).max()
+        }
+        return nil
+    }
+
+    /// Descripción del tipo ("Carpeta", "Imagen PNG", …), como la "Clase" del Finder.
+    var kindDescription: String {
+        if isDirectory { return "Carpeta" }
+        let ext = (name as NSString).pathExtension
+        if !ext.isEmpty, let type = UTType(filenameExtension: ext), let desc = type.localizedDescription {
+            return desc.prefix(1).uppercased() + desc.dropFirst()
+        }
+        return ext.isEmpty ? "Documento" : "Documento \(ext.uppercased())"
+    }
+
+    /// Ruta completa "carpeta/subcarpeta/nombre" para mostrar en menús.
+    var pathLabel: String {
+        var parts = [name]
+        var ancestor = parent
+        while let current = ancestor {
+            parts.insert(current.name, at: 0)
+            ancestor = current.parent
+        }
+        return parts.joined(separator: "/")
     }
 }
 
@@ -51,6 +100,9 @@ final class ArchiveDocument: ObservableObject {
     @Published private(set) var hasUnsavedChanges: Bool = false
     /// Fichero de origen, si se abrió/guardó uno (para "Guardar" sin volver a preguntar).
     @Published private(set) var sourceURL: URL?
+    /// Se incrementa con cada cambio estructural (no al seleccionar). La vista de
+    /// lista lo usa para recargar solo cuando hace falta.
+    @Published private(set) var revision = 0
 
     static let untitledName = "Sin título"
 
@@ -99,8 +151,12 @@ final class ArchiveDocument: ObservableObject {
 
     /// Añade ficheros/carpetas del disco dentro de la carpeta destino actual.
     func addFiles(_ urls: [URL]) {
+        addFiles(urls, into: destinationFolderForAdding())
+    }
+
+    /// Añade ficheros/carpetas del disco dentro de `target` (o la raíz si es `nil`).
+    func addFiles(_ urls: [URL], into target: FileNode?) {
         if documentName.isEmpty { beginNewDocument() }
-        let target = destinationFolderForAdding()
         for url in urls {
             let node = importFromDisk(url)
             insert(node, into: target)
@@ -131,6 +187,62 @@ final class ArchiveDocument: ObservableObject {
         remove(node)
         if selection == node.id { selection = nil }
         markChanged()
+    }
+
+    /// Renombra un nodo. Ignora si el nombre está vacío o ya existe entre hermanos.
+    func rename(_ node: FileNode, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != node.name else { return }
+        let siblings = node.parent?.children ?? roots
+        guard !siblings.contains(where: { $0.id != node.id && $0.name == trimmed }) else { return }
+        node.name = trimmed
+        markChanged()
+    }
+
+    /// Mueve un nodo dentro de `target` (o a la raíz si es `nil`). No permite
+    /// moverlo a sí mismo, a un descendiente, ni donde ya exista ese nombre.
+    func move(_ node: FileNode, into target: FileNode?) {
+        guard !isSelfOrDescendant(target, of: node) else { return }
+        let destination = target?.children ?? roots
+        guard !destination.contains(where: { $0.name == node.name }) else { return }
+        remove(node)
+        insert(node, into: target)
+        markChanged()
+    }
+
+    /// `true` si `node` puede moverse a `target` (no a sí mismo ni a un descendiente).
+    func canMove(_ node: FileNode, into target: FileNode?) -> Bool {
+        !isSelfOrDescendant(target, of: node)
+    }
+
+    /// Carpetas válidas como destino para mover `node` (excluye su carpeta actual,
+    /// sí mismo y sus descendientes).
+    func moveDestinations(for node: FileNode) -> [FileNode] {
+        allFolders().filter { folder in
+            folder.id != node.parent?.id && !isSelfOrDescendant(folder, of: node)
+        }
+    }
+
+    private func allFolders() -> [FileNode] {
+        var result: [FileNode] = []
+        func walk(_ nodes: [FileNode]) {
+            for n in nodes where n.isDirectory {
+                result.append(n)
+                walk(n.children)
+            }
+        }
+        walk(roots)
+        return result
+    }
+
+    /// `true` si `candidate` es `node` o está dentro de `node`.
+    private func isSelfOrDescendant(_ candidate: FileNode?, of node: FileNode) -> Bool {
+        var current = candidate
+        while let cur = current {
+            if cur.id == node.id { return true }
+            current = cur.parent
+        }
+        return false
     }
 
     // MARK: - Documento: cerrar y guardar
@@ -242,7 +354,10 @@ final class ArchiveDocument: ObservableObject {
                 let isDir = !isLast || entry.isDirectory
 
                 if let existing = index[accumulated] {
-                    if isLast, !entry.isDirectory { existing.source = .zipEntry(entry) }
+                    if isLast {
+                        existing.zipDate = entry.modificationDate
+                        if !entry.isDirectory { existing.source = .zipEntry(entry) }
+                    }
                     parent = existing
                     continue
                 }
@@ -251,6 +366,7 @@ final class ArchiveDocument: ObservableObject {
                     isDirectory: isDir,
                     source: (isLast && !entry.isDirectory) ? .zipEntry(entry) : .folder
                 )
+                if isLast { node.zipDate = entry.modificationDate }
                 node.parent = parent
                 if let parent { parent.children.append(node) } else { rootNodes.append(node) }
                 index[accumulated] = node
@@ -280,18 +396,20 @@ final class ArchiveDocument: ObservableObject {
         for node in nodes {
             let path = prefix + node.name
             if node.isDirectory {
-                items.append(.directory(path: path + "/"))
+                items.append(.directory(path: path + "/", modifiedAt: node.modificationDate))
                 try collect(node.children, prefix: path + "/", into: &items)
             } else {
                 switch node.source {
                 case .diskFile(let url):
-                    items.append(.file(path: path, data: try Data(contentsOf: url)))
+                    items.append(.file(path: path, data: try Data(contentsOf: url),
+                                       modifiedAt: node.modificationDate))
                 case .zipEntry(let entry):
                     if let archive = sourceArchiveData {
                         let raw = try extractor.rawCompressedData(for: entry, in: archive)
                         items.append(.rawEntry(path: path, method: entry.compressionMethod,
                                                crc32: entry.crc32, compressed: raw,
-                                               uncompressedSize: entry.uncompressedSize))
+                                               uncompressedSize: entry.uncompressedSize,
+                                               modifiedAt: entry.modificationDate))
                     }
                 case .folder:
                     break
@@ -343,8 +461,9 @@ final class ArchiveDocument: ObservableObject {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
     }
 
-    /// Las mutaciones tocan nodos (clases), así que avisamos a SwiftUI a mano.
-    private func changed() { objectWillChange.send() }
+    /// Las mutaciones tocan nodos (clases); subir `revision` (publicado) avisa a
+    /// SwiftUI y le dice a la vista de lista que debe recargar.
+    private func changed() { revision &+= 1 }
 
     /// Como `changed()`, pero además marca el documento con cambios sin guardar.
     private func markChanged() {

@@ -18,6 +18,8 @@ public struct ArchiveEntry: Equatable, Identifiable, Sendable {
     /// Offset del *local file header* de esta entrada dentro del ZIP.
     /// Necesario para extraer o copiar los bytes comprimidos sin releer el índice.
     public let localHeaderOffset: UInt64
+    /// Fecha de modificación (campo MS-DOS del ZIP), si es válida.
+    public let modificationDate: Date?
 }
 
 public enum ArchiveError: Error, Equatable {
@@ -63,6 +65,8 @@ public struct ZipReader: Sendable {
                 throw ArchiveError.corruptCentralDirectory
             }
             let method = readU16(bytes, p + 10)
+            let modTime = readU16(bytes, p + 12)
+            let modDate = readU16(bytes, p + 14)
             let crc = readU32(bytes, p + 16)
             let compSize = UInt64(readU32(bytes, p + 20))
             let uncompSize = UInt64(readU32(bytes, p + 24))
@@ -84,7 +88,8 @@ public struct ZipReader: Sendable {
                 isDirectory: name.hasSuffix("/"),
                 compressionMethod: method,
                 crc32: crc,
-                localHeaderOffset: localOffset
+                localHeaderOffset: localOffset,
+                modificationDate: Self.dosDate(time: modTime, date: modDate)
             ))
             p = nameStart + nameLen + extraLen + commentLen
         }
@@ -104,6 +109,21 @@ public struct ZipReader: Sendable {
             i -= 1
         }
         return nil
+    }
+
+    /// Convierte la fecha/hora MS-DOS del ZIP (dos UInt16) en una `Date`.
+    static func dosDate(time: UInt16, date: UInt16) -> Date? {
+        let day = Int(date & 0x1F)
+        let month = Int((date >> 5) & 0x0F)
+        guard day > 0, month > 0 else { return nil }
+        var components = DateComponents()
+        components.year = Int((date >> 9) & 0x7F) + 1980
+        components.month = month
+        components.day = day
+        components.hour = Int((time >> 11) & 0x1F)
+        components.minute = Int((time >> 5) & 0x3F)
+        components.second = Int(time & 0x1F) * 2
+        return Calendar.current.date(from: components)
     }
 
     private func readU16(_ b: [UInt8], _ o: Int) -> UInt16 {

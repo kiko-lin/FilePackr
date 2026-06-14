@@ -3,11 +3,11 @@ import Foundation
 /// Una unidad a escribir dentro del ZIP.
 public enum ZipWriteItem {
     /// Carpeta (la ruta debe acabar en "/").
-    case directory(path: String)
+    case directory(path: String, modifiedAt: Date?)
     /// Fichero nuevo: se comprimirá con DEFLATE (o se almacenará si no compensa).
-    case file(path: String, data: Data)
+    case file(path: String, data: Data, modifiedAt: Date?)
     /// Entrada que viene de otro ZIP: se copia tal cual, sin recomprimir.
-    case rawEntry(path: String, method: UInt16, crc32: UInt32, compressed: Data, uncompressedSize: UInt64)
+    case rawEntry(path: String, method: UInt16, crc32: UInt32, compressed: Data, uncompressedSize: UInt64, modifiedAt: Date?)
 }
 
 /// Construye un fichero ZIP en memoria a partir de una lista de elementos.
@@ -31,8 +31,8 @@ public struct ZipWriter: Sendable {
             out.appendU16(20)                    // versión necesaria
             out.appendU16(0)                     // flags
             out.appendU16(record.method)
-            out.appendU16(0)                     // hora
-            out.appendU16(0)                     // fecha
+            out.appendU16(record.dosTime)        // hora
+            out.appendU16(record.dosDate)        // fecha
             out.appendU32(record.crc32)
             out.appendU32(UInt32(record.compressed.count))
             out.appendU32(UInt32(record.uncompressedSize))
@@ -47,8 +47,8 @@ public struct ZipWriter: Sendable {
             central.appendU16(20)                // versión necesaria
             central.appendU16(0)                 // flags
             central.appendU16(record.method)
-            central.appendU16(0)                 // hora
-            central.appendU16(0)                 // fecha
+            central.appendU16(record.dosTime)    // hora
+            central.appendU16(record.dosDate)    // fecha
             central.appendU32(record.crc32)
             central.appendU32(UInt32(record.compressed.count))
             central.appendU32(UInt32(record.uncompressedSize))
@@ -88,30 +88,49 @@ public struct ZipWriter: Sendable {
         let compressed: Data
         let uncompressedSize: UInt64
         let isDirectory: Bool
+        let dosTime: UInt16
+        let dosDate: UInt16
     }
 
     private func normalize(_ item: ZipWriteItem) -> Record {
         switch item {
-        case .directory(let path):
+        case .directory(let path, let modifiedAt):
             let name = path.hasSuffix("/") ? path : path + "/"
+            let (time, date) = Self.dosDateTime(modifiedAt)
             return Record(nameBytes: Data(name.utf8), method: 0, crc32: 0,
-                          compressed: Data(), uncompressedSize: 0, isDirectory: true)
+                          compressed: Data(), uncompressedSize: 0, isDirectory: true,
+                          dosTime: time, dosDate: date)
 
-        case .file(let path, let data):
+        case .file(let path, let data, let modifiedAt):
             let crc = CRC32.checksum(data)
+            let (time, date) = Self.dosDateTime(modifiedAt)
             if let deflated = Deflate.compress(data) {
                 return Record(nameBytes: Data(path.utf8), method: 8, crc32: crc,
-                              compressed: deflated, uncompressedSize: UInt64(data.count), isDirectory: false)
+                              compressed: deflated, uncompressedSize: UInt64(data.count), isDirectory: false,
+                              dosTime: time, dosDate: date)
             }
             // No compensó comprimir: almacenar sin comprimir.
             return Record(nameBytes: Data(path.utf8), method: 0, crc32: crc,
-                          compressed: data, uncompressedSize: UInt64(data.count), isDirectory: false)
+                          compressed: data, uncompressedSize: UInt64(data.count), isDirectory: false,
+                          dosTime: time, dosDate: date)
 
-        case .rawEntry(let path, let method, let crc, let compressed, let uncompressedSize):
+        case .rawEntry(let path, let method, let crc, let compressed, let uncompressedSize, let modifiedAt):
+            let (time, date) = Self.dosDateTime(modifiedAt)
             return Record(nameBytes: Data(path.utf8), method: method, crc32: crc,
                           compressed: compressed, uncompressedSize: uncompressedSize,
-                          isDirectory: path.hasSuffix("/"))
+                          isDirectory: path.hasSuffix("/"), dosTime: time, dosDate: date)
         }
+    }
+
+    /// Codifica una fecha en el formato MS-DOS del ZIP (hora, fecha). Si es `nil`,
+    /// devuelve ceros (sin fecha).
+    private static func dosDateTime(_ date: Date?) -> (UInt16, UInt16) {
+        guard let date else { return (0, 0) }
+        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        let year = min(127, max(0, (c.year ?? 1980) - 1980))
+        let dosDate = UInt16((year << 9) | ((c.month ?? 1) << 5) | (c.day ?? 1))
+        let dosTime = UInt16(((c.hour ?? 0) << 11) | ((c.minute ?? 0) << 5) | ((c.second ?? 0) / 2))
+        return (dosTime, dosDate)
     }
 }
 

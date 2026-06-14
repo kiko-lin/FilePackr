@@ -2,8 +2,6 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-/// Gestor de archivos comprimidos: barra superior con acciones y cuerpo central
-/// con el contenido (o la zona de arrastre cuando está vacío).
 /// Conflicto al extraer: ya existe un fichero/carpeta con ese nombre en destino.
 private struct ExtractionConflict: Identifiable {
     let id = UUID()
@@ -12,11 +10,12 @@ private struct ExtractionConflict: Identifiable {
     let alternative: URL    // nombre libre propuesto (p.ej. "3d_2.svg")
 }
 
+/// Gestor de archivos comprimidos: barra superior + barra de documento + cuerpo
+/// central (zona de arrastre cuando está vacío, o el navegador `NSOutlineView`).
 struct ContentView: View {
     @StateObject private var doc = ArchiveDocument()
     @State private var errorMessage: String?
     @State private var conflict: ExtractionConflict?
-    @State private var quickLook = QuickLookCoordinator()
     @State private var confirmingClose = false
 
     var body: some View {
@@ -27,12 +26,7 @@ struct ContentView: View {
             }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .dropDestination(for: URL.self) { urls, _ in
-                    run { try doc.handleIncoming(urls) }
-                    return true
-                }
         }
-        .background(QuickLookHost(coordinator: quickLook))
         .toolbar { toolbarContent }
         .confirmationDialog("Hay cambios sin guardar en «\(doc.documentName)»",
                             isPresented: $confirmingClose, titleVisibility: .visible) {
@@ -71,8 +65,12 @@ struct ContentView: View {
     private var content: some View {
         if doc.isEmpty {
             dropPrompt
+                .dropDestination(for: URL.self) { urls, _ in
+                    run { try doc.handleIncoming(urls) }
+                    return true
+                }
         } else {
-            fileList
+            ArchiveOutlineView(doc: doc, onExtract: { extract($0) })
         }
     }
 
@@ -118,46 +116,6 @@ struct ContentView: View {
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
-    }
-
-    private var fileList: some View {
-        List(doc.roots, children: \.childrenOrNil, selection: $doc.selection) { node in
-            HStack(spacing: 6) {
-                Image(nsImage: systemIcon(for: node))
-                    .resizable()
-                    .frame(width: 18, height: 18)
-                Text(node.name)
-                Spacer()
-                if let size = node.displaySize {
-                    Text(byteString(size))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-            }
-            .tag(node.id)
-            .onDrag { dragProvider(for: node) }
-            .contextMenu {
-                Button("Extraer…") { extract(node) }
-                Button("Eliminar", role: .destructive) { doc.delete(node) }
-            }
-        }
-        .listStyle(.inset(alternatesRowBackgrounds: true))
-        .onDeleteCommand { doc.removeSelected() }
-        .onKeyPress(.space) {
-            triggerQuickLook()
-            return .handled
-        }
-    }
-
-    /// Icono del sistema correspondiente al tipo de archivo (como en el Finder).
-    private func systemIcon(for node: FileNode) -> NSImage {
-        if node.isDirectory {
-            return NSWorkspace.shared.icon(for: .folder)
-        }
-        let ext = (node.name as NSString).pathExtension
-        let type = ext.isEmpty ? UTType.data : (UTType(filenameExtension: ext) ?? .data)
-        return NSWorkspace.shared.icon(for: type)
     }
 
     // MARK: - Barra superior
@@ -219,7 +177,6 @@ struct ContentView: View {
         let plan = doc.exportPlan(for: node)
         let destination = dir.appendingPathComponent(node.name)
         if FileManager.default.fileExists(atPath: destination.path) {
-            // Conflicto: preguntamos sobrescribir / guardar como / cancelar.
             conflict = ExtractionConflict(plan: plan,
                                           destination: destination,
                                           alternative: doc.conflictFreeURL(for: destination))
@@ -240,7 +197,9 @@ struct ContentView: View {
     private func saveAsPanel() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.zip]
-        let base = doc.documentName == ArchiveDocument.untitledName ? doc.documentName : (doc.documentName as NSString).deletingPathExtension
+        let base = doc.documentName == ArchiveDocument.untitledName
+            ? doc.documentName
+            : (doc.documentName as NSString).deletingPathExtension
         panel.nameFieldStringValue = "\(base).zip"
         panel.prompt = "Guardar"
         if panel.runModal() == .OK, let url = panel.url {
@@ -257,59 +216,8 @@ struct ContentView: View {
         }
     }
 
-    /// Entrega el nodo para arrastrarlo al Finder. La extracción es perezosa:
-    /// solo se prepara un plan ligero; el archivo se materializa al soltar.
-    private func dragProvider(for node: FileNode) -> NSItemProvider {
-        let plan = doc.exportPlan(for: node)
-        let (type, suggestedName) = dragType(for: node)
-
-        let provider = NSItemProvider()
-        // El sistema reañade la extensión del tipo al nombre sugerido, así que el
-        // nombre va sin extensión (si no, "3d.svg" acabaría como "3d.svg.svg").
-        provider.suggestedName = suggestedName
-        provider.registerFileRepresentation(forTypeIdentifier: type.identifier,
-                                             fileOptions: [],
-                                             visibility: .all) { completion in
-            do {
-                completion(try plan.materialize(), false, nil)
-            } catch {
-                completion(nil, false, error)
-            }
-            return nil
-        }
-        return provider
-    }
-
-    /// Decide el tipo uniforme y el nombre sugerido (sin extensión) para el arrastre.
-    private func dragType(for node: FileNode) -> (UTType, String) {
-        if node.isDirectory {
-            return (.folder, node.name) // las carpetas no llevan extensión que reañadir
-        }
-        let ext = (node.name as NSString).pathExtension
-        guard !ext.isEmpty else { return (.data, node.name) }
-        let base = (node.name as NSString).deletingPathExtension
-        let type = UTType(filenameExtension: ext)
-            ?? UTType(tag: ext, tagClass: .filenameExtension, conformingTo: .data)
-            ?? .data
-        return (type, base)
-    }
-
-    /// Abre/cierra Quick Look (barra espaciadora) para el elemento seleccionado,
-    /// con sus hermanos como ítems para poder navegar con las flechas, como el Finder.
-    private func triggerQuickLook() {
-        guard let node = doc.selectedNode(), !node.isDirectory else { return }
-        let siblings = doc.siblingFiles(of: node)
-        let plans = siblings.map { doc.exportPlan(for: $0) }
-        let start = siblings.firstIndex { $0.id == node.id } ?? 0
-        quickLook.toggle(plans: plans, startIndex: start)
-    }
-
     private func run(_ op: () throws -> Void) {
         do { try op() } catch { errorMessage = "\(error)" }
-    }
-
-    private func byteString(_ bytes: UInt64) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 }
 

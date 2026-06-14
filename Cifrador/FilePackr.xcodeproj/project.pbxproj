@@ -43,7 +43,7 @@
 		A97D1DB52FDEC134004667A6 = {
 			isa = PBXGroup;
 			children = (
-				A97D1DC02FDEC134004667A6 /* Cifrador */,
+				A97D1DC02FDEC134004667A6 /* FilePackr */,
 				A97D1DBF2FDEC134004667A6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -51,7 +51,7 @@
 		A97D1DBF2FDEC134004667A6 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A97D1DBE2FDEC134004667A6 /* Cifrador.app */,
+				A97D1DBE2FDEC134004667A6 /* FilePackr.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -59,9 +59,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A97D1DBD2FDEC134004667A6 /* Cifrador */ = {
+		A97D1DBD2FDEC134004667A6 /* FilePackr */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A97D1DC92FDEC135004667A6 /* Build configuration list for PBXNativeTarget "Cifrador" */;
+			buildConfigurationList = A97D1DC92FDEC135004667A6 /* Build configuration list for PBXNativeTarget "FilePackr" */;
 			buildPhases = (
 				A97D1DBA2FDEC134004667A6 /* Sources */,
 				A97D1DBB2FDEC134004667A6 /* Frameworks */,
@@ -72,7 +72,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				A97D1DC02FDEC134004667A6 /* Cifrador */,
+				A97D1DC02FDEC134004667A6 /* FilePackr */,
 			);
 			name = FilePackr;
 			packageProductDependencies = (
@@ -100,7 +100,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A97D1DB92FDEC134004667A6 /* Build configuration list for PBXProject "Cifrador" */;
+			buildConfigurationList = A97D1DB92FDEC134004667A6 /* Build configuration list for PBXProject "FilePackr" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -117,7 +117,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A97D1DBD2FDEC134004667A6 /* Cifrador */,
+				A97D1DBD2FDEC134004667A6 /* FilePackr */,
 			);
 		};
 /* End PBXProject section */
@@ -326,7 +326,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A97D1DB92FDEC134004667A6 /* Build configuration list for PBXProject "Cifrador" */ = {
+		A97D1DB92FDEC134004667A6 /* Build configuration list for PBXProject "FilePackr" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A97D1DC72FDEC135004667A6 /* Debug */,
@@ -335,7 +335,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A97D1DC92FDEC135004667A6 /* Build configuration list for PBXNativeTarget "Cifrador" */ = {
+		A97D1DC92FDEC135004667A6 /* Build configuration list for PBXNativeTarget "FilePackr" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A97D1DCA2FDEC135004667A6 /* Debug */,
