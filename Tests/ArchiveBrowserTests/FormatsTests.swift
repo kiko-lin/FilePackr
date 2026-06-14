@@ -113,4 +113,66 @@ final class FormatsTests: XCTestCase {
         let entries = try Tar.listEntries(in: recoveredTar)
         XCTAssertEqual(entries.first?.path, "uno.txt")
     }
+
+    // MARK: xz
+
+    func testXzRoundTrip() throws {
+        let payload = Data(String(repeating: "contenido xz ñ áé ", count: 300).utf8)
+        let xz = Xz.compress(payload)
+        XCTAssertEqual(Array(xz.prefix(6)), [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00])  // firma .xz
+        XCTAssertEqual(try Xz.decompress(xz), payload)
+        XCTAssertEqual(Xz.uncompressedSize(of: xz), UInt64(payload.count))
+        XCTAssertLessThan(xz.count, payload.count)
+    }
+
+    func testXzEmpty() throws {
+        XCTAssertEqual(try Xz.decompress(Xz.compress(Data())), Data())
+    }
+
+    func testPythonReadsOurXz() throws {
+        let python = "/usr/bin/python3"
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: python))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let payload = Data("datos para liblzma del sistema".utf8)
+        let url = dir.appendingPathComponent("f.xz")
+        try Xz.compress(payload).write(to: url)
+        let out = try run(python, ["-c", "import lzma,sys; sys.stdout.buffer.write(lzma.open(sys.argv[1]).read())", url.path])
+        XCTAssertEqual(out, payload)
+    }
+
+    func testReadsPythonXz() throws {
+        let python = "/usr/bin/python3"
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: python))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("f.xz")
+        _ = try run(python, ["-c", "import lzma; open('\(url.path)','wb').write(lzma.compress(b'creado por liblzma'))"])
+        let xz = try Data(contentsOf: url)
+        XCTAssertEqual(String(decoding: try Xz.decompress(xz), as: UTF8.self), "creado por liblzma")
+    }
+
+    func testReadsBsdtarTarXz() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/tar"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        try "hola xz".write(to: dir.appendingPathComponent("hola.txt"), atomically: true, encoding: .utf8)
+        try run("/usr/bin/tar", ["-cJf", "out.tar.xz", "hola.txt"], cwd: dir)
+
+        let xz = try Data(contentsOf: dir.appendingPathComponent("out.tar.xz"))
+        let tar = try Xz.decompress(xz)
+        let entry = try XCTUnwrap(try Tar.listEntries(in: tar).first { $0.path == "hola.txt" })
+        XCTAssertEqual(String(decoding: try Tar.entryData(for: entry, in: tar), as: UTF8.self), "hola xz")
+    }
+
+    func testBsdtarReadsOurTarXz() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/tar"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let tarxz = Xz.compress(Tar.write([
+            Tar.WriteItem(path: "leeme.txt", data: Data("escrito por FilePackr".utf8), modifiedAt: nil, isDirectory: false),
+        ]))
+        let url = dir.appendingPathComponent("ours.tar.xz")
+        try tarxz.write(to: url)
+        let listing = String(decoding: try run("/usr/bin/tar", ["-tJf", url.path]), as: UTF8.self)
+        XCTAssertTrue(listing.contains("leeme.txt"))
+        let content = String(decoding: try run("/usr/bin/tar", ["-xOJf", url.path, "leeme.txt"]), as: UTF8.self)
+        XCTAssertEqual(content, "escrito por FilePackr")
+    }
 }
