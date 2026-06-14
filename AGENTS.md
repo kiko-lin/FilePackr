@@ -66,6 +66,10 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   **bidireccional** verificada contra `tar`/`gzip`/`gunzip` del sistema.
   `Tar.swift` (ustar + PAX `x` + GNU `L`), `Gzip.swift` (RFC 1952), `Deflate.deflate`.
   La app detecta el formato al abrir y reconstruye el contenido al guardar en otro.
+- **Volúmenes** (división por bytes, convención `.001`/`.002`… de 7-Zip/Keka):
+  `Volumes.swift` (split/join + naming, testeado). Diálogo Guardar con toggle
+  "Dividir en volúmenes" + tamaño/unidad, por formato (`supportsVolumeSplit`).
+  Al abrir un `.001` se reúnen y concatenan las partes; re-guardar conserva el troceo.
 - **Pedir contraseña al abrir** un zip cifrado (de otra app): valida la clave
   extrayendo la primera entrada y la recuerda (`entryPassword`) para extraer/
   previsualizar/arrastrar. `ExportPlan.zipEntry` lleva la contraseña.
@@ -117,3 +121,7 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - gzip (RFC 1952): `1F 8B 08` + FLG + MTIME + (FNAME opcional) + DEFLATE +
   CRC32 + ISIZE(LE). `.tar.gz` = TAR envuelto en gzip; un `.gz` "suelto" se
   distingue de un tar.gz comprobando la firma `ustar` tras descomprimir.
+- Volúmenes: división **por bytes** (no spanning PKWARE nativo), sufijo numérico
+  `.001`, `.002`… Reconstrucción = concatenar en orden. Es lo que hacen 7-Zip y
+  Keka (sus `.001` se abren concatenando). NO soportado: el split PKWARE nativo
+  `.z01`/.zip (cabeceras de spanning) — sería trabajo aparte.
