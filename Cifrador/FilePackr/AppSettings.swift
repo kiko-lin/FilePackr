@@ -26,25 +26,26 @@ enum ExtractDestinationMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// Un icono de app seleccionable. `assetName == nil` es el icono por defecto del bundle.
+/// Un icono de app seleccionable (image set de Assets).
 struct AppIconOption: Identifiable, Equatable {
     let id: String
-    let assetName: String?
+    let assetName: String
     let labelKey: String
 
-    /// Icono por defecto (el del propio bundle).
-    static let `default` = AppIconOption(id: "default", assetName: nil, labelKey: "")
+    /// Catálogo de iconos disponibles.
+    static let all: [AppIconOption] = [
+        AppIconOption(id: "orange", assetName: "AppIconOrange", labelKey: "icon.orange"),
+        AppIconOption(id: "green",  assetName: "AppIconGreen",  labelKey: "icon.green"),
+        AppIconOption(id: "purple", assetName: "AppIconPurple", labelKey: "icon.purple"),
+        AppIconOption(id: "blue",   assetName: "AppIconBlue",   labelKey: "icon.blue"),
+        AppIconOption(id: "red",    assetName: "AppIconRed",    labelKey: "icon.red"),
+    ]
 
-    /// Catálogo de iconos disponibles. Añadir aquí una entrada por cada juego de
-    /// imágenes que se incluya en Assets (p. ej. `AppIconOption(id: "blue",
-    /// assetName: "AppIconBlue", labelKey: "")`).
-    static let all: [AppIconOption] = [.default]
+    /// Por defecto: naranja (color de marca).
+    static let `default` = all[0]
 
-    /// Imagen para mostrar en el selector (la del bundle si es el por defecto).
-    var previewImage: NSImage? {
-        if let assetName { return NSImage(named: assetName) }
-        return NSApp.applicationIconImage
-    }
+    /// Imagen para mostrar en el selector.
+    var previewImage: NSImage? { NSImage(named: assetName) }
 }
 
 /// Preferencias de la app (aparte del idioma, que gestiona `Localizer`). Se guardan
@@ -95,12 +96,22 @@ final class AppSettings: ObservableObject {
     /// Aplica el icono elegido al Dock/ventanas de la app en ejecución. Hay que
     /// llamarlo al arrancar (el icono nativo no persiste entre lanzamientos).
     func applyAppIcon() {
-        let icon = selectedIcon
-        if let assetName = icon.assetName {
-            NSApp.applicationIconImage = NSImage(named: assetName)
-        } else {
-            NSApp.applicationIconImage = nil   // restaura el del bundle
-        }
+        guard let image = NSImage(named: selectedIcon.assetName) else { return }
+        NSApp.applicationIconImage = Self.rounded(image)
+    }
+
+    /// Recorta la imagen a un cuadrado de esquinas redondeadas (estilo macOS), ya que
+    /// `applicationIconImage` no aplica la máscara del sistema.
+    private static func rounded(_ image: NSImage) -> NSImage {
+        let side: CGFloat = 512
+        let size = NSSize(width: side, height: side)
+        let result = NSImage(size: size)
+        result.lockFocus()
+        let rect = NSRect(origin: .zero, size: size)
+        NSBezierPath(roundedRect: rect, xRadius: side * 0.2237, yRadius: side * 0.2237).addClip()
+        image.draw(in: rect, from: .zero, operation: .copy, fraction: 1)
+        result.unlockFocus()
+        return result
     }
 }
 

@@ -83,6 +83,11 @@ private extension Localizer {
         "extract.dest.fixedFolder": "A fixed folder",
         "settings.noFolder": "No folder chosen",
         "button.done": "Done",
+        "icon.orange": "Orange",
+        "icon.green": "Green",
+        "icon.purple": "Purple",
+        "icon.blue": "Blue",
+        "icon.red": "Red",
 
         // Document bar
         "doc.encrypted.help": "Encrypted archive",
@@ -204,6 +209,11 @@ private extension Localizer {
         "extract.dest.fixedFolder": "Una carpeta fija",
         "settings.noFolder": "Ninguna carpeta elegida",
         "button.done": "Hecho",
+        "icon.orange": "Naranja",
+        "icon.green": "Verde",
+        "icon.purple": "Morado",
+        "icon.blue": "Azul",
+        "icon.red": "Rojo",
 
         // Document bar
         "doc.encrypted.help": "Archivo cifrado",

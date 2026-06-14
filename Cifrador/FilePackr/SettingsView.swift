@@ -91,7 +91,7 @@ struct SettingsView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .help(option.id)
+                .help(loc(option.labelKey))
             }
             Spacer()
         }
