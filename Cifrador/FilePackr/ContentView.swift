@@ -16,9 +16,15 @@ struct ContentView: View {
     @StateObject private var doc = ArchiveDocument()
     @State private var errorMessage: String?
     @State private var conflict: ExtractionConflict?
+    @State private var quickLook = QuickLookCoordinator()
+    @State private var confirmingClose = false
 
     var body: some View {
         VStack(spacing: 0) {
+            if !doc.isEmpty {
+                documentBar
+                Divider()
+            }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .dropDestination(for: URL.self) { urls, _ in
@@ -26,7 +32,15 @@ struct ContentView: View {
                     return true
                 }
         }
+        .background(QuickLookHost(coordinator: quickLook))
         .toolbar { toolbarContent }
+        .confirmationDialog("Hay cambios sin guardar en «\(doc.documentName)»",
+                            isPresented: $confirmingClose, titleVisibility: .visible) {
+            Button("Cerrar sin guardar", role: .destructive) { doc.close() }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Si cierras ahora perderás los cambios no guardados.")
+        }
         .alert("No se pudo completar la operación",
                isPresented: Binding(get: { errorMessage != nil },
                                     set: { if !$0 { errorMessage = nil } }),
@@ -62,6 +76,32 @@ struct ContentView: View {
         }
     }
 
+    /// Barra intermedia: icono + nombre del archivo y acciones Cerrar / Guardar.
+    private var documentBar: some View {
+        HStack(spacing: 8) {
+            Image(nsImage: NSWorkspace.shared.icon(for: .zip))
+                .resizable()
+                .frame(width: 16, height: 16)
+            Text(doc.documentName)
+                .fontWeight(.medium)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if doc.hasUnsavedChanges {
+                Text("— sin guardar")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Cerrar") { attemptClose() }
+            Button("Guardar") { saveDocument() }
+                .disabled(!doc.hasUnsavedChanges)
+                .keyboardShortcut("s", modifiers: .command)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
     private var dropPrompt: some View {
         VStack(spacing: 14) {
             Image(systemName: "arrow.down.doc")
@@ -82,15 +122,17 @@ struct ContentView: View {
 
     private var fileList: some View {
         List(doc.roots, children: \.childrenOrNil, selection: $doc.selection) { node in
-            HStack {
-                Image(systemName: node.isDirectory ? "folder" : "doc")
-                    .foregroundStyle(node.isDirectory ? .blue : .secondary)
+            HStack(spacing: 6) {
+                Image(nsImage: systemIcon(for: node))
+                    .resizable()
+                    .frame(width: 18, height: 18)
                 Text(node.name)
                 Spacer()
                 if let size = node.displaySize {
                     Text(byteString(size))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
             .tag(node.id)
@@ -100,7 +142,22 @@ struct ContentView: View {
                 Button("Eliminar", role: .destructive) { doc.delete(node) }
             }
         }
+        .listStyle(.inset(alternatesRowBackgrounds: true))
         .onDeleteCommand { doc.removeSelected() }
+        .onKeyPress(.space) {
+            triggerQuickLook()
+            return .handled
+        }
+    }
+
+    /// Icono del sistema correspondiente al tipo de archivo (como en el Finder).
+    private func systemIcon(for node: FileNode) -> NSImage {
+        if node.isDirectory {
+            return NSWorkspace.shared.icon(for: .folder)
+        }
+        let ext = (node.name as NSString).pathExtension
+        let type = ext.isEmpty ? UTType.data : (UTType(filenameExtension: ext) ?? .data)
+        return NSWorkspace.shared.icon(for: type)
     }
 
     // MARK: - Barra superior
@@ -129,15 +186,6 @@ struct ContentView: View {
             }
             .disabled(doc.selection == nil)
             .help("Extraer el elemento seleccionado a una ubicación")
-
-            Spacer()
-
-            Button(action: saveAction) {
-                Label("Guardar", systemImage: "square.and.arrow.down")
-            }
-            .disabled(doc.isEmpty)
-            .help("Guardar como .zip")
-            .keyboardShortcut("s", modifiers: .command)
         }
     }
 
@@ -180,13 +228,32 @@ struct ContentView: View {
         }
     }
 
-    private func saveAction() {
+    /// Guarda: sobre el fichero de origen si existe, o pide ubicación si es nuevo.
+    private func saveDocument() {
+        if let url = doc.sourceURL {
+            run { try doc.save(to: url); doc.markSaved(as: url) }
+        } else {
+            saveAsPanel()
+        }
+    }
+
+    private func saveAsPanel() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.zip]
-        panel.nameFieldStringValue = "Archivo.zip"
+        let base = doc.documentName == ArchiveDocument.untitledName ? doc.documentName : (doc.documentName as NSString).deletingPathExtension
+        panel.nameFieldStringValue = "\(base).zip"
         panel.prompt = "Guardar"
         if panel.runModal() == .OK, let url = panel.url {
-            run { try doc.save(to: url) }
+            run { try doc.save(to: url); doc.markSaved(as: url) }
+        }
+    }
+
+    /// Cierra el documento; si hay cambios sin guardar, pide confirmación.
+    private func attemptClose() {
+        if doc.hasUnsavedChanges {
+            confirmingClose = true
+        } else {
+            doc.close()
         }
     }
 
@@ -225,6 +292,16 @@ struct ContentView: View {
             ?? UTType(tag: ext, tagClass: .filenameExtension, conformingTo: .data)
             ?? .data
         return (type, base)
+    }
+
+    /// Abre/cierra Quick Look (barra espaciadora) para el elemento seleccionado,
+    /// con sus hermanos como ítems para poder navegar con las flechas, como el Finder.
+    private func triggerQuickLook() {
+        guard let node = doc.selectedNode(), !node.isDirectory else { return }
+        let siblings = doc.siblingFiles(of: node)
+        let plans = siblings.map { doc.exportPlan(for: $0) }
+        let start = siblings.firstIndex { $0.id == node.id } ?? 0
+        quickLook.toggle(plans: plans, startIndex: start)
     }
 
     private func run(_ op: () throws -> Void) {

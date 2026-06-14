@@ -45,6 +45,15 @@ final class ArchiveDocument: ObservableObject {
     @Published var roots: [FileNode] = []
     @Published var selection: FileNode.ID?
 
+    /// Nombre mostrado en la barra de documento (fichero abierto o "Sin título").
+    @Published private(set) var documentName: String = ""
+    /// Hay modificaciones sin guardar desde la última apertura/guardado.
+    @Published private(set) var hasUnsavedChanges: Bool = false
+    /// Fichero de origen, si se abrió/guardó uno (para "Guardar" sin volver a preguntar).
+    @Published private(set) var sourceURL: URL?
+
+    static let untitledName = "Sin título"
+
     private(set) var sourceArchiveData: Data?
 
     private let reader = ZipReader()
@@ -63,6 +72,7 @@ final class ArchiveDocument: ObservableObject {
         if isEmpty, cleaned.count == 1, isZip(cleaned[0]), !isDirectory(cleaned[0]) {
             try openArchive(cleaned[0])
         } else {
+            if isEmpty { beginNewDocument() }
             addFiles(cleaned)
         }
     }
@@ -74,29 +84,41 @@ final class ArchiveDocument: ObservableObject {
         sourceArchiveData = data
         roots = buildTree(from: entries)
         selection = nil
+        sourceURL = url
+        documentName = url.lastPathComponent
+        hasUnsavedChanges = false
         changed()
+    }
+
+    /// Empieza un documento nuevo, aún sin guardar.
+    func beginNewDocument() {
+        sourceURL = nil
+        documentName = Self.untitledName
+        hasUnsavedChanges = false
     }
 
     /// Añade ficheros/carpetas del disco dentro de la carpeta destino actual.
     func addFiles(_ urls: [URL]) {
+        if documentName.isEmpty { beginNewDocument() }
         let target = destinationFolderForAdding()
         for url in urls {
             let node = importFromDisk(url)
             insert(node, into: target)
         }
-        changed()
+        markChanged()
     }
 
     // MARK: - Acciones de la barra superior
 
     func createFolder() {
+        if documentName.isEmpty { beginNewDocument() }
         let parent = folderForNewFolder()
         let siblings = parent?.children ?? roots
         let name = uniqueName("Nueva carpeta", among: siblings)
         let node = FileNode(name: name, isDirectory: true, source: .folder)
         insert(node, into: parent)
         selection = node.id
-        changed()
+        markChanged()
     }
 
     func removeSelected() {
@@ -108,6 +130,27 @@ final class ArchiveDocument: ObservableObject {
     func delete(_ node: FileNode) {
         remove(node)
         if selection == node.id { selection = nil }
+        markChanged()
+    }
+
+    // MARK: - Documento: cerrar y guardar
+
+    /// Cierra el documento y vuelve al estado vacío (zona de arrastre).
+    func close() {
+        roots = []
+        selection = nil
+        sourceArchiveData = nil
+        sourceURL = nil
+        documentName = ""
+        hasUnsavedChanges = false
+        changed()
+    }
+
+    /// Marca el documento como guardado en `url` (actualiza nombre y origen).
+    func markSaved(as url: URL) {
+        sourceURL = url
+        documentName = url.lastPathComponent
+        hasUnsavedChanges = false
         changed()
     }
 
@@ -162,6 +205,12 @@ final class ArchiveDocument: ObservableObject {
     // MARK: - Navegación del árbol
 
     func selectedNode() -> FileNode? { node(with: selection) }
+
+    /// Ficheros (no carpetas) hermanos de `node`, en orden, para navegar en Quick Look.
+    func siblingFiles(of node: FileNode) -> [FileNode] {
+        let siblings = node.parent?.children ?? roots
+        return siblings.filter { !$0.isDirectory }
+    }
 
     func node(with id: FileNode.ID?) -> FileNode? {
         guard let id else { return nil }
@@ -296,6 +345,12 @@ final class ArchiveDocument: ObservableObject {
 
     /// Las mutaciones tocan nodos (clases), así que avisamos a SwiftUI a mano.
     private func changed() { objectWillChange.send() }
+
+    /// Como `changed()`, pero además marca el documento con cambios sin guardar.
+    private func markChanged() {
+        hasUnsavedChanges = true
+        changed()
+    }
 }
 
 /// Instantánea inmutable y `Sendable` de un nodo para poder extraerlo en segundo

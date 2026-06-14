@@ -14,13 +14,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A97D1DBE2FDEC134004667A6 /* Cifrador.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cifrador.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A97D1DBE2FDEC134004667A6 /* FilePackr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FilePackr.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A97D1DC02FDEC134004667A6 /* Cifrador */ = {
+		A97D1DC02FDEC134004667A6 /* FilePackr */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Cifrador;
+			path = FilePackr;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -74,15 +74,15 @@
 			fileSystemSynchronizedGroups = (
 				A97D1DC02FDEC134004667A6 /* Cifrador */,
 			);
-			name = Cifrador;
+			name = FilePackr;
 			packageProductDependencies = (
 				A97D1DD12FDEC223004667A6 /* ArchiveBrowser */,
 				A97D1DD32FDEC223004667A6 /* CryptoCore */,
 				A97D1DE02FDEC4C6004667A6 /* ArchiveBrowser */,
 				A97D1DE22FDEC4C6004667A6 /* CryptoCore */,
 			);
-			productName = Cifrador;
-			productReference = A97D1DBE2FDEC134004667A6 /* Cifrador.app */;
+			productName = FilePackr;
+			productReference = A97D1DBE2FDEC134004667A6 /* FilePackr.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -280,7 +280,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kiko.Cifrador;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kiko.FilePackr;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -311,7 +311,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kiko.Cifrador;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kiko.FilePackr;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

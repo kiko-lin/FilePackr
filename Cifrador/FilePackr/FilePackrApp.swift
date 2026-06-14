@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct CifradorApp: App {
+struct FilePackrApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

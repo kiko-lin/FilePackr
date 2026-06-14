@@ -8,6 +8,7 @@ Package.resolved
 *.xcworkspace/xcuserdata/
 xcuserdata/
 DerivedData/
+build/
 *.xcuserstate
 
 # macOS
