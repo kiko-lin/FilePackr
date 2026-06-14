@@ -167,6 +167,10 @@ final class ArchiveDocument: ObservableObject {
 
     var isEmpty: Bool { roots.isEmpty }
 
+    /// Nombre a mostrar: el del fichero guardado, o "Sin título"/"Untitled" (en el
+    /// idioma actual) mientras no se haya guardado. Reactivo al cambio de idioma.
+    var displayName: String { sourceURL == nil ? Self.untitledName : documentName }
+
     // MARK: - Entrada de elementos (arrastre o botón Añadir)
 
     /// Decide qué hacer con lo que llega: abrir un ZIP como base o añadir ficheros.
@@ -561,8 +565,8 @@ final class ArchiveDocument: ObservableObject {
         let cipher = outputFormat.supportsEncryption ? encryption : .none
         let pwd = outputFormat.supportsEncryption ? password : nil
         if outputFormat == .zip { saveEncryption = cipher; savePassword = pwd }
-        progress = ProgressState(label: cipher == .none ? Localizer.shared("progress.compressing", documentName)
-                                                         : Localizer.shared("progress.encrypting", documentName),
+        progress = ProgressState(label: cipher == .none ? Localizer.shared("progress.compressing", displayName)
+                                                         : Localizer.shared("progress.encrypting", displayName),
                                  fraction: outputFormat == .zip ? 0 : nil)
         defer { progress = nil }
 

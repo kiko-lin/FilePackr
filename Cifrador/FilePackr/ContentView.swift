@@ -234,7 +234,7 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .toolbar { toolbarContent }
-        .confirmationDialog(loc("close.title", doc.documentName),
+        .confirmationDialog(loc("close.title", doc.displayName),
                             isPresented: $confirmingClose, titleVisibility: .visible) {
             Button(loc("close.discard"), role: .destructive) { doc.close() }
             Button(loc("button.cancel"), role: .cancel) {}
@@ -371,7 +371,7 @@ struct ContentView: View {
             Image(nsImage: NSWorkspace.shared.icon(for: .zip))
                 .resizable()
                 .frame(width: 16, height: 16)
-            Text(doc.documentName)
+            Text(doc.displayName)
                 .fontWeight(.medium)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -587,7 +587,7 @@ struct ContentView: View {
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = format == .zip ? [.zip] : []
-        panel.nameFieldStringValue = "\(strippedBaseName(doc.documentName)).\(format.fileExtension)"
+        panel.nameFieldStringValue = "\(strippedBaseName(doc.displayName)).\(format.fileExtension)"
         panel.prompt = loc("panel.save")
         if panel.runModal() == .OK, let url = panel.url {
             Task { await runAsync {
