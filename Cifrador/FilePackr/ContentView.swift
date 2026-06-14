@@ -10,6 +10,59 @@ private struct ExtractionConflict: Identifiable {
     let alternative: URL    // nombre libre propuesto (p.ej. "3d_2.svg")
 }
 
+/// Petición de contraseña: para abrir un archivo cifrado o para guardar cifrando.
+private enum PasswordRequest: Identifiable {
+    case open(URL)
+    case saveEncrypted(URL)
+
+    var id: String {
+        switch self {
+        case .open(let url): return "open:" + url.path
+        case .saveEncrypted(let url): return "save:" + url.path
+        }
+    }
+    var title: String {
+        switch self {
+        case .open: return "Contraseña para abrir el archivo"
+        case .saveEncrypted: return "Contraseña para cifrar el archivo"
+        }
+    }
+    var confirmLabel: String {
+        switch self {
+        case .open: return "Abrir"
+        case .saveEncrypted: return "Cifrar y guardar"
+        }
+    }
+}
+
+/// Hoja de introducción de contraseña.
+private struct PasswordSheet: View {
+    let title: String
+    let confirmLabel: String
+    @Binding var password: String
+    var onConfirm: () -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title).font(.headline)
+            SecureField("Contraseña", text: $password)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 280)
+                .onSubmit { if !password.isEmpty { onConfirm() } }
+            HStack {
+                Spacer()
+                Button("Cancelar", role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button(confirmLabel, action: onConfirm)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(password.isEmpty)
+            }
+        }
+        .padding(20)
+    }
+}
+
 /// Gestor de archivos comprimidos: barra superior + barra de documento + cuerpo
 /// central (zona de arrastre cuando está vacío, o el navegador `NSOutlineView`).
 struct ContentView: View {
@@ -17,6 +70,8 @@ struct ContentView: View {
     @State private var errorMessage: String?
     @State private var conflict: ExtractionConflict?
     @State private var confirmingClose = false
+    @State private var passwordRequest: PasswordRequest?
+    @State private var passwordInput = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,6 +115,13 @@ struct ContentView: View {
             Button("Cancelar", role: .cancel) { conflict = nil }
         }
         .overlay { progressOverlay }
+        .sheet(item: $passwordRequest) { request in
+            PasswordSheet(title: request.title,
+                          confirmLabel: request.confirmLabel,
+                          password: $passwordInput,
+                          onConfirm: { confirmPassword(request) },
+                          onCancel: { dismissPassword() })
+        }
     }
 
     @ViewBuilder
@@ -88,7 +150,7 @@ struct ContentView: View {
         if doc.isEmpty {
             dropPrompt
                 .dropDestination(for: URL.self) { urls, _ in
-                    run { try doc.handleIncoming(urls) }
+                    handleOpen(urls)
                     return true
                 }
         } else {
@@ -106,6 +168,11 @@ struct ContentView: View {
                 .fontWeight(.medium)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            if doc.isEncrypted {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(.secondary)
+                    .help("Archivo cifrado")
+            }
             if doc.hasUnsavedChanges {
                 Text("— sin guardar")
                     .font(.caption)
@@ -113,6 +180,11 @@ struct ContentView: View {
             }
             Spacer()
             Button("Cerrar") { attemptClose() }
+            Button { promptSaveEncrypted() } label: {
+                Image(systemName: "lock")
+            }
+            .help("Guardar cifrado con contraseña…")
+            .disabled(doc.isEmpty)
             Button("Guardar") { saveDocument() }
                 .disabled(!doc.hasUnsavedChanges)
                 .keyboardShortcut("s", modifiers: .command)
@@ -178,8 +250,47 @@ struct ContentView: View {
         panel.allowsMultipleSelection = true
         panel.prompt = "Añadir"
         if panel.runModal() == .OK {
-            run { try doc.handleIncoming(panel.urls) }
+            handleOpen(panel.urls)
         }
+    }
+
+    /// Abre lo seleccionado; si es un único archivo cifrado, pide contraseña.
+    private func handleOpen(_ urls: [URL]) {
+        if doc.isEmpty, urls.count == 1, doc.isEncryptedFile(urls[0]) {
+            passwordInput = ""
+            passwordRequest = .open(urls[0])
+        } else {
+            run { try doc.handleIncoming(urls) }
+        }
+    }
+
+    private func promptSaveEncrypted() {
+        let panel = NSSavePanel()
+        let base = doc.documentName == ArchiveDocument.untitledName
+            ? doc.documentName
+            : (doc.documentName as NSString).deletingPathExtension
+        panel.nameFieldStringValue = "\(base).\(ArchiveDocument.encryptedExtension)"
+        panel.prompt = "Cifrar y guardar"
+        if panel.runModal() == .OK, let url = panel.url {
+            passwordInput = ""
+            passwordRequest = .saveEncrypted(url)
+        }
+    }
+
+    private func confirmPassword(_ request: PasswordRequest) {
+        let password = passwordInput
+        dismissPassword()
+        switch request {
+        case .open(let url):
+            Task { await runAsync { try await doc.openEncrypted(url, password: password) } }
+        case .saveEncrypted(let url):
+            Task { await runAsync { try await doc.saveEncrypted(to: url, password: password) } }
+        }
+    }
+
+    private func dismissPassword() {
+        passwordRequest = nil
+        passwordInput = ""
     }
 
     private func extractAction() {

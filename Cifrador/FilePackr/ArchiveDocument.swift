@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import UniformTypeIdentifiers
 import ArchiveBrowser
+import CryptoCore
 
 /// Origen del contenido de un nodo del árbol.
 enum NodeSource {
@@ -105,13 +106,19 @@ final class ArchiveDocument: ObservableObject {
     @Published private(set) var revision = 0
     /// Operación larga en curso (comprimir/extraer): muestra la barra de progreso.
     @Published var progress: ProgressState?
+    /// El documento está protegido con contraseña (se abrió o se guardó cifrado).
+    @Published private(set) var isEncrypted = false
 
     static let untitledName = "Sin título"
+    static let encryptedExtension = "fpkz"
 
     private(set) var sourceArchiveData: Data?
+    /// Contraseña en memoria para volver a cifrar al guardar sin volver a pedirla.
+    private var encryptionPassword: String?
 
     private let reader = ZipReader()
     private let writer = ZipWriter()
+    private let crypto = CryptoCore()
 
     var isEmpty: Bool { roots.isEmpty }
 
@@ -143,11 +150,45 @@ final class ArchiveDocument: ObservableObject {
         changed()
     }
 
+    /// `true` si el fichero está cifrado por FilePackr (extensión `.fpkz` o cabecera CIFR).
+    func isEncryptedFile(_ url: URL) -> Bool {
+        if url.pathExtension.lowercased() == Self.encryptedExtension { return true }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        let magic = try? handle.read(upToCount: 4)
+        return magic.map { Array($0) == Array("CIFR".utf8) } ?? false
+    }
+
+    /// Abre un archivo cifrado: descifra (en segundo plano) y muestra su contenido.
+    func openEncrypted(_ url: URL, password: String) async throws {
+        let container = try Data(contentsOf: url)
+        progress = ProgressState(label: "Descifrando…", fraction: nil)
+        defer { progress = nil }
+
+        let crypto = self.crypto
+        let zipData = try await Task.detached(priority: .userInitiated) {
+            try crypto.decrypt(container, password: password)
+        }.value
+
+        let entries = try reader.listEntries(in: zipData)
+        sourceArchiveData = zipData
+        roots = buildTree(from: entries)
+        selection = nil
+        sourceURL = url
+        documentName = url.lastPathComponent
+        isEncrypted = true
+        encryptionPassword = password
+        hasUnsavedChanges = false
+        changed()
+    }
+
     /// Empieza un documento nuevo, aún sin guardar.
     func beginNewDocument() {
         sourceURL = nil
         documentName = Self.untitledName
         hasUnsavedChanges = false
+        isEncrypted = false
+        encryptionPassword = nil
     }
 
     /// Añade ficheros/carpetas del disco dentro de la carpeta destino actual.
@@ -256,6 +297,8 @@ final class ArchiveDocument: ObservableObject {
         sourceURL = nil
         documentName = ""
         hasUnsavedChanges = false
+        isEncrypted = false
+        encryptionPassword = nil
         changed()
     }
 
@@ -323,12 +366,37 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Construye y guarda el ZIP final en `url` (compresión en segundo plano con progreso).
+    /// Si el documento es cifrado, vuelve a cifrar con la contraseña en memoria.
     func save(to url: URL) async throws {
+        if isEncrypted, let password = encryptionPassword {
+            try await saveEncrypted(to: url, password: password)
+            return
+        }
         let plan = makeSavePlan()
         progress = ProgressState(label: "Comprimiendo \(documentName)…", fraction: 0)
         defer { progress = nil }
         let data = try await buildZip(plan: plan, writer: writer)
         try data.write(to: url, options: .atomic)
+        markSaved(as: url)
+    }
+
+    /// Comprime y cifra el archivo en `url` (todo en segundo plano).
+    func saveEncrypted(to url: URL, password: String) async throws {
+        let plan = makeSavePlan()
+        progress = ProgressState(label: "Cifrando \(documentName)…", fraction: 0)
+        defer { progress = nil }
+
+        let zipData = try await buildZip(plan: plan, writer: writer)
+        await MainActor.run { progress?.fraction = nil } // cifrado: indeterminado
+
+        let crypto = self.crypto
+        let container = try await Task.detached(priority: .userInitiated) {
+            try crypto.encrypt(zipData, password: password)
+        }.value
+
+        try container.write(to: url, options: .atomic)
+        isEncrypted = true
+        encryptionPassword = password
         markSaved(as: url)
     }
 
