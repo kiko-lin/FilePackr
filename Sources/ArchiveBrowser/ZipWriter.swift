@@ -17,12 +17,14 @@ public struct ZipWriter: Sendable {
 
     public init() {}
 
-    public func build(_ items: [ZipWriteItem]) -> Data {
+    /// Construye el ZIP. `progress` se llama tras cada elemento con la fracción
+    /// completada (0…1), útil para una barra de progreso en segundo plano.
+    public func build(_ items: [ZipWriteItem], progress: ((Double) -> Void)? = nil) -> Data {
         var out = Data()
         var central = Data()
         var entryCount: UInt16 = 0
 
-        for item in items {
+        for (index, item) in items.enumerated() {
             let record = normalize(item)
             let localOffset = UInt32(out.count)
 
@@ -62,6 +64,7 @@ public struct ZipWriter: Sendable {
             central.append(record.nameBytes)
 
             entryCount += 1
+            if !items.isEmpty { progress?(Double(index + 1) / Double(items.count)) }
         }
 
         let centralOffset = UInt32(out.count)

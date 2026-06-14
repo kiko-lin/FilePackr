@@ -103,13 +103,14 @@ final class ArchiveDocument: ObservableObject {
     /// Se incrementa con cada cambio estructural (no al seleccionar). La vista de
     /// lista lo usa para recargar solo cuando hace falta.
     @Published private(set) var revision = 0
+    /// Operación larga en curso (comprimir/extraer): muestra la barra de progreso.
+    @Published var progress: ProgressState?
 
     static let untitledName = "Sin título"
 
     private(set) var sourceArchiveData: Data?
 
     private let reader = ZipReader()
-    private let extractor = ZipExtractor()
     private let writer = ZipWriter()
 
     var isEmpty: Bool { roots.isEmpty }
@@ -266,12 +267,27 @@ final class ArchiveDocument: ObservableObject {
         changed()
     }
 
-    /// Escribe un plan en una ruta destino concreta, opcionalmente sobrescribiendo.
-    func performExtraction(of plan: ExportPlan, to destination: URL, overwrite: Bool) throws {
+    /// Escribe un plan en una ruta destino concreta (en segundo plano, con progreso),
+    /// opcionalmente sobrescribiendo.
+    func performExtraction(of plan: ExportPlan, to destination: URL, overwrite: Bool) async throws {
         if overwrite, FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
-        try plan.writeContents(to: destination)
+        let total = max(1, plan.fileCount())
+        progress = ProgressState(label: "Extrayendo…", fraction: 0)
+        defer { progress = nil }
+        try await runExtraction(plan, to: destination, total: total)
+    }
+
+    nonisolated private func runExtraction(_ plan: ExportPlan, to destination: URL, total: Int) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            var done = 0
+            try plan.writeContents(to: destination) {
+                done += 1
+                let fraction = Double(done) / Double(total)
+                Task { @MainActor in self.progress?.fraction = fraction }
+            }
+        }.value
     }
 
     /// Devuelve una ruta libre añadiendo "_2", "_3"… cuando ya existe el nombre.
@@ -306,12 +322,59 @@ final class ArchiveDocument: ObservableObject {
         }
     }
 
-    /// Construye y guarda el ZIP final en `url`.
-    func save(to url: URL) throws {
-        var items: [ZipWriteItem] = []
-        try collect(roots, prefix: "", into: &items)
-        let data = writer.build(items)
+    /// Construye y guarda el ZIP final en `url` (compresión en segundo plano con progreso).
+    func save(to url: URL) async throws {
+        let plan = makeSavePlan()
+        progress = ProgressState(label: "Comprimiendo \(documentName)…", fraction: 0)
+        defer { progress = nil }
+        let data = try await buildZip(plan: plan, writer: writer)
         try data.write(to: url, options: .atomic)
+        markSaved(as: url)
+    }
+
+    /// Plan de guardado ligero y `Sendable` (sin leer datos), construido en el hilo
+    /// principal; la lectura y compresión ocurren luego en segundo plano.
+    private func makeSavePlan() -> [SaveItem] {
+        var items: [SaveItem] = []
+        func walk(_ nodes: [FileNode], prefix: String) {
+            for node in nodes {
+                let path = prefix + node.name
+                if node.isDirectory {
+                    items.append(SaveItem(path: path + "/", date: node.modificationDate, source: .directory))
+                    walk(node.children, prefix: path + "/")
+                } else if case .diskFile(let url) = node.source {
+                    items.append(SaveItem(path: path, date: node.modificationDate, source: .diskFile(url)))
+                } else if case .zipEntry(let entry) = node.source, let archive = sourceArchiveData {
+                    items.append(SaveItem(path: path, date: entry.modificationDate, source: .zipRaw(entry: entry, archive: archive)))
+                }
+            }
+        }
+        walk(roots, prefix: "")
+        return items
+    }
+
+    nonisolated private func buildZip(plan: [SaveItem], writer: ZipWriter) async throws -> Data {
+        try await Task.detached(priority: .userInitiated) {
+            let extractor = ZipExtractor()
+            var writeItems: [ZipWriteItem] = []
+            writeItems.reserveCapacity(plan.count)
+            for item in plan {
+                switch item.source {
+                case .directory:
+                    writeItems.append(.directory(path: item.path, modifiedAt: item.date))
+                case .diskFile(let url):
+                    writeItems.append(.file(path: item.path, data: try Data(contentsOf: url), modifiedAt: item.date))
+                case .zipRaw(let entry, let archive):
+                    let raw = try extractor.rawCompressedData(for: entry, in: archive)
+                    writeItems.append(.rawEntry(path: item.path, method: entry.compressionMethod,
+                                                crc32: entry.crc32, compressed: raw,
+                                                uncompressedSize: entry.uncompressedSize, modifiedAt: item.date))
+                }
+            }
+            return writer.build(writeItems) { fraction in
+                Task { @MainActor in self.progress?.fraction = fraction }
+            }
+        }.value
     }
 
     // MARK: - Navegación del árbol
@@ -392,31 +455,6 @@ final class ArchiveDocument: ObservableObject {
         return FileNode(name: url.lastPathComponent, isDirectory: false, source: .diskFile(url))
     }
 
-    private func collect(_ nodes: [FileNode], prefix: String, into items: inout [ZipWriteItem]) throws {
-        for node in nodes {
-            let path = prefix + node.name
-            if node.isDirectory {
-                items.append(.directory(path: path + "/", modifiedAt: node.modificationDate))
-                try collect(node.children, prefix: path + "/", into: &items)
-            } else {
-                switch node.source {
-                case .diskFile(let url):
-                    items.append(.file(path: path, data: try Data(contentsOf: url),
-                                       modifiedAt: node.modificationDate))
-                case .zipEntry(let entry):
-                    if let archive = sourceArchiveData {
-                        let raw = try extractor.rawCompressedData(for: entry, in: archive)
-                        items.append(.rawEntry(path: path, method: entry.compressionMethod,
-                                               crc32: entry.crc32, compressed: raw,
-                                               uncompressedSize: entry.uncompressedSize,
-                                               modifiedAt: entry.modificationDate))
-                    }
-                case .folder:
-                    break
-                }
-            }
-        }
-    }
 
     // MARK: - Inserción / borrado / utilidades
 
@@ -499,19 +537,49 @@ struct ExportPlan: Sendable {
         return destination
     }
 
+    /// Número de ficheros (hojas) que contiene, para calcular el progreso.
+    func fileCount() -> Int {
+        switch payload {
+        case .folder(let children): return children.reduce(0) { $0 + $1.fileCount() }
+        case .diskFile, .zipEntry: return 1
+        }
+    }
+
     /// Escribe el contenido en la ruta `destination` (nombre final incluido).
-    func writeContents(to destination: URL) throws {
+    /// Llama a `onFile` tras escribir cada fichero (para reportar progreso).
+    func writeContents(to destination: URL, onFile: () -> Void = {}) throws {
         switch payload {
         case .folder(let children):
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
             for child in children {
-                try child.writeContents(to: destination.appendingPathComponent(child.name))
+                try child.writeContents(to: destination.appendingPathComponent(child.name), onFile: onFile)
             }
         case .diskFile(let url):
             try FileManager.default.copyItem(at: url, to: destination)
+            onFile()
         case .zipEntry(let entry, let archive):
             let data = try ZipExtractor().extractedData(for: entry, in: archive)
             try data.write(to: destination, options: .atomic)
+            onFile()
         }
     }
+}
+
+/// Estado de una operación larga (comprimir/extraer) para la barra de progreso.
+struct ProgressState {
+    var label: String
+    var fraction: Double?   // nil = indeterminado
+}
+
+/// Elemento del plan de guardado, `Sendable` para procesarse en segundo plano.
+struct SaveItem: Sendable {
+    let path: String
+    let date: Date?
+    let source: SaveSource
+}
+
+enum SaveSource: Sendable {
+    case directory
+    case diskFile(URL)
+    case zipRaw(entry: ArchiveEntry, archive: Data)
 }

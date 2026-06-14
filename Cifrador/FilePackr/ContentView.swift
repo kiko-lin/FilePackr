@@ -48,14 +48,36 @@ struct ContentView: View {
             presenting: conflict
         ) { item in
             Button("Sobrescribir", role: .destructive) {
-                run { try doc.performExtraction(of: item.plan, to: item.destination, overwrite: true) }
+                let plan = item.plan, destination = item.destination
                 conflict = nil
+                Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: true) } }
             }
             Button("Guardar como \(item.alternative.lastPathComponent)") {
-                run { try doc.performExtraction(of: item.plan, to: item.alternative, overwrite: false) }
+                let plan = item.plan, destination = item.alternative
                 conflict = nil
+                Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) } }
             }
             Button("Cancelar", role: .cancel) { conflict = nil }
+        }
+        .overlay { progressOverlay }
+    }
+
+    @ViewBuilder
+    private var progressOverlay: some View {
+        if let progress = doc.progress {
+            ZStack {
+                Color.black.opacity(0.12).ignoresSafeArea()
+                VStack(spacing: 12) {
+                    Text(progress.label).font(.callout)
+                    if let fraction = progress.fraction {
+                        ProgressView(value: fraction).frame(width: 240)
+                    } else {
+                        ProgressView().controlSize(.large)
+                    }
+                }
+                .padding(24)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
         }
     }
 
@@ -181,14 +203,14 @@ struct ContentView: View {
                                           destination: destination,
                                           alternative: doc.conflictFreeURL(for: destination))
         } else {
-            run { try doc.performExtraction(of: plan, to: destination, overwrite: false) }
+            Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) } }
         }
     }
 
     /// Guarda: sobre el fichero de origen si existe, o pide ubicación si es nuevo.
     private func saveDocument() {
         if let url = doc.sourceURL {
-            run { try doc.save(to: url); doc.markSaved(as: url) }
+            Task { await runAsync { try await doc.save(to: url) } }
         } else {
             saveAsPanel()
         }
@@ -203,7 +225,7 @@ struct ContentView: View {
         panel.nameFieldStringValue = "\(base).zip"
         panel.prompt = "Guardar"
         if panel.runModal() == .OK, let url = panel.url {
-            run { try doc.save(to: url); doc.markSaved(as: url) }
+            Task { await runAsync { try await doc.save(to: url) } }
         }
     }
 
@@ -218,6 +240,10 @@ struct ContentView: View {
 
     private func run(_ op: () throws -> Void) {
         do { try op() } catch { errorMessage = "\(error)" }
+    }
+
+    private func runAsync(_ op: () async throws -> Void) async {
+        do { try await op() } catch { errorMessage = "\(error)" }
     }
 }
 
