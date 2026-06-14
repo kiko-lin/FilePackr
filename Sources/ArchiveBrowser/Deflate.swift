@@ -26,6 +26,24 @@ enum Deflate {
         return dst.prefix(written)
     }
 
+    /// Comprime `input` con DEFLATE devolviendo SIEMPRE el flujo (aunque no reduzca),
+    /// como necesita gzip. El DEFLATE de datos vacíos es `03 00`.
+    static func deflate(_ input: Data) -> Data {
+        guard !input.isEmpty else { return Data([0x03, 0x00]) }
+        let dstCapacity = input.count + input.count / 100 + 128
+        var dst = Data(count: dstCapacity)
+        let written = dst.withUnsafeMutableBytes { dstRaw -> Int in
+            input.withUnsafeBytes { srcRaw in
+                compression_encode_buffer(
+                    dstRaw.bindMemory(to: UInt8.self).baseAddress!, dstCapacity,
+                    srcRaw.bindMemory(to: UInt8.self).baseAddress!, input.count,
+                    nil, COMPRESSION_ZLIB
+                )
+            }
+        }
+        return written > 0 ? dst.prefix(written) : Data([0x03, 0x00])
+    }
+
     /// Descomprime `input` (DEFLATE) sabiendo el tamaño original `uncompressedSize`.
     static func decompress(_ input: Data, uncompressedSize: Int) -> Data? {
         guard uncompressedSize > 0 else { return Data() }

@@ -1,0 +1,116 @@
+import XCTest
+@testable import ArchiveBrowser
+
+/// Tests de gzip y TAR, con interoperabilidad contra `gzip`/`gunzip`/`tar` del sistema.
+final class FormatsTests: XCTestCase {
+
+    private func tempDir() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    @discardableResult
+    private func run(_ path: String, _ args: [String], cwd: URL? = nil, stdin: Data? = nil) throws -> Data {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        if let cwd { p.currentDirectoryURL = cwd }
+        let out = Pipe(); p.standardOutput = out; p.standardError = Pipe()
+        if let stdin { let inPipe = Pipe(); p.standardInput = inPipe; try p.run(); inPipe.fileHandleForWriting.write(stdin); inPipe.fileHandleForWriting.closeFile() }
+        else { try p.run() }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return data
+    }
+
+    // MARK: gzip
+
+    func testGzipRoundTrip() throws {
+        let payload = Data(String(repeating: "contenido gzip ñ áé ", count: 200).utf8)
+        let gz = Gzip.compress(payload, filename: "doc.txt")
+        XCTAssertEqual(try Gzip.decompress(gz), payload)
+        XCTAssertEqual(Gzip.storedFilename(gz), "doc.txt")
+        XCTAssertLessThan(gz.count, payload.count, "el texto repetido debe comprimir")
+    }
+
+    func testGzipEmpty() throws {
+        XCTAssertEqual(try Gzip.decompress(Gzip.compress(Data())), Data())
+    }
+
+    func testSystemGunzipReadsOurGzip() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/gunzip"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let payload = Data("datos para gunzip del sistema".utf8)
+        let url = dir.appendingPathComponent("f.gz")
+        try Gzip.compress(payload).write(to: url)
+        let out = try run("/usr/bin/gunzip", ["-c", url.path])
+        XCTAssertEqual(out, payload)
+    }
+
+    func testReadsSystemGzip() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/gzip"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let payload = "creado por el gzip del sistema"
+        try payload.write(to: dir.appendingPathComponent("f.txt"), atomically: true, encoding: .utf8)
+        try run("/usr/bin/gzip", ["f.txt"], cwd: dir)
+        let gz = try Data(contentsOf: dir.appendingPathComponent("f.txt.gz"))
+        XCTAssertEqual(String(decoding: try Gzip.decompress(gz), as: UTF8.self), payload)
+    }
+
+    // MARK: TAR
+
+    func testTarRoundTrip() throws {
+        let items = [
+            Tar.WriteItem(path: "a.txt", data: Data("primero".utf8), modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "dir", data: Data(), modifiedAt: nil, isDirectory: true),
+            Tar.WriteItem(path: "dir/b.bin", data: Data((0..<300).map { UInt8($0 & 0xFF) }), modifiedAt: nil, isDirectory: false),
+        ]
+        let tar = Tar.write(items)
+        let entries = try Tar.listEntries(in: tar)
+        XCTAssertEqual(Set(entries.map(\.path)), ["a.txt", "dir/", "dir/b.bin"])
+        let b = try XCTUnwrap(entries.first { $0.path == "dir/b.bin" })
+        XCTAssertEqual(try Tar.entryData(for: b, in: tar).count, 300)
+    }
+
+    func testReadsSystemTar() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/tar"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("sub"), withIntermediateDirectories: true)
+        try "hola".write(to: dir.appendingPathComponent("hola.txt"), atomically: true, encoding: .utf8)
+        try "anidado".write(to: dir.appendingPathComponent("sub/x.txt"), atomically: true, encoding: .utf8)
+        try run("/usr/bin/tar", ["-cf", "out.tar", "hola.txt", "sub"], cwd: dir)
+
+        let tar = try Data(contentsOf: dir.appendingPathComponent("out.tar"))
+        let entries = try Tar.listEntries(in: tar)
+        let hola = try XCTUnwrap(entries.first { $0.path == "hola.txt" })
+        XCTAssertEqual(String(decoding: try Tar.entryData(for: hola, in: tar), as: UTF8.self), "hola")
+        XCTAssertTrue(entries.contains { $0.path.hasSuffix("x.txt") })
+    }
+
+    func testSystemTarReadsOurTar() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/tar"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let tar = Tar.write([
+            Tar.WriteItem(path: "leeme.txt", data: Data("escrito por FilePackr".utf8), modifiedAt: nil, isDirectory: false),
+        ])
+        let url = dir.appendingPathComponent("ours.tar")
+        try tar.write(to: url)
+        let listing = String(decoding: try run("/usr/bin/tar", ["-tf", url.path]), as: UTF8.self)
+        XCTAssertTrue(listing.contains("leeme.txt"))
+        let content = String(decoding: try run("/usr/bin/tar", ["-xOf", url.path, "leeme.txt"]), as: UTF8.self)
+        XCTAssertEqual(content, "escrito por FilePackr")
+    }
+
+    func testTarGzipRoundTrip() throws {
+        // .tar.gz = TAR + gzip
+        let tar = Tar.write([
+            Tar.WriteItem(path: "uno.txt", data: Data(String(repeating: "x", count: 500).utf8), modifiedAt: nil, isDirectory: false),
+        ])
+        let targz = Gzip.compress(tar)
+        let recoveredTar = try Gzip.decompress(targz)
+        XCTAssertEqual(recoveredTar, tar)
+        let entries = try Tar.listEntries(in: recoveredTar)
+        XCTAssertEqual(entries.first?.path, "uno.txt")
+    }
+}
