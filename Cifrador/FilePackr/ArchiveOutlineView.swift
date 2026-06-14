@@ -62,6 +62,7 @@ struct ArchiveOutlineView: NSViewRepresentable {
         outline.allowsMultipleSelection = false
         outline.indentationPerLevel = 14
         outline.menu = coordinator.makeContextMenu()
+        coordinator.lastLanguage = language   // columnas/menú ya creados con el idioma actual
 
         // .fileURL para añadir ficheros del Finder; los tipos de promesa para
         // reconocer el arrastre interno (mover) de nuestras propias filas.
