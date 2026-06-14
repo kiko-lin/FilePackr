@@ -83,6 +83,14 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - Diálogo de extracción compacto (destino = carpeta del zip; "Elegir…" abre el
   navegador; contraseña si hace falta).
 - Icono de app (full-bleed macOS 26). Lectura `.fpkz` legacy.
+- **i18n** (`Localization.swift`): `Localizer` (@MainActor, ObservableObject) con
+  catálogo EN/ES en memoria y cambio de idioma **en caliente** (recordado en
+  UserDefaults). **Inglés por defecto**. Icono de ajustes (engranaje) en la barra →
+  menú con selector de idioma. Uso: en vistas `@EnvironmentObject var loc` y
+  `loc("clave")`/`loc("clave", arg)`; en modelo `Localizer.shared("clave")`. Para
+  añadir texto: nueva clave en `en`/`es`. `ArchiveOutlineView` recibe `language` y
+  re-titula columnas/menú al cambiar. Nota: los nombres de "Clase" vienen de
+  `UTType.localizedDescription` (siguen el idioma del SO, no el de la app).
 
 ## TODO (objetivos pendientes, en orden lógico)
 
@@ -102,7 +110,8 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
       security-scoped bookmarks), notarización, `.dmg`.
 - [ ] **Streaming de compresión** de un único fichero enorme (hoy cada fichero se
       carga entero en memoria para comprimir).
-- [ ] **Localización** (textos de UI fijos en español).
+- [x] ~~Localización~~ (hecho: EN/ES con selector de idioma — ver "Hecho"). Pendiente
+      menor: más idiomas, y que "Clase" use el idioma de la app y no el del SO.
 
 ## Notas de formato/cifrado (para no re-investigar)
 
