@@ -12,7 +12,8 @@ enum NodeSource {
 
 /// Formato del contenedor abierto o de salida.
 enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
-    case zip, tar, tarGzip, tarXz, tarBzip2, gzip, xz, bzip2, sevenZip, rar
+    case zip, tar, tarGzip, tarXz, tarBzip2, gzip, xz, bzip2
+    case sevenZip, rar, iso, cpio, xar, lha, cab
 
     /// Clave de localización del nombre mostrado en el selector de formato.
     var nameKey: String {
@@ -27,6 +28,11 @@ enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
         case .bzip2: return "format.bzip2"
         case .sevenZip: return "format.sevenZip"
         case .rar: return "format.rar"
+        case .iso: return "format.iso"
+        case .cpio: return "format.cpio"
+        case .xar: return "format.xar"
+        case .lha: return "format.lha"
+        case .cab: return "format.cab"
         }
     }
 
@@ -43,6 +49,11 @@ enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
         case .bzip2: return "bz2"
         case .sevenZip: return "7z"
         case .rar: return "rar"
+        case .iso: return "iso"
+        case .cpio: return "cpio"
+        case .xar: return "xar"
+        case .lha: return "lha"
+        case .cab: return "cab"
         }
     }
 
@@ -56,11 +67,21 @@ enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
     /// Formatos de un solo fichero (gzip/xz/bzip2): solo si el documento es un fichero.
     var isSingleFileOnly: Bool { self == .gzip || self == .xz || self == .bzip2 }
 
-    /// `false` para formatos solo de lectura (rar es propietario, no se puede crear).
-    var isWritable: Bool { self != .rar }
+    /// `false` para formatos solo de lectura (rar propietario; cpio/lha/cab no se escriben).
+    var isWritable: Bool { ![.rar, .cpio, .lha, .cab].contains(self) }
 
     /// Se lee/escribe con la libarchive del sistema (no en Swift puro).
-    var usesLibArchive: Bool { self == .sevenZip || self == .rar }
+    var usesLibArchive: Bool { [.sevenZip, .rar, .iso, .cpio, .xar, .lha, .cab].contains(self) }
+
+    /// Formato de escritura de libarchive (solo para los escribibles vía libarchive).
+    var libArchiveWriteFormat: LibArchive.WriteFormat? {
+        switch self {
+        case .sevenZip: return .sevenZip
+        case .iso: return .iso
+        case .xar: return .xar
+        default: return nil
+        }
+    }
 }
 
 /// Nodo del árbol editable que se muestra en el cuerpo central.
@@ -266,8 +287,8 @@ final class ArchiveDocument: ObservableObject {
                     return (.tarBzip2, inner, try Tar.listEntries(in: inner))
                 }
                 return (.bzip2, data, Bzip2.entries(in: data, fallbackName: fallbackName))
-            case .sevenZip, .rar:
-                // 7z/rar vía libarchive (lectura). Puede lanzar passphraseRequired.
+            case .sevenZip, .rar, .iso, .cpio, .xar, .lha, .cab:
+                // Formatos de libarchive (lectura). 7z puede lanzar passphraseRequired.
                 let (entries, _) = try LibArchive.listEntries(in: data, passphrase: passphrase)
                 return (detected, data, entries)
             }
@@ -580,7 +601,8 @@ final class ArchiveDocument: ObservableObject {
             case .gzip: return try? Gzip.decompress(archive)
             case .xz: return try? Xz.decompress(archive)
             case .bzip2: return try? Bzip2.decompress(archive)
-            case .sevenZip, .rar: return try? LibArchive.extractEntry(path: entry.path, in: archive, passphrase: entryPassword)
+            case .sevenZip, .rar, .iso, .cpio, .xar, .lha, .cab:
+                return try? LibArchive.extractEntry(path: entry.path, in: archive, passphrase: entryPassword)
             }
         }
     }
@@ -637,11 +659,12 @@ final class ArchiveDocument: ObservableObject {
                     throw CocoaError(.fileWriteUnknown)
                 }
                 try await writeData({ Bzip2.compress(data) }, to: work)
-            case .sevenZip:
+            case .sevenZip, .iso, .xar:
+                guard let writeFormat = outputFormat.libArchiveWriteFormat else { throw CocoaError(.fileWriteUnsupportedScheme) }
                 let items = makeLibArchiveItems()
-                try await writeLibArchive(items, to: work)
-            case .rar:
-                throw CocoaError(.fileWriteUnsupportedScheme)   // rar es solo lectura
+                try await writeLibArchive(items, to: work, format: writeFormat)
+            case .rar, .cpio, .lha, .cab:
+                throw CocoaError(.fileWriteUnsupportedScheme)   // formatos de solo lectura
             }
             // 2) Colocar el resultado: un solo fichero o dividido en volúmenes.
             if let volumes {
@@ -763,10 +786,11 @@ final class ArchiveDocument: ObservableObject {
         }.value
     }
 
-    /// Escribe un `.7z` (libarchive) en `url`, en segundo plano.
-    nonisolated private func writeLibArchive(_ items: [LibArchive.WriteItem], to url: URL) async throws {
+    /// Escribe un archivo de libarchive (7z/iso/xar) en `url`, en segundo plano.
+    nonisolated private func writeLibArchive(_ items: [LibArchive.WriteItem], to url: URL,
+                                             format: LibArchive.WriteFormat) async throws {
         try await Task.detached(priority: .userInitiated) {
-            try LibArchive.write7z(items, to: url)
+            try LibArchive.write(items, to: url, format: format)
         }.value
     }
 
@@ -963,7 +987,8 @@ final class ArchiveDocument: ObservableObject {
             || name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") || name.hasSuffix(".gz")
             || name.hasSuffix(".tar.xz") || name.hasSuffix(".txz") || name.hasSuffix(".xz")
             || name.hasSuffix(".tar.bz2") || name.hasSuffix(".tbz") || name.hasSuffix(".tbz2") || name.hasSuffix(".bz2")
-            || name.hasSuffix(".7z") || name.hasSuffix(".rar")
+            || name.hasSuffix(".7z") || name.hasSuffix(".rar") || name.hasSuffix(".iso") || name.hasSuffix(".cpio")
+            || name.hasSuffix(".xar") || name.hasSuffix(".pkg") || name.hasSuffix(".lha") || name.hasSuffix(".lzh") || name.hasSuffix(".cab")
     }
 
     /// Volúmenes que forman el archivo, en orden (nombre.zip, nombre_001.zip…). Si
@@ -1014,6 +1039,11 @@ final class ArchiveDocument: ObservableObject {
         if name.hasSuffix(".bz2") { return .bzip2 }
         if name.hasSuffix(".7z") { return .sevenZip }
         if name.hasSuffix(".rar") { return .rar }
+        if name.hasSuffix(".iso") { return .iso }
+        if name.hasSuffix(".cpio") { return .cpio }
+        if name.hasSuffix(".xar") || name.hasSuffix(".pkg") { return .xar }
+        if name.hasSuffix(".lha") || name.hasSuffix(".lzh") { return .lha }
+        if name.hasSuffix(".cab") { return .cab }
         return .zip
     }
 
@@ -1104,7 +1134,8 @@ struct ExportPlan: Sendable {
             case .gzip: data = try Gzip.decompress(archive)
             case .xz: data = try Xz.decompress(archive)
             case .bzip2: data = try Bzip2.decompress(archive)
-            case .sevenZip, .rar: data = try LibArchive.extractEntry(path: entry.path, in: archive, passphrase: password)
+            case .sevenZip, .rar, .iso, .cpio, .xar, .lha, .cab:
+                data = try LibArchive.extractEntry(path: entry.path, in: archive, passphrase: password)
             }
             try data.write(to: destination, options: .atomic)
             onFile()

@@ -124,6 +124,11 @@ private extension Localizer {
         "format.bzip2": "BZIP2 (single file)",
         "format.sevenZip": "7z",
         "format.rar": "RAR (read only)",
+        "format.iso": "ISO (disc image)",
+        "format.cpio": "CPIO (read only)",
+        "format.xar": "XAR",
+        "format.lha": "LHA (read only)",
+        "format.cab": "CAB (read only)",
 
         // Extract sheet
         "extract.title": "Extract “%@”",
@@ -255,6 +260,11 @@ private extension Localizer {
         "format.bzip2": "BZIP2 (un fichero)",
         "format.sevenZip": "7z",
         "format.rar": "RAR (solo lectura)",
+        "format.iso": "ISO (imagen de disco)",
+        "format.cpio": "CPIO (solo lectura)",
+        "format.xar": "XAR",
+        "format.lha": "LHA (solo lectura)",
+        "format.cab": "CAB (solo lectura)",
 
         // Extract sheet
         "extract.title": "Extraer «%@»",

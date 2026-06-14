@@ -25,6 +25,8 @@ int archive_read_free(struct archive *);
 // --- Escritura ---
 struct archive *archive_write_new(void);
 int archive_write_set_format_7zip(struct archive *);
+int archive_write_set_format_iso9660(struct archive *);
+int archive_write_set_format_xar(struct archive *);
 int archive_write_set_options(struct archive *, const char *);
 int archive_write_open_filename(struct archive *, const char *);
 int archive_write_header(struct archive *, struct archive_entry *);

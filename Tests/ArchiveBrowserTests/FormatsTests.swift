@@ -238,7 +238,7 @@ final class FormatsTests: XCTestCase {
     func testSevenZipRoundTrip() throws {
         let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("out.7z")
-        try LibArchive.write7z([
+        try LibArchive.write([
             .init(path: "a.txt", data: Data("primero 7z".utf8), modifiedAt: nil, isDirectory: false),
             .init(path: "dir", data: Data(), modifiedAt: nil, isDirectory: true),
             .init(path: "dir/b.bin", data: Data((0..<400).map { UInt8($0 & 0xFF) }), modifiedAt: nil, isDirectory: false),
@@ -258,10 +258,32 @@ final class FormatsTests: XCTestCase {
         try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/tar"))
         let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("ours.7z")
-        try LibArchive.write7z([
+        try LibArchive.write([
             .init(path: "leeme.txt", data: Data("escrito por FilePackr".utf8), modifiedAt: nil, isDirectory: false),
         ], to: url)
         let content = String(decoding: try run("/usr/bin/tar", ["-xOf", url.path, "leeme.txt"]), as: UTF8.self)
         XCTAssertEqual(content, "escrito por FilePackr")
+    }
+
+    func testXarRoundTrip() throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("out.xar")
+        try LibArchive.write([
+            .init(path: "leeme.txt", data: Data("contenido xar".utf8), modifiedAt: nil, isDirectory: false),
+        ], to: url, format: .xar)
+        let data = try Data(contentsOf: url)
+        XCTAssertEqual(Array(data.prefix(4)), [0x78, 0x61, 0x72, 0x21])   // "xar!"
+        XCTAssertEqual(String(decoding: try LibArchive.extractEntry(path: "leeme.txt", in: data), as: UTF8.self), "contenido xar")
+    }
+
+    func testIsoRoundTrip() throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("out.iso")
+        try LibArchive.write([
+            .init(path: "leeme.txt", data: Data("contenido iso".utf8), modifiedAt: nil, isDirectory: false),
+        ], to: url, format: .iso)
+        let data = try Data(contentsOf: url)
+        let entry = try XCTUnwrap(try LibArchive.listEntries(in: data).entries.first { $0.path.contains("leeme") })
+        XCTAssertEqual(String(decoding: try LibArchive.extractEntry(path: entry.path, in: data), as: UTF8.self), "contenido iso")
     }
 }

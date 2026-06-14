@@ -84,13 +84,26 @@ public enum LibArchive {
         }
     }
 
-    /// Escribe un `.7z` en `url` (en claro: el escritor de 7z de libarchive no cifra;
-    /// el cifrado de 7z solo está disponible en **lectura**).
-    public static func write7z(_ items: [WriteItem], to url: URL) throws {
+    /// Formatos de escritura que soporta la libarchive de Apple.
+    public enum WriteFormat: Sendable {
+        case sevenZip, iso, xar
+        func apply(_ a: OpaquePointer) {
+            switch self {
+            case .sevenZip:
+                archive_write_set_format_7zip(a)
+                _ = "7zip:compression=lzma2".withCString { archive_write_set_options(a, $0) }
+            case .iso: archive_write_set_format_iso9660(a)
+            case .xar: archive_write_set_format_xar(a)
+            }
+        }
+    }
+
+    /// Escribe un archivo (7z/iso/xar) en `url`. **En claro**: el escritor de 7z de
+    /// libarchive no cifra (el cifrado de 7z solo está disponible en lectura).
+    public static func write(_ items: [WriteItem], to url: URL, format: WriteFormat = .sevenZip) throws {
         guard let a = archive_write_new() else { throw LibArchiveError.writeFailed }
         defer { archive_write_free(a) }
-        archive_write_set_format_7zip(a)
-        _ = "7zip:compression=lzma2".withCString { archive_write_set_options(a, $0) }
+        format.apply(a)
         guard url.path.withCString({ archive_write_open_filename(a, $0) }) == OK else {
             throw LibArchiveError.writeFailed
         }
