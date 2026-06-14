@@ -64,6 +64,14 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - **Pedir contraseña al abrir** un zip cifrado (de otra app): valida la clave
   extrayendo la primera entrada y la recuerda (`entryPassword`) para extraer/
   previsualizar/arrastrar. `ExportPlan.zipEntry` lleva la contraseña.
+- **Re-guardar conserva el cifrado**: al abrir un cifrado se detecta su tipo y, con
+  la contraseña, se re-cifra al guardar; las entradas cifradas se descifran a texto
+  claro en `makeSaveInputs` (no se copian en crudo a un zip plano).
+- **Bloqueo de solo lectura**: un cifrado sin contraseña no se puede editar
+  (renombrar/borrar/mover/crear/añadir); al intentarlo se pide la clave
+  (`doc.isLocked`). Doble blindaje: guard en la UI y en el documento.
+- Diálogo de extracción compacto (destino = carpeta del zip; "Elegir…" abre el
+  navegador; contraseña si hace falta).
 - Icono de app (full-bleed macOS 26). Lectura `.fpkz` legacy.
 
 ## TODO (objetivos pendientes, en orden lógico)
@@ -77,9 +85,8 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - [ ] **Limpieza legacy**: decidir si se retira `.fpkz` (CryptoCore, `openEncrypted`,
       `isEncryptedFile`, `encryptionPassword`), `CipherView.swift` (pantalla vieja
       sin usar) y `ArchiveTree.swift` (solo lo usa un test).
-- [ ] **Re-cifrar al guardar** un zip ya cifrado abierto: hoy `makeSaveInputs` usa
-      `.rawEntry` (bytes comprimidos en crudo); si el origen estaba cifrado se
-      re-cifraría doble. Documentado, sin resolver.
+- [ ] **Cambiar cifrado/contraseña al re-guardar** ("Guardar como…"): hoy re-guardar
+      conserva el cifrado y la contraseña originales; no hay UI para cambiarlos.
 - [ ] **Opciones de fuerza AES** (128/192) además de 256; ZipCrypto ya está.
 - [ ] **Distribución**: reactivar App Sandbox correctamente (paneles de guardado +
       security-scoped bookmarks), notarización, `.dmg`.

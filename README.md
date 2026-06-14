@@ -25,6 +25,11 @@ Interfaz nativa (SwiftUI + AppKit), con un navegador de ficheros basado en
   - **Débil** — ZipCrypto / PKWARE clásico (universal, inseguro).
   - **Fuerte** — AES-256 de WinZip (AE-2).
   - Diálogo de guardado: formato + cifrado + contraseña opcional.
+  - **Abrir archivos con contraseña** (de cualquier app): pide la clave, la valida
+    y la recuerda. Re-guardar conserva el cifrado.
+  - Un archivo cifrado **bloqueado** es de solo lectura hasta dar la contraseña.
+
+Ver [`docs/encryption.md`](docs/encryption.md) y [`docs/architecture.md`](docs/architecture.md).
 
 ## Arquitectura
 
