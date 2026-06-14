@@ -47,8 +47,7 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
     directory**, no copia el fichero), `ZipExtractor` (extrae/descifra),
     `ZipWriter` (escribe; `build` en memoria y `write` en streaming a `FileHandle`;
     ZIP64; `ZipEncryption .none/.zipCrypto/.aes256`), `ZipCrypto`, `ZipAES`,
-    `Deflate` (framework Compression), `CRC32`.
-  - `CryptoCore`: AES-256-GCM + PBKDF2 (formato propio `.fpkz`, **legacy**).
+    `Deflate` (framework Compression), `CRC32`. También `Tar`, `Gzip`, `Volumes`.
 - App (`Cifrador/FilePackr/`):
   - `ArchiveDocument` (`@MainActor ObservableObject`): árbol `FileNode`, abrir
     (`openArchive` async), guardar (`save(to:encryption:password:)` en streaming),
@@ -92,7 +91,7 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   (`doc.isLocked`). Doble blindaje: guard en la UI y en el documento.
 - Diálogo de extracción compacto (destino = carpeta del zip; "Elegir…" abre el
   navegador; contraseña si hace falta).
-- Icono de app (full-bleed macOS 26). Lectura `.fpkz` legacy.
+- Icono de app (full-bleed macOS 26).
 - **Ajustes** (`SettingsView.swift` + `AppSettings.swift`): el engranaje de la barra
   abre una **hoja modal** (no menú). `AppSettings` (@MainActor, ObservableObject,
   UserDefaults, en caliente): **tema** (sistema/claro/oscuro → `preferredColorScheme`),
@@ -122,9 +121,8 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - [x] ~~tar/gz/tar.gz en Swift puro~~ (Tier 1, hecho — ver "Hecho").
 - [ ] **Más formatos**: 7z/rar/dmg/bzip2/xz con **libarchive** (vendorizar C —
       esfuerzo grande). El selector de formato del diálogo ya está montado.
-- [ ] **Limpieza legacy**: decidir si se retira `.fpkz` (CryptoCore, `openEncrypted`,
-      `isEncryptedFile`, `encryptionPassword`), `CipherView.swift` (pantalla vieja
-      sin usar) y `ArchiveTree.swift` (solo lo usa un test).
+- [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
+      `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
 - [ ] **Cambiar cifrado/contraseña al re-guardar** ("Guardar como…"): hoy re-guardar
       conserva el cifrado y la contraseña originales; no hay UI para cambiarlos.
 - [ ] **Opciones de fuerza AES** (128/192) además de 256; ZipCrypto ya está.
