@@ -274,6 +274,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Añade ficheros/carpetas del disco dentro de `target` (o la raíz si es `nil`).
     func addFiles(_ urls: [URL], into target: FileNode?) {
+        guard !isLocked else { return }
         if documentName.isEmpty { beginNewDocument() }
         for url in urls {
             let node = importFromDisk(url)
@@ -284,7 +285,11 @@ final class ArchiveDocument: ObservableObject {
 
     // MARK: - Acciones de la barra superior
 
+    /// El archivo está cifrado y bloqueado (sin contraseña): no se puede editar.
+    var isLocked: Bool { requiresEntryPassword }
+
     func createFolder() {
+        guard !isLocked else { return }
         if documentName.isEmpty { beginNewDocument() }
         let parent = folderForNewFolder()
         let siblings = parent?.children ?? roots
@@ -302,6 +307,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Elimina un nodo concreto (el del menú contextual, por ejemplo).
     func delete(_ node: FileNode) {
+        guard !isLocked else { return }
         remove(node)
         if selection == node.id { selection = nil }
         markChanged()
@@ -309,6 +315,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Renombra un nodo. Ignora si el nombre está vacío o ya existe entre hermanos.
     func rename(_ node: FileNode, to newName: String) {
+        guard !isLocked else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != node.name else { return }
         let siblings = node.parent?.children ?? roots
@@ -320,7 +327,7 @@ final class ArchiveDocument: ObservableObject {
     /// Mueve un nodo dentro de `target` (o a la raíz si es `nil`). No permite
     /// moverlo a sí mismo, a un descendiente, ni donde ya exista ese nombre.
     func move(_ node: FileNode, into target: FileNode?) {
-        guard !isSelfOrDescendant(target, of: node) else { return }
+        guard !isLocked, !isSelfOrDescendant(target, of: node) else { return }
         let destination = target?.children ?? roots
         guard !destination.contains(where: { $0.name == node.name }) else { return }
         remove(node)
@@ -330,7 +337,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// `true` si `node` puede moverse a `target` (no a sí mismo ni a un descendiente).
     func canMove(_ node: FileNode, into target: FileNode?) -> Bool {
-        !isSelfOrDescendant(target, of: node)
+        !isLocked && !isSelfOrDescendant(target, of: node)
     }
 
     /// Carpetas válidas como destino para mover `node` (excluye su carpeta actual,

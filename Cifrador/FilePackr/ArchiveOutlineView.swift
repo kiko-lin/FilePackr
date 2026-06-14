@@ -199,6 +199,7 @@ extension ArchiveOutlineView {
                 let cell = nameCell(outlineView)
                 cell.imageView?.image = icon(for: node)
                 cell.textField?.stringValue = node.name
+                cell.textField?.isEditable = !doc.isLocked   // bloqueado si está cifrado sin contraseña
                 return cell
             case .dateColumn?:
                 let cell = textCell(outlineView, .dateColumn, alignment: .left, mono: false)
@@ -362,12 +363,14 @@ extension ArchiveOutlineView {
 
         func editSelected() {
             guard let outline, outline.selectedRow >= 0 else { return }
+            if doc.isLocked { onNeedPassword(); return }
             outline.editColumn(0, row: outline.selectedRow, with: nil, select: true)
         }
 
         func deleteSelected() {
             guard let outline, outline.selectedRow >= 0,
                   let node = outline.item(atRow: outline.selectedRow) as? FileNode else { return }
+            if doc.isLocked { onNeedPassword(); return }
             doc.delete(node)
         }
 
@@ -390,10 +393,14 @@ extension ArchiveOutlineView {
 
         @objc private func menuRename() {
             guard let outline, outline.clickedRow >= 0 else { return }
+            if doc.isLocked { onNeedPassword(); return }
             outline.editColumn(0, row: outline.clickedRow, with: nil, select: true)
         }
         @objc private func menuExtract() { if let node = clickedNode() { onExtract(node) } }
-        @objc private func menuDelete() { if let node = clickedNode() { doc.delete(node) } }
+        @objc private func menuDelete() {
+            if doc.isLocked { onNeedPassword(); return }
+            if let node = clickedNode() { doc.delete(node) }
+        }
 
         // MARK: - Arrastre
 

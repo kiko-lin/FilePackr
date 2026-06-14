@@ -354,13 +354,13 @@ struct ContentView: View {
             }
             .help("Añadir archivos, o abrir un .zip si es el primero")
 
-            Button(action: doc.removeSelected) {
+            Button { editGuarded { doc.removeSelected() } } label: {
                 Label("Eliminar", systemImage: "trash")
             }
             .disabled(doc.selection == nil)
             .help("Eliminar el elemento seleccionado")
 
-            Button(action: doc.createFolder) {
+            Button { editGuarded { doc.createFolder() } } label: {
                 Label("Crear carpeta", systemImage: "folder.badge.plus")
             }
             .help("Crear una carpeta")
@@ -375,7 +375,13 @@ struct ContentView: View {
 
     // MARK: - Acciones con paneles del sistema
 
+    /// Ejecuta una edición; si el archivo está cifrado y bloqueado, pide la contraseña.
+    private func editGuarded(_ action: () -> Void) {
+        if doc.isLocked { promptEntryPassword() } else { action() }
+    }
+
     private func addAction() {
+        if doc.isLocked { promptEntryPassword(); return }
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
