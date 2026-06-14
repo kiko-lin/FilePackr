@@ -24,6 +24,13 @@ public struct ZipEntryInput: Sendable {
     }
 }
 
+/// Cifrado a aplicar al escribir el ZIP.
+public enum ZipEncryption: Sendable, Equatable {
+    case none
+    /// ZipCrypto / PKWARE clásico ("Débil"). Interoperable pero inseguro.
+    case zipCrypto
+}
+
 /// Escribe ficheros ZIP. Soporta dos modos sobre el mismo núcleo:
 /// - `build`: en memoria (para el guardado cifrado, que necesita los bytes).
 /// - `write`: en streaming a un `FileHandle` (no carga el zip entero en memoria).
@@ -34,28 +41,35 @@ public struct ZipWriter: Sendable {
     public init() {}
 
     /// Construye el ZIP en memoria y lo devuelve.
-    public func build(_ inputs: [ZipEntryInput], progress: ((Double) -> Void)? = nil) throws -> Data {
+    public func build(_ inputs: [ZipEntryInput], encryption: ZipEncryption = .none,
+                      password: String? = nil, progress: ((Double) -> Void)? = nil) throws -> Data {
         var out = Data()
-        try writeStream(inputs, progress: progress) { out.append($0) }
+        try writeStream(inputs, encryption: encryption, password: password, progress: progress) { out.append($0) }
         return out
     }
 
     /// Escribe el ZIP directamente a `handle` (streaming a disco).
-    public func write(_ inputs: [ZipEntryInput], to handle: FileHandle, progress: ((Double) -> Void)? = nil) throws {
-        try writeStream(inputs, progress: progress) { try handle.write(contentsOf: $0) }
+    public func write(_ inputs: [ZipEntryInput], to handle: FileHandle, encryption: ZipEncryption = .none,
+                      password: String? = nil, progress: ((Double) -> Void)? = nil) throws {
+        try writeStream(inputs, encryption: encryption, password: password, progress: progress) {
+            try handle.write(contentsOf: $0)
+        }
     }
 
     // MARK: - Núcleo
 
-    private func writeStream(_ inputs: [ZipEntryInput], progress: ((Double) -> Void)?,
-                             sink: (Data) throws -> Void) throws {
+    private func writeStream(_ inputs: [ZipEntryInput], encryption: ZipEncryption, password: String?,
+                             progress: ((Double) -> Void)?, sink: (Data) throws -> Void) throws {
         var offset: UInt64 = 0
         var central = Data()
         var count = 0
         func emit(_ data: Data) throws { try sink(data); offset += UInt64(data.count) }
 
         for (index, input) in inputs.enumerated() {
-            let record = try makeRecord(input)
+            var record = try makeRecord(input)
+            if encryption == .zipCrypto, let password, !record.isDirectory {
+                record = encryptZipCrypto(record, password: password)
+            }
             let localOffset = offset
             try emit(localHeader(record))
             try emit(record.compressed)
@@ -80,6 +94,7 @@ public struct ZipWriter: Sendable {
         let isDirectory: Bool
         let dosTime: UInt16
         let dosDate: UInt16
+        var flags: UInt16 = 0
         var compressedSize: UInt64 { UInt64(compressed.count) }
         var needsZip64Sizes: Bool { uncompressedSize >= 0xFFFF_FFFF || compressedSize >= 0xFFFF_FFFF }
     }
@@ -112,6 +127,19 @@ public struct ZipWriter: Sendable {
                       uncompressedSize: UInt64(data.count), isDirectory: false, dosTime: time, dosDate: date)
     }
 
+    /// Cifra una entrada con ZipCrypto: cabecera de 12 bytes + datos, todo con el
+    /// mismo flujo de cifrado; activa el bit 0 de las banderas.
+    private func encryptZipCrypto(_ record: Record, password: String) -> Record {
+        var cipher = ZipCrypto(password: password)
+        var header = (0..<12).map { _ in UInt8.random(in: 0...255) }
+        header[11] = UInt8((record.crc32 >> 24) & 0xFF)
+        var encrypted = cipher.encrypt(header)
+        encrypted.append(contentsOf: cipher.encrypt([UInt8](record.compressed)))
+        return Record(nameBytes: record.nameBytes, method: record.method, crc32: record.crc32,
+                      compressed: Data(encrypted), uncompressedSize: record.uncompressedSize,
+                      isDirectory: false, dosTime: record.dosTime, dosDate: record.dosDate, flags: 0x0001)
+    }
+
     // MARK: - Cabeceras
 
     private func localHeader(_ record: Record) -> Data {
@@ -126,7 +154,7 @@ public struct ZipWriter: Sendable {
         var h = Data()
         h.appendU32(0x0403_4b50)
         h.appendU16(zip64 ? 45 : 20)
-        h.appendU16(0)
+        h.appendU16(record.flags)
         h.appendU16(record.method)
         h.appendU16(record.dosTime)
         h.appendU16(record.dosDate)
@@ -162,7 +190,7 @@ public struct ZipWriter: Sendable {
         h.appendU32(0x0201_4b50)
         h.appendU16(zip64 ? 45 : 20)
         h.appendU16(zip64 ? 45 : 20)
-        h.appendU16(0)
+        h.appendU16(record.flags)
         h.appendU16(record.method)
         h.appendU16(record.dosTime)
         h.appendU16(record.dosDate)

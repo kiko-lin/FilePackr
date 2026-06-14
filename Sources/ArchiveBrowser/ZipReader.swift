@@ -20,6 +20,13 @@ public struct ArchiveEntry: Equatable, Identifiable, Sendable {
     public let localHeaderOffset: UInt64
     /// Fecha de modificación (campo MS-DOS del ZIP), si es válida.
     public let modificationDate: Date?
+    /// Bandera de propósito general (bit 0 = entrada cifrada).
+    public let flags: UInt16
+
+    /// La entrada está cifrada (cualquier método).
+    public var isEncrypted: Bool { flags & 0x0001 != 0 }
+    /// Cifrada con AES (WinZip): método 99. Si no, y está cifrada, es ZipCrypto.
+    public var isAESEncrypted: Bool { isEncrypted && compressionMethod == 99 }
 }
 
 public enum ArchiveError: Error, Equatable {
@@ -88,6 +95,7 @@ public struct ZipReader: Sendable {
             guard p + 46 <= cd.count, readU32(cd, p) == 0x0201_4b50 else {
                 throw ArchiveError.corruptCentralDirectory
             }
+            let flags = readU16(cd, p + 8)
             let method = readU16(cd, p + 10)
             let modTime = readU16(cd, p + 12)
             let modDate = readU16(cd, p + 14)
@@ -128,7 +136,8 @@ public struct ZipReader: Sendable {
                 compressionMethod: method,
                 crc32: crc,
                 localHeaderOffset: localOffset,
-                modificationDate: Self.dosDate(time: modTime, date: modDate)
+                modificationDate: Self.dosDate(time: modTime, date: modDate),
+                flags: flags
             ))
             p = nameStart + nameLen + extraLen + commentLen
             if let progress, entryCount > 0 { progress(Double(index + 1) / Double(entryCount)) }

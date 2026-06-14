@@ -4,6 +4,9 @@ public enum ExtractError: Error, Equatable {
     case corruptLocalHeader
     case unsupportedMethod(UInt16)
     case decompressionFailed
+    case needsPassword
+    case wrongPassword
+    case unsupportedEncryption   // AES u otro cifrado aún no soportado
 }
 
 /// Extrae el contenido de una entrada concreta de un ZIP, descomprimiéndola
@@ -21,9 +24,17 @@ public struct ZipExtractor: Sendable {
         return archive.subdata(in: dataStart..<end)
     }
 
-    /// Devuelve el contenido descomprimido de una entrada.
-    public func extractedData(for entry: ArchiveEntry, in archive: Data) throws -> Data {
-        let compressed = try rawCompressedData(for: entry, in: archive)
+    /// Devuelve el contenido descomprimido de una entrada. Si está cifrada con
+    /// ZipCrypto, hay que pasar `password`.
+    public func extractedData(for entry: ArchiveEntry, in archive: Data, password: String? = nil) throws -> Data {
+        var compressed = try rawCompressedData(for: entry, in: archive)
+
+        if entry.isEncrypted {
+            if entry.isAESEncrypted { throw ExtractError.unsupportedEncryption }
+            guard let password else { throw ExtractError.needsPassword }
+            compressed = try decryptZipCrypto(compressed, entry: entry, password: password)
+        }
+
         switch entry.compressionMethod {
         case 0: // almacenado sin comprimir
             return compressed
@@ -35,6 +46,21 @@ public struct ZipExtractor: Sendable {
         default:
             throw ExtractError.unsupportedMethod(entry.compressionMethod)
         }
+    }
+
+    /// Descifra ZipCrypto: los primeros 12 bytes son la cabecera de verificación.
+    private func decryptZipCrypto(_ data: Data, entry: ArchiveEntry, password: String) throws -> Data {
+        guard data.count >= 12 else { throw ExtractError.wrongPassword }
+        var cipher = ZipCrypto(password: password)
+        let decrypted = cipher.decrypt([UInt8](data))
+        // El byte 11 de la cabecera debe coincidir con el byte alto del CRC. Si la
+        // entrada usa descriptor de datos (bit 3), no se puede verificar aquí; en
+        // ese caso seguimos y un fallo de descompresión delatará la contraseña.
+        let hasDataDescriptor = entry.flags & 0x0008 != 0
+        if !hasDataDescriptor, decrypted[11] != UInt8((entry.crc32 >> 24) & 0xFF) {
+            throw ExtractError.wrongPassword
+        }
+        return Data(decrypted[12...])
     }
 
     /// Localiza el inicio de los datos saltando el *local file header* variable.

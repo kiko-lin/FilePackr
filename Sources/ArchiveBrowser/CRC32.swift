@@ -4,7 +4,7 @@ import Foundation
 /// validar la integridad de cada entrada. Implementación por tabla.
 public enum CRC32 {
 
-    private static let table: [UInt32] = {
+    static let table: [UInt32] = {
         (0..<256).map { i -> UInt32 in
             var c = UInt32(i)
             for _ in 0..<8 {
