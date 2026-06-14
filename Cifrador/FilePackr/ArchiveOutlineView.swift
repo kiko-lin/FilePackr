@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import QuickLookUI
+import ArchiveBrowser
 
 extension NSUserInterfaceItemIdentifier {
     static let nameColumn = NSUserInterfaceItemIdentifier("name")
@@ -19,8 +20,12 @@ struct ArchiveOutlineView: NSViewRepresentable {
     @ObservedObject var doc: ArchiveDocument
     /// Lanza el flujo de extracción de SwiftUI (con su diálogo de conflictos).
     var onExtract: (FileNode) -> Void
+    /// Pide la contraseña (cuando el archivo está cifrado y aún no la tenemos).
+    var onNeedPassword: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(doc: doc, onExtract: onExtract) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(doc: doc, onExtract: onExtract, onNeedPassword: onNeedPassword)
+    }
 
     func makeNSView(context: Context) -> NSScrollView {
         let coordinator = context.coordinator
@@ -74,6 +79,7 @@ struct ArchiveOutlineView: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.doc = doc
         coordinator.onExtract = onExtract
+        coordinator.onNeedPassword = onNeedPassword
         guard let outline = nsView.documentView as? FileOutlineView else { return }
 
         if coordinator.lastRevision != doc.revision {
@@ -103,6 +109,8 @@ final class FileOutlineView: NSOutlineView {
     override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
         panel.dataSource = coordinator
         panel.delegate = coordinator
+        panel.reloadData()
+        panel.currentPreviewItemIndex = coordinator?.qlStartIndex ?? 0
     }
     override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {}
 }
@@ -112,6 +120,7 @@ extension ArchiveOutlineView {
                              NSFilePromiseProviderDelegate, QLPreviewPanelDataSource {
         var doc: ArchiveDocument
         var onExtract: (FileNode) -> Void
+        var onNeedPassword: () -> Void
         weak var outline: FileOutlineView?
 
         var lastRevision = -1
@@ -123,12 +132,15 @@ extension ArchiveOutlineView {
         // Quick Look
         private var qlPlans: [ExportPlan] = []
         private var qlCache: [Int: URL] = [:]
+        var qlStartIndex = 0
 
         private let promiseQueue = OperationQueue.main
 
-        init(doc: ArchiveDocument, onExtract: @escaping (FileNode) -> Void) {
+        init(doc: ArchiveDocument, onExtract: @escaping (FileNode) -> Void,
+             onNeedPassword: @escaping () -> Void) {
             self.doc = doc
             self.onExtract = onExtract
+            self.onNeedPassword = onNeedPassword
         }
 
         // MARK: - DataSource
@@ -387,6 +399,11 @@ extension ArchiveOutlineView {
 
         func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
             guard let node = item as? FileNode else { return nil }
+            // Cifrado y sin contraseña: pídela y no inicies el arrastre.
+            if doc.requiresEntryPassword, case .zipEntry(let entry) = node.source, entry.isEncrypted {
+                onNeedPassword()
+                return nil
+            }
             let provider = NSFilePromiseProvider(fileType: utType(for: node).identifier, delegate: self)
             provider.userInfo = node
             return provider
@@ -463,13 +480,15 @@ extension ArchiveOutlineView {
             }
             guard let outline, outline.selectedRow >= 0,
                   let node = outline.item(atRow: outline.selectedRow) as? FileNode, !node.isDirectory else { return }
+            // Si el archivo está cifrado y aún no tenemos la contraseña, pídela.
+            if doc.requiresEntryPassword { onNeedPassword(); return }
             let siblings = doc.siblingFiles(of: node)
             qlPlans = siblings.map { doc.exportPlan(for: $0) }
             qlCache = [:]
-            let start = siblings.firstIndex { $0.id == node.id } ?? 0
+            qlStartIndex = siblings.firstIndex { $0.id == node.id } ?? 0
+            // El índice se fija al tomar el control (beginPreviewPanelControl), para
+            // que el panel no muestre primero otro elemento.
             panel.makeKeyAndOrderFront(nil)
-            panel.reloadData()
-            if !qlPlans.isEmpty { panel.currentPreviewItemIndex = start }
         }
 
         func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int { qlPlans.count }

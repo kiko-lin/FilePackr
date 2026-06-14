@@ -175,12 +175,16 @@ struct ContentView: View {
                           onCancel: { showingEntryPassword = false })
         }
         .onChange(of: doc.requiresEntryPassword) { _, requires in
-            if requires {
-                entryPasswordInput = ""
-                entryPasswordWrong = false
-                showingEntryPassword = true
-            }
+            if requires { promptEntryPassword() }
         }
+    }
+
+    /// Muestra la hoja para introducir la contraseña del archivo cifrado.
+    private func promptEntryPassword() {
+        guard doc.requiresEntryPassword else { return }
+        entryPasswordInput = ""
+        entryPasswordWrong = false
+        showingEntryPassword = true
     }
 
     private func confirmEntryPassword() {
@@ -226,7 +230,9 @@ struct ContentView: View {
                     return true
                 }
         } else {
-            ArchiveOutlineView(doc: doc, onExtract: { extract($0) })
+            ArchiveOutlineView(doc: doc,
+                               onExtract: { extract($0) },
+                               onNeedPassword: { promptEntryPassword() })
         }
     }
 
@@ -352,6 +358,7 @@ struct ContentView: View {
 
     /// Extrae un nodo concreto: pide carpeta destino y gestiona conflictos de nombre.
     private func extract(_ node: FileNode) {
+        if doc.requiresEntryPassword { promptEntryPassword(); return }
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
