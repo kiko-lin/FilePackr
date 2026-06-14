@@ -33,13 +33,13 @@ private struct SaveOptionsSheet: View {
     @Binding var splitEnabled: Bool
     @Binding var volumeSize: Double
     @Binding var volumeUnit: VolumeUnit
-    /// `.gz` (un solo fichero) solo se ofrece cuando el documento es un único fichero.
-    let allowGzip: Bool
+    /// Los formatos de un solo fichero (gz/xz) solo se ofrecen si el documento es un fichero.
+    let allowSingleFileFormats: Bool
     var onSave: () -> Void
     var onCancel: () -> Void
 
     private var formats: [ArchiveFormat] {
-        ArchiveFormat.allCases.filter { $0 != .gzip || allowGzip }
+        ArchiveFormat.allCases.filter { !$0.isSingleFileOnly || allowSingleFileFormats }
     }
 
     /// El botón Guardar se bloquea si falta la contraseña o el tamaño de volumen no es válido.
@@ -265,7 +265,7 @@ struct ContentView: View {
                              splitEnabled: $splitEnabled,
                              volumeSize: $volumeSizeValue,
                              volumeUnit: $volumeUnit,
-                             allowGzip: doc.isSingleFile,
+                             allowSingleFileFormats: doc.isSingleFile,
                              onSave: { confirmSaveOptions() },
                              onCancel: { showingSaveOptions = false })
         }
@@ -530,7 +530,7 @@ struct ContentView: View {
             // Documento nuevo: defaults de Ajustes; abierto: lo que traía el archivo.
             let isNew = doc.sourceURL == nil
             var format = isNew ? settings.defaultFormat : doc.saveFormat
-            if format == .gzip && !doc.isSingleFile { format = .zip }
+            if format.isSingleFileOnly && !doc.isSingleFile { format = .zip }
             saveFormatChoice = format
             saveEncryptionChoice = isNew ? settings.defaultEncryption : doc.saveEncryption
             saveOptionsPassword = ""

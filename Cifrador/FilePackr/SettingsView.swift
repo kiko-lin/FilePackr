@@ -9,9 +9,9 @@ struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     var onClose: () -> Void
 
-    /// Formatos ofrecidos como "por defecto" (gzip se omite: solo vale para un fichero).
+    /// Formatos ofrecidos como "por defecto" (se omiten los de un solo fichero: gz/xz).
     private var defaultFormats: [ArchiveFormat] {
-        ArchiveFormat.allCases.filter { $0 != .gzip }
+        ArchiveFormat.allCases.filter { !$0.isSingleFileOnly }
     }
 
     var body: some View {

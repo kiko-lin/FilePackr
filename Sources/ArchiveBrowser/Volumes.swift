@@ -51,7 +51,7 @@ public enum Volumes {
     /// Separa nombre en (raíz, extensión), tratando ".tar.gz" como extensión compuesta.
     static func splitExtension(_ name: String) -> (stem: String, ext: String) {
         let lower = name.lowercased()
-        for compound in ["tar.gz"] where lower.hasSuffix("." + compound) {
+        for compound in ["tar.gz", "tar.xz"] where lower.hasSuffix("." + compound) {
             return (String(name.dropLast(compound.count + 1)), String(name.suffix(compound.count)))
         }
         if let dot = name.lastIndex(of: "."), dot != name.startIndex {
