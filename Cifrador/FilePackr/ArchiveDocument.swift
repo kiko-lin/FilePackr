@@ -171,8 +171,18 @@ final class ArchiveDocument: ObservableObject {
         encryptionPassword = nil
         entryPassword = nil
         requiresEntryPassword = result.1.contains { $0.isEncrypted }
+        // Al re-guardar, conservar el cifrado original (con su contraseña, cuando se dé).
+        saveEncryption = detectedEncryption(in: result.1)
+        savePassword = nil
         hasUnsavedChanges = false
         changed()
+    }
+
+    /// Tipo de cifrado de las entradas (para conservarlo al re-guardar).
+    private func detectedEncryption(in entries: [ArchiveEntry]) -> ZipEncryption {
+        if entries.contains(where: { $0.isAESEncrypted }) { return .aes256 }
+        if entries.contains(where: { $0.isEncrypted }) { return .zipCrypto }
+        return .none
     }
 
     /// Da la contraseña para las entradas cifradas del archivo abierto. La valida
@@ -191,6 +201,7 @@ final class ArchiveDocument: ObservableObject {
             return false
         }
         entryPassword = password
+        savePassword = password   // misma contraseña para re-guardar cifrado
         requiresEntryPassword = false
         changed()
         return true
@@ -237,6 +248,8 @@ final class ArchiveDocument: ObservableObject {
         encryptionPassword = password
         entryPassword = nil
         requiresEntryPassword = result.1.contains { $0.isEncrypted }
+        saveEncryption = detectedEncryption(in: result.1)
+        savePassword = nil
         hasUnsavedChanges = false
         changed()
     }
@@ -464,11 +477,18 @@ final class ArchiveDocument: ObservableObject {
                     walk(node.children, prefix: path + "/")
                 } else if case .diskFile(let url) = node.source {
                     items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .file(url)))
-                } else if case .zipEntry(let entry) = node.source, let archive = sourceArchiveData,
-                          let raw = try? extractor.rawCompressedData(for: entry, in: archive) {
-                    items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate,
-                        source: .rawEntry(method: entry.compressionMethod, crc32: entry.crc32,
-                                          compressed: raw, uncompressedSize: entry.uncompressedSize)))
+                } else if case .zipEntry(let entry) = node.source, let archive = sourceArchiveData {
+                    if entry.isEncrypted {
+                        // Cifrada: descifrar a texto claro; el escritor la re-cifra (o no) limpiamente.
+                        if let data = try? extractor.extractedData(for: entry, in: archive, password: entryPassword) {
+                            items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate, source: .data(data)))
+                        }
+                    } else if let raw = try? extractor.rawCompressedData(for: entry, in: archive) {
+                        // Sin cifrar: copiar los bytes comprimidos en crudo (más rápido).
+                        items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate,
+                            source: .rawEntry(method: entry.compressionMethod, crc32: entry.crc32,
+                                              compressed: raw, uncompressedSize: entry.uncompressedSize)))
+                    }
                 }
             }
         }

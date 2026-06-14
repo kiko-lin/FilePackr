@@ -465,6 +465,7 @@ struct ContentView: View {
     /// Guarda: si ya tiene fichero, re-guarda con los ajustes; si es nuevo, abre el
     /// diálogo de opciones (formato + cifrado + contraseña).
     private func saveDocument() {
+        if doc.requiresEntryPassword { promptEntryPassword(); return }
         if let url = doc.sourceURL {
             Task { await runAsync { try await doc.save(to: url) } }
         } else {
