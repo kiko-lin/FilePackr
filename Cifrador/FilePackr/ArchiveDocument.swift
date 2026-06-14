@@ -8,7 +8,34 @@ import CryptoCore
 enum NodeSource {
     case folder                   // carpeta (puede contener hijos)
     case diskFile(URL)            // fichero nuevo que vive en disco, aún sin comprimir
-    case zipEntry(ArchiveEntry)   // entrada que proviene de un ZIP abierto
+    case zipEntry(ArchiveEntry)   // entrada que proviene de un archivo abierto (zip/tar/gz)
+}
+
+/// Formato del contenedor abierto o de salida.
+enum ArchiveFormat: Sendable, CaseIterable, Hashable {
+    case zip, tar, tarGzip, gzip
+
+    var displayName: String {
+        switch self {
+        case .zip: return "ZIP"
+        case .tar: return "TAR"
+        case .tarGzip: return "TAR.GZ (comprimido)"
+        case .gzip: return "GZIP (un fichero)"
+        }
+    }
+
+    /// Extensión de fichero asociada.
+    var fileExtension: String {
+        switch self {
+        case .zip: return "zip"
+        case .tar: return "tar"
+        case .tarGzip: return "tar.gz"
+        case .gzip: return "gz"
+        }
+    }
+
+    /// Solo ZIP admite cifrado con contraseña.
+    var supportsEncryption: Bool { self == .zip }
 }
 
 /// Nodo del árbol editable que se muestra en el cuerpo central.
@@ -111,6 +138,10 @@ final class ArchiveDocument: ObservableObject {
     /// Cifrado elegido al guardar (se recuerda para el botón Guardar).
     @Published private(set) var saveEncryption: ZipEncryption = .none
     private var savePassword: String?
+    /// Formato del contenedor abierto (para leer las entradas de los nodos).
+    @Published private(set) var format: ArchiveFormat = .zip
+    /// Formato por defecto del diálogo Guardar (se recuerda tras guardar).
+    @Published private(set) var saveFormat: ArchiveFormat = .zip
     /// El archivo abierto tiene entradas cifradas y aún no tenemos la contraseña.
     @Published private(set) var requiresEntryPassword = false
     /// Contraseña para descifrar las entradas del archivo abierto.
@@ -135,7 +166,7 @@ final class ArchiveDocument: ObservableObject {
         let cleaned = urls.filter { $0.isFileURL }
         guard !cleaned.isEmpty else { return }
 
-        if isEmpty, cleaned.count == 1, isZip(cleaned[0]), !isDirectory(cleaned[0]) {
+        if isEmpty, cleaned.count == 1, isOpenableArchive(cleaned[0]), !isDirectory(cleaned[0]) {
             try await openArchive(cleaned[0])
         } else {
             if isEmpty { beginNewDocument() }
@@ -146,34 +177,55 @@ final class ArchiveDocument: ObservableObject {
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
     func openArchive(_ url: URL) async throws {
-        progress = ProgressState(label: "Abriendo \(url.lastPathComponent)…", fraction: 0)
+        let detected = detectFormat(for: url)
+        progress = ProgressState(label: "Abriendo \(url.lastPathComponent)…",
+                                 fraction: detected == .zip ? 0 : nil)
         defer { progress = nil }
 
-        let result = try await Task.detached(priority: .userInitiated) { [weak self] () -> (Data, [ArchiveEntry]) in
+        let fallbackName = url.deletingPathExtension().lastPathComponent
+        let result = try await Task.detached(priority: .userInitiated) { [weak self] () -> (ArchiveFormat, Data, [ArchiveEntry]) in
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
-            var lastReported = 0.0
-            let entries = try ZipReader().listEntries(in: data) { fraction in
-                // Limitamos los saltos a la UI (cada ~1%) para no inundar el hilo principal.
-                if fraction - lastReported >= 0.01 || fraction >= 1 {
-                    lastReported = fraction
-                    Task { @MainActor in self?.progress?.fraction = fraction }
+            switch detected {
+            case .zip:
+                var lastReported = 0.0
+                let entries = try ZipReader().listEntries(in: data) { fraction in
+                    // Limitamos los saltos a la UI (cada ~1%) para no inundar el hilo principal.
+                    if fraction - lastReported >= 0.01 || fraction >= 1 {
+                        lastReported = fraction
+                        Task { @MainActor in self?.progress?.fraction = fraction }
+                    }
                 }
+                return (.zip, data, entries)
+            case .tar:
+                return (.tar, data, try Tar.listEntries(in: data))
+            case .tarGzip:
+                let tar = try Gzip.decompress(data)
+                return (.tarGzip, tar, try Tar.listEntries(in: tar))
+            case .gzip:
+                // Un `.gz` puede ser un fichero suelto o un tar.gz: lo distinguimos al descomprimir.
+                let inner = try Gzip.decompress(data)
+                if Self.isUstar(inner) {
+                    return (.tarGzip, inner, try Tar.listEntries(in: inner))
+                }
+                return (.gzip, data, Gzip.entries(in: data, fallbackName: fallbackName))
             }
-            return (data, entries)
         }.value
 
-        sourceArchiveData = result.0
-        roots = buildTree(from: result.1)
+        format = result.0
+        sourceArchiveData = result.1
+        roots = buildTree(from: result.2)
         selection = nil
         sourceURL = url
         documentName = url.lastPathComponent
         isEncrypted = false
         encryptionPassword = nil
         entryPassword = nil
-        requiresEntryPassword = result.1.contains { $0.isEncrypted }
+        // Solo ZIP cifra entradas; tar/gz nunca piden contraseña.
+        requiresEntryPassword = result.0 == .zip && result.2.contains { $0.isEncrypted }
         // Al re-guardar, conservar el cifrado original (con su contraseña, cuando se dé).
-        saveEncryption = detectedEncryption(in: result.1)
+        saveEncryption = result.0 == .zip ? detectedEncryption(in: result.2) : .none
         savePassword = nil
+        saveFormat = result.0
         hasUnsavedChanges = false
         changed()
     }
@@ -248,6 +300,8 @@ final class ArchiveDocument: ObservableObject {
         encryptionPassword = password
         entryPassword = nil
         requiresEntryPassword = result.1.contains { $0.isEncrypted }
+        format = .zip
+        saveFormat = .zip
         saveEncryption = detectedEncryption(in: result.1)
         savePassword = nil
         hasUnsavedChanges = false
@@ -265,6 +319,8 @@ final class ArchiveDocument: ObservableObject {
         requiresEntryPassword = false
         saveEncryption = .none
         savePassword = nil
+        format = .zip
+        saveFormat = .zip
     }
 
     /// Añade ficheros/carpetas del disco dentro de la carpeta destino actual.
@@ -386,6 +442,8 @@ final class ArchiveDocument: ObservableObject {
         requiresEntryPassword = false
         saveEncryption = .none
         savePassword = nil
+        format = .zip
+        saveFormat = .zip
         changed()
     }
 
@@ -446,28 +504,93 @@ final class ArchiveDocument: ObservableObject {
         case .diskFile(let url):
             return ExportPlan(name: node.name, payload: .diskFile(url))
         case .zipEntry(let entry):
-            return ExportPlan(name: node.name, payload: .zipEntry(entry: entry, archive: sourceArchiveData ?? Data(), password: entryPassword))
+            return ExportPlan(name: node.name, payload: .archiveEntry(
+                entry: entry, archive: sourceArchiveData ?? Data(), password: entryPassword, format: format))
         case .folder:
             return ExportPlan(name: node.name, payload: .folder([]))
         }
     }
 
+    /// Datos sin comprimir de un nodo, leídos según el formato del archivo de origen.
+    /// Sirve para reconstruir el contenido al guardar en otro formato o al extraer.
+    private func nodeData(_ node: FileNode) -> Data? {
+        switch node.source {
+        case .folder: return nil
+        case .diskFile(let url): return try? Data(contentsOf: url)
+        case .zipEntry(let entry):
+            guard let archive = sourceArchiveData else { return nil }
+            switch format {
+            case .zip: return try? ZipExtractor().extractedData(for: entry, in: archive, password: entryPassword)
+            case .tar, .tarGzip: return try? Tar.entryData(for: entry, in: archive)
+            case .gzip: return try? Gzip.decompress(archive)
+            }
+        }
+    }
+
     /// Guarda el ZIP en `url` con el formato/cifrado elegidos, en streaming a disco
     /// y en segundo plano con progreso. Recuerda los ajustes para re-guardar.
-    func save(to url: URL, encryption: ZipEncryption, password: String?) async throws {
-        saveEncryption = encryption
-        savePassword = password
-        let inputs = makeSaveInputs()
-        progress = ProgressState(label: encryption == .none ? "Comprimiendo \(documentName)…"
-                                                            : "Cifrando \(documentName)…", fraction: 0)
+    func save(to url: URL, format outputFormat: ArchiveFormat,
+              encryption: ZipEncryption, password: String?) async throws {
+        saveFormat = outputFormat
+        let cipher = outputFormat.supportsEncryption ? encryption : .none
+        let pwd = outputFormat.supportsEncryption ? password : nil
+        progress = ProgressState(label: cipher == .none ? "Comprimiendo \(documentName)…"
+                                                         : "Cifrando \(documentName)…", fraction: 0)
         defer { progress = nil }
-        try await streamZip(inputs, to: url, encryption: encryption, password: password, writer: writer)
+
+        switch outputFormat {
+        case .zip:
+            saveEncryption = cipher
+            savePassword = pwd
+            let inputs = makeSaveInputs()
+            try await streamZip(inputs, to: url, encryption: cipher, password: pwd, writer: writer)
+        case .tar:
+            let items = makeTarItems()
+            try await writeData({ Tar.write(items) }, to: url)
+        case .tarGzip:
+            let items = makeTarItems()
+            let name = documentName
+            try await writeData({ Gzip.compress(Tar.write(items), filename: name) }, to: url)
+        case .gzip:
+            guard let node = roots.first(where: { !$0.isDirectory }), let data = nodeData(node) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            let name = node.name
+            try await writeData({ Gzip.compress(data, filename: name) }, to: url)
+        }
         markSaved(as: url)
     }
 
     /// Re-guarda con los ajustes ya elegidos (botón Guardar de un documento existente).
     func save(to url: URL) async throws {
-        try await save(to: url, encryption: saveEncryption, password: savePassword)
+        try await save(to: url, format: saveFormat, encryption: saveEncryption, password: savePassword)
+    }
+
+    /// Construye las entradas (con datos en memoria) para escribir un TAR.
+    private func makeTarItems() -> [Tar.WriteItem] {
+        var items: [Tar.WriteItem] = []
+        func walk(_ nodes: [FileNode], prefix: String) {
+            for node in nodes {
+                let path = prefix + node.name
+                if node.isDirectory {
+                    items.append(Tar.WriteItem(path: path + "/", data: Data(),
+                                               modifiedAt: node.modificationDate, isDirectory: true))
+                    walk(node.children, prefix: path + "/")
+                } else if let data = nodeData(node) {
+                    items.append(Tar.WriteItem(path: path, data: data,
+                                               modifiedAt: node.modificationDate, isDirectory: false))
+                }
+            }
+        }
+        walk(roots, prefix: "")
+        return items
+    }
+
+    /// Escribe `make()` (cómputo en segundo plano) en `url` de forma atómica.
+    nonisolated private func writeData(_ make: @escaping @Sendable () -> Data, to url: URL) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            try make().write(to: url, options: .atomic)
+        }.value
     }
 
     /// Construye las entradas a escribir. Es ligero: los ficheros nuevos van como
@@ -485,7 +608,12 @@ final class ArchiveDocument: ObservableObject {
                 } else if case .diskFile(let url) = node.source {
                     items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .file(url)))
                 } else if case .zipEntry(let entry) = node.source, let archive = sourceArchiveData {
-                    if entry.isEncrypted {
+                    if format != .zip {
+                        // Origen tar/gz: reconstruir el texto claro y dejar que el escritor comprima.
+                        if let data = nodeData(node) {
+                            items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .data(data)))
+                        }
+                    } else if entry.isEncrypted {
                         // Cifrada: descifrar a texto claro; el escritor la re-cifra (o no) limpiamente.
                         if let data = try? extractor.extractedData(for: entry, in: archive, password: entryPassword) {
                             items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate, source: .data(data)))
@@ -558,7 +686,8 @@ final class ArchiveDocument: ObservableObject {
         var index: [String: FileNode] = [:]
 
         for entry in entries.sorted(by: { $0.path < $1.path }) {
-            let parts = entry.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+            var parts = entry.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+            if parts.first == "." { parts.removeFirst() }   // tar suele prefijar "./"
             guard !parts.isEmpty else { continue }
 
             var accumulated = ""
@@ -645,7 +774,30 @@ final class ArchiveDocument: ObservableObject {
         return "\(base) \(n)"
     }
 
-    private func isZip(_ url: URL) -> Bool { url.pathExtension.lowercased() == "zip" }
+    /// `true` si la extensión corresponde a un contenedor que sabemos abrir.
+    func isOpenableArchive(_ url: URL) -> Bool {
+        let name = url.lastPathComponent.lowercased()
+        return name.hasSuffix(".zip") || name.hasSuffix(".tar")
+            || name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") || name.hasSuffix(".gz")
+    }
+
+    /// Formato deducido del nombre del fichero (refinado al leer para `.gz` → `.tar.gz`).
+    private func detectFormat(for url: URL) -> ArchiveFormat {
+        let name = url.lastPathComponent.lowercased()
+        if name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") { return .tarGzip }
+        if name.hasSuffix(".tar") { return .tar }
+        if name.hasSuffix(".gz") { return .gzip }
+        return .zip
+    }
+
+    /// `true` si `data` empieza con la firma ustar (es un TAR).
+    nonisolated private static func isUstar(_ data: Data) -> Bool {
+        guard data.count >= 263 else { return false }
+        return Array(data[257..<262]) == Array("ustar".utf8)
+    }
+
+    /// El documento es un único fichero (apto para guardar como `.gz`).
+    var isSingleFile: Bool { roots.count == 1 && !roots[0].isDirectory }
 
     private func isDirectory(_ url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
@@ -671,7 +823,7 @@ struct ExportPlan: Sendable {
     enum Payload: Sendable {
         case folder([ExportPlan])
         case diskFile(URL)
-        case zipEntry(entry: ArchiveEntry, archive: Data, password: String?)
+        case archiveEntry(entry: ArchiveEntry, archive: Data, password: String?, format: ArchiveFormat)
     }
 
     var isDirectory: Bool {
@@ -693,7 +845,7 @@ struct ExportPlan: Sendable {
     func fileCount() -> Int {
         switch payload {
         case .folder(let children): return children.reduce(0) { $0 + $1.fileCount() }
-        case .diskFile, .zipEntry: return 1
+        case .diskFile, .archiveEntry: return 1
         }
     }
 
@@ -709,8 +861,13 @@ struct ExportPlan: Sendable {
         case .diskFile(let url):
             try FileManager.default.copyItem(at: url, to: destination)
             onFile()
-        case .zipEntry(let entry, let archive, let password):
-            let data = try ZipExtractor().extractedData(for: entry, in: archive, password: password)
+        case .archiveEntry(let entry, let archive, let password, let format):
+            let data: Data
+            switch format {
+            case .zip: data = try ZipExtractor().extractedData(for: entry, in: archive, password: password)
+            case .tar, .tarGzip: data = try Tar.entryData(for: entry, in: archive)
+            case .gzip: data = try Gzip.decompress(archive)
+            }
             try data.write(to: destination, options: .atomic)
             onFile()
         }

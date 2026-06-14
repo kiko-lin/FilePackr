@@ -26,27 +26,40 @@ private enum PasswordRequest: Identifiable {
 
 /// Hoja "Guardar archivo": formato, cifrado y contraseña (opcional).
 private struct SaveOptionsSheet: View {
+    @Binding var format: ArchiveFormat
     @Binding var encryption: ZipEncryption
     @Binding var password: String
+    /// `.gz` (un solo fichero) solo se ofrece cuando el documento es un único fichero.
+    let allowGzip: Bool
     var onSave: () -> Void
     var onCancel: () -> Void
+
+    private var formats: [ArchiveFormat] {
+        ArchiveFormat.allCases.filter { $0 != .gzip || allowGzip }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Guardar archivo").font(.headline)
             Form {
-                Picker("Formato", selection: .constant(0)) {
-                    Text("ZIP (recomendado)").tag(0)
+                Picker("Formato", selection: $format) {
+                    ForEach(formats, id: \.self) { fmt in
+                        Text(fmt.displayName).tag(fmt)
+                    }
                 }
-                .disabled(true)
-                Picker("Cifrado", selection: $encryption) {
-                    Text("No cifrado").tag(ZipEncryption.none)
-                    Text("Débil (PKZip2 compatible)").tag(ZipEncryption.zipCrypto)
-                    Text("Fuerte (AES-256)").tag(ZipEncryption.aes256)
-                }
-                if encryption != .none {
-                    SecureField("Contraseña", text: $password)
-                        .onSubmit { if !password.isEmpty { onSave() } }
+                if format.supportsEncryption {
+                    Picker("Cifrado", selection: $encryption) {
+                        Text("No cifrado").tag(ZipEncryption.none)
+                        Text("Débil (PKZip2 compatible)").tag(ZipEncryption.zipCrypto)
+                        Text("Fuerte (AES-256)").tag(ZipEncryption.aes256)
+                    }
+                    if encryption != .none {
+                        SecureField("Contraseña", text: $password)
+                            .onSubmit { if !password.isEmpty { onSave() } }
+                    }
+                } else {
+                    Text("Este formato no admite cifrado.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)
@@ -55,7 +68,7 @@ private struct SaveOptionsSheet: View {
                 Button("Cancelar", role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
                 Button("Guardar…", action: onSave)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(encryption != .none && password.isEmpty)
+                    .disabled(format.supportsEncryption && encryption != .none && password.isEmpty)
             }
         }
         .padding(20)
@@ -150,6 +163,7 @@ struct ContentView: View {
     @State private var passwordRequest: PasswordRequest?
     @State private var passwordInput = ""
     @State private var showingSaveOptions = false
+    @State private var saveFormatChoice: ArchiveFormat = .zip
     @State private var saveEncryptionChoice: ZipEncryption = .none
     @State private var saveOptionsPassword = ""
     @State private var showingEntryPassword = false
@@ -210,8 +224,10 @@ struct ContentView: View {
                           onCancel: { dismissPassword() })
         }
         .sheet(isPresented: $showingSaveOptions) {
-            SaveOptionsSheet(encryption: $saveEncryptionChoice,
+            SaveOptionsSheet(format: $saveFormatChoice,
+                             encryption: $saveEncryptionChoice,
                              password: $saveOptionsPassword,
+                             allowGzip: doc.isSingleFile,
                              onSave: { confirmSaveOptions() },
                              onCancel: { showingSaveOptions = false })
         }
@@ -334,7 +350,7 @@ struct ContentView: View {
             Text("Arrastra archivos aquí")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text("Un .zip se abrirá para editarlo; otros archivos crearán uno nuevo.")
+            Text("Un .zip, .tar, .tar.gz o .gz se abrirá para editarlo; otros archivos crearán uno nuevo.")
                 .font(.callout)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
@@ -475,28 +491,37 @@ struct ContentView: View {
         if let url = doc.sourceURL {
             Task { await runAsync { try await doc.save(to: url) } }
         } else {
+            saveFormatChoice = doc.isSingleFile ? doc.saveFormat : (doc.saveFormat == .gzip ? .zip : doc.saveFormat)
             saveEncryptionChoice = doc.saveEncryption
             saveOptionsPassword = ""
             showingSaveOptions = true
         }
     }
 
-    /// Tras elegir opciones, pide ubicación y guarda el .zip con el cifrado elegido.
+    /// Tras elegir opciones, pide ubicación y guarda el archivo con el formato/cifrado elegidos.
     private func confirmSaveOptions() {
         showingSaveOptions = false
-        let encryption = saveEncryptionChoice
+        let format = saveFormatChoice
+        let encryption = format.supportsEncryption ? saveEncryptionChoice : .none
         let password = encryption == .none ? nil : saveOptionsPassword
 
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.zip]
-        let base = doc.documentName == ArchiveDocument.untitledName
-            ? doc.documentName
-            : (doc.documentName as NSString).deletingPathExtension
-        panel.nameFieldStringValue = "\(base).zip"
+        panel.allowedContentTypes = format == .zip ? [.zip] : []
+        panel.nameFieldStringValue = "\(strippedBaseName(doc.documentName)).\(format.fileExtension)"
         panel.prompt = "Guardar"
         if panel.runModal() == .OK, let url = panel.url {
-            Task { await runAsync { try await doc.save(to: url, encryption: encryption, password: password) } }
+            Task { await runAsync { try await doc.save(to: url, format: format, encryption: encryption, password: password) } }
         }
+    }
+
+    /// Nombre base sin la extensión de archivo conocida (zip/tar/tar.gz/tgz/gz/fpkz).
+    private func strippedBaseName(_ name: String) -> String {
+        if name == ArchiveDocument.untitledName { return name }
+        let lower = name.lowercased()
+        for ext in [".tar.gz", ".tgz", ".tar", ".zip", ".gz", ".fpkz"] where lower.hasSuffix(ext) {
+            return String(name.dropLast(ext.count))
+        }
+        return (name as NSString).deletingPathExtension
     }
 
     /// Cierra el documento; si hay cambios sin guardar, pide confirmación.

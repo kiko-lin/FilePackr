@@ -59,6 +59,19 @@ public enum Gzip {
         return result
     }
 
+    /// Una entrada `ArchiveEntry` que representa el único fichero de un `.gz`
+    /// (para navegarlo). La extracción se hace con `decompress`.
+    public static func entries(in data: Data, fallbackName: String) -> [ArchiveEntry] {
+        let bytes = [UInt8](data)
+        let size = bytes.count >= 4 ? UInt64(read32(bytes, bytes.count - 4)) : 0
+        return [ArchiveEntry(
+            path: storedFilename(data) ?? fallbackName,
+            compressedSize: UInt64(data.count), uncompressedSize: size,
+            isDirectory: false, compressionMethod: 8, crc32: 0,
+            localHeaderOffset: 0, modificationDate: nil,
+            dosTime: 0, flags: 0, aesStrength: nil, aesRealMethod: nil)]
+    }
+
     /// Nombre del fichero contenido (de la cabecera FNAME), si lo hay.
     public static func storedFilename(_ data: Data) -> String? {
         let bytes = [UInt8](data)
