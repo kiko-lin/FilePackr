@@ -49,7 +49,7 @@ public struct ZipReader: Sendable {
     }
 
     /// Lista las entradas a partir del contenido en memoria de un ZIP.
-    public func listEntries(in data: Data) throws -> [ArchiveEntry] {
+    public func listEntries(in data: Data, progress: ((Double) -> Void)? = nil) throws -> [ArchiveEntry] {
         let bytes = [UInt8](data)
         guard let eocd = findEOCD(bytes) else { throw ArchiveError.notZipArchive }
 
@@ -59,7 +59,7 @@ public struct ZipReader: Sendable {
         entries.reserveCapacity(entryCount)
 
         var p = cdOffset
-        for _ in 0..<entryCount {
+        for index in 0..<entryCount {
             guard p + 46 <= bytes.count, readU32(bytes, p) == 0x0201_4b50 else {
                 throw ArchiveError.corruptCentralDirectory
             }
@@ -106,6 +106,7 @@ public struct ZipReader: Sendable {
                 modificationDate: Self.dosDate(time: modTime, date: modDate)
             ))
             p = nameStart + nameLen + extraLen + commentLen
+            if let progress, entryCount > 0 { progress(Double(index + 1) / Double(entryCount)) }
         }
         return entries
     }

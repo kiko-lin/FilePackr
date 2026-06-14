@@ -128,17 +128,21 @@ struct ContentView: View {
     private var progressOverlay: some View {
         if let progress = doc.progress {
             ZStack {
-                Color.black.opacity(0.12).ignoresSafeArea()
-                VStack(spacing: 12) {
-                    Text(progress.label).font(.callout)
+                // Fondo opaco: oculta por completo lo que haya debajo.
+                Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
+                VStack(spacing: 14) {
+                    Text(progress.label)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                     if let fraction = progress.fraction {
-                        ProgressView(value: fraction).frame(width: 240)
+                        ProgressView(value: fraction)
+                            .progressViewStyle(.linear)
+                            .frame(width: 260)
                     } else {
-                        ProgressView().controlSize(.large)
+                        ProgressView()
+                            .controlSize(.large)
                     }
                 }
-                .padding(24)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
     }

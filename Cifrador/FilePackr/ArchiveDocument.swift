@@ -139,12 +139,19 @@ final class ArchiveDocument: ObservableObject {
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
     func openArchive(_ url: URL) async throws {
-        progress = ProgressState(label: "Abriendo \(url.lastPathComponent)…", fraction: nil)
+        progress = ProgressState(label: "Abriendo \(url.lastPathComponent)…", fraction: 0)
         defer { progress = nil }
 
-        let result = try await Task.detached(priority: .userInitiated) { () -> (Data, [ArchiveEntry]) in
+        let result = try await Task.detached(priority: .userInitiated) { [weak self] () -> (Data, [ArchiveEntry]) in
             let data = try Data(contentsOf: url, options: .mappedIfSafe)
-            let entries = try ZipReader().listEntries(in: data)
+            var lastReported = 0.0
+            let entries = try ZipReader().listEntries(in: data) { fraction in
+                // Limitamos los saltos a la UI (cada ~1%) para no inundar el hilo principal.
+                if fraction - lastReported >= 0.01 || fraction >= 1 {
+                    lastReported = fraction
+                    Task { @MainActor in self?.progress?.fraction = fraction }
+                }
+            }
             return (data, entries)
         }.value
 
