@@ -29,6 +29,8 @@ public enum ZipEncryption: Sendable, Equatable {
     case none
     /// ZipCrypto / PKWARE clásico ("Débil"). Interoperable pero inseguro.
     case zipCrypto
+    /// AES de WinZip ("Fuerte"). Interoperable y seguro.
+    case aes256
 }
 
 /// Escribe ficheros ZIP. Soporta dos modos sobre el mismo núcleo:
@@ -67,8 +69,12 @@ public struct ZipWriter: Sendable {
 
         for (index, input) in inputs.enumerated() {
             var record = try makeRecord(input)
-            if encryption == .zipCrypto, let password, !record.isDirectory {
-                record = encryptZipCrypto(record, password: password)
+            if let password, !record.isDirectory {
+                switch encryption {
+                case .none: break
+                case .zipCrypto: record = encryptZipCrypto(record, password: password)
+                case .aes256: record = encryptAES(record, password: password)
+                }
             }
             let localOffset = offset
             try emit(localHeader(record))
@@ -95,8 +101,13 @@ public struct ZipWriter: Sendable {
         let dosTime: UInt16
         let dosDate: UInt16
         var flags: UInt16 = 0
+        /// Si está cifrada con AES, fuerza (1/2/3) y método de compresión real.
+        var aes: (strength: UInt8, realMethod: UInt16)?
         var compressedSize: UInt64 { UInt64(compressed.count) }
         var needsZip64Sizes: Bool { uncompressedSize >= 0xFFFF_FFFF || compressedSize >= 0xFFFF_FFFF }
+        /// Método que va en la cabecera (99 si AES) y CRC (0 en AE-2).
+        var headerMethod: UInt16 { aes != nil ? 99 : method }
+        var headerCRC: UInt32 { aes != nil ? 0 : crc32 }
     }
 
     private func makeRecord(_ input: ZipEntryInput) throws -> Record {
@@ -140,6 +151,29 @@ public struct ZipWriter: Sendable {
                       isDirectory: false, dosTime: record.dosTime, dosDate: record.dosDate, flags: 0x0001)
     }
 
+    /// Cifra una entrada con AES de WinZip (AE-2). La cabecera lleva método 99 y un
+    /// campo extra 0x9901 que indica fuerza y método real; el CRC va a 0.
+    private func encryptAES(_ record: Record, password: String) -> Record {
+        let stored = ZipAES.encrypt([UInt8](record.compressed), password: password, strength: ZipAES.strength256)
+        return Record(nameBytes: record.nameBytes, method: record.method, crc32: record.crc32,
+                      compressed: Data(stored), uncompressedSize: record.uncompressedSize,
+                      isDirectory: false, dosTime: record.dosTime, dosDate: record.dosDate,
+                      flags: 0x0001, aes: (ZipAES.strength256, record.method))
+    }
+
+    /// Campo extra 0x9901 (AES de WinZip): versión 2, vendor "AE", fuerza, método real.
+    private func aesExtra(_ record: Record) -> Data {
+        guard let aes = record.aes else { return Data() }
+        var e = Data()
+        e.appendU16(0x9901)
+        e.appendU16(7)
+        e.appendU16(2)                       // AE-2
+        e.append(contentsOf: [0x41, 0x45])   // "AE"
+        e.append(aes.strength)
+        e.appendU16(aes.realMethod)
+        return e
+    }
+
     // MARK: - Cabeceras
 
     private func localHeader(_ record: Record) -> Data {
@@ -151,14 +185,15 @@ public struct ZipWriter: Sendable {
             extra.appendU64(record.uncompressedSize)
             extra.appendU64(record.compressedSize)
         }
+        extra.append(aesExtra(record))
         var h = Data()
         h.appendU32(0x0403_4b50)
         h.appendU16(zip64 ? 45 : 20)
         h.appendU16(record.flags)
-        h.appendU16(record.method)
+        h.appendU16(record.headerMethod)
         h.appendU16(record.dosTime)
         h.appendU16(record.dosDate)
-        h.appendU32(record.crc32)
+        h.appendU32(record.headerCRC)
         h.appendU32(zip64 ? 0xFFFF_FFFF : UInt32(record.compressedSize))
         h.appendU32(zip64 ? 0xFFFF_FFFF : UInt32(record.uncompressedSize))
         h.appendU16(UInt16(record.nameBytes.count))
@@ -185,16 +220,17 @@ public struct ZipWriter: Sendable {
             extra.appendU16(UInt16(body.count))
             extra.append(body)
         }
+        extra.append(aesExtra(record))
 
         var h = Data()
         h.appendU32(0x0201_4b50)
         h.appendU16(zip64 ? 45 : 20)
         h.appendU16(zip64 ? 45 : 20)
         h.appendU16(record.flags)
-        h.appendU16(record.method)
+        h.appendU16(record.headerMethod)
         h.appendU16(record.dosTime)
         h.appendU16(record.dosDate)
-        h.appendU32(record.crc32)
+        h.appendU32(record.headerCRC)
         h.appendU32(needSizes ? 0xFFFF_FFFF : UInt32(record.compressedSize))
         h.appendU32(needSizes ? 0xFFFF_FFFF : UInt32(record.uncompressedSize))
         h.appendU16(UInt16(record.nameBytes.count))

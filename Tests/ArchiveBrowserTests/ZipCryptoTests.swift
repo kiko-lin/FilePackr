@@ -44,6 +44,32 @@ final class ZipCryptoTests: XCTestCase {
         }
     }
 
+    func testAESRoundTrip() throws {
+        let payload = Data(String(repeating: "datos AES-256 de prueba ", count: 60).utf8)
+        let zip = try writer.build([ZipEntryInput(path: "secreto.txt", modifiedAt: nil, source: .data(payload))],
+                                   encryption: .aes256, password: "claveFuerte")
+        let entry = try XCTUnwrap(try reader.listEntries(in: zip).first)
+        XCTAssertTrue(entry.isAESEncrypted)
+        XCTAssertEqual(entry.aesStrength, 3)              // AES-256
+        XCTAssertEqual(entry.aesRealMethod, 8)            // deflate
+        XCTAssertEqual(try extractor.extractedData(for: entry, in: zip, password: "claveFuerte"), payload)
+        XCTAssertThrowsError(try extractor.extractedData(for: entry, in: zip, password: "mala")) { error in
+            XCTAssertEqual(error as? ExtractError, .wrongPassword)
+        }
+        XCTAssertThrowsError(try extractor.extractedData(for: entry, in: zip)) { error in
+            XCTAssertEqual(error as? ExtractError, .needsPassword)
+        }
+    }
+
+    func testAESStoredUncompressible() throws {
+        // Datos no comprimibles → método real 0 (almacenado), también cifrado AES.
+        let payload = Data((0..<24).map { UInt8($0 &* 7 &+ 3) })
+        let zip = try writer.build([ZipEntryInput(path: "r.bin", modifiedAt: nil, source: .data(payload))],
+                                   encryption: .aes256, password: "k")
+        let entry = try XCTUnwrap(try reader.listEntries(in: zip).first)
+        XCTAssertEqual(try extractor.extractedData(for: entry, in: zip, password: "k"), payload)
+    }
+
     func testReadsZipCryptoFromSystemZip() throws {
         try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/zip"))
         let dir = try tempDir()

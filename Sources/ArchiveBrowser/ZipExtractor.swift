@@ -28,14 +28,26 @@ public struct ZipExtractor: Sendable {
     /// ZipCrypto, hay que pasar `password`.
     public func extractedData(for entry: ArchiveEntry, in archive: Data, password: String? = nil) throws -> Data {
         var compressed = try rawCompressedData(for: entry, in: archive)
+        var method = entry.compressionMethod
 
         if entry.isEncrypted {
-            if entry.isAESEncrypted { throw ExtractError.unsupportedEncryption }
             guard let password else { throw ExtractError.needsPassword }
-            compressed = try decryptZipCrypto(compressed, entry: entry, password: password)
+            if entry.isAESEncrypted {
+                guard let strength = entry.aesStrength else { throw ExtractError.unsupportedEncryption }
+                do {
+                    compressed = Data(try ZipAES.decrypt([UInt8](compressed), password: password, strength: strength))
+                } catch ZipAESError.wrongPassword {
+                    throw ExtractError.wrongPassword
+                } catch {
+                    throw ExtractError.decompressionFailed
+                }
+                method = entry.aesRealMethod ?? 8
+            } else {
+                compressed = try decryptZipCrypto(compressed, entry: entry, password: password)
+            }
         }
 
-        switch entry.compressionMethod {
+        switch method {
         case 0: // almacenado sin comprimir
             return compressed
         case 8: // deflate
@@ -44,7 +56,7 @@ public struct ZipExtractor: Sendable {
             }
             return out
         default:
-            throw ExtractError.unsupportedMethod(entry.compressionMethod)
+            throw ExtractError.unsupportedMethod(method)
         }
     }
 
@@ -53,13 +65,14 @@ public struct ZipExtractor: Sendable {
         guard data.count >= 12 else { throw ExtractError.wrongPassword }
         var cipher = ZipCrypto(password: password)
         let decrypted = cipher.decrypt([UInt8](data))
-        // El byte 11 de la cabecera debe coincidir con el byte alto del CRC. Si la
-        // entrada usa descriptor de datos (bit 3), no se puede verificar aquí; en
-        // ese caso seguimos y un fallo de descompresión delatará la contraseña.
+        // El byte 11 de la cabecera verifica la contraseña: byte alto del CRC, o de
+        // la hora MS-DOS si la entrada usa descriptor de datos (bit 3), como hace
+        // el `zip` de Info-ZIP.
         let hasDataDescriptor = entry.flags & 0x0008 != 0
-        if !hasDataDescriptor, decrypted[11] != UInt8((entry.crc32 >> 24) & 0xFF) {
-            throw ExtractError.wrongPassword
-        }
+        let expected = hasDataDescriptor
+            ? UInt8((entry.dosTime >> 8) & 0xFF)
+            : UInt8((entry.crc32 >> 24) & 0xFF)
+        guard decrypted[11] == expected else { throw ExtractError.wrongPassword }
         return Data(decrypted[12...])
     }
 

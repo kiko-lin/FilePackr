@@ -20,8 +20,14 @@ public struct ArchiveEntry: Equatable, Identifiable, Sendable {
     public let localHeaderOffset: UInt64
     /// Fecha de modificación (campo MS-DOS del ZIP), si es válida.
     public let modificationDate: Date?
+    /// Hora MS-DOS en crudo (para la verificación de contraseña de ZipCrypto).
+    public let dosTime: UInt16
     /// Bandera de propósito general (bit 0 = entrada cifrada).
     public let flags: UInt16
+    /// Fuerza AES (1/2/3) si la entrada usa AES de WinZip; `nil` en otro caso.
+    public let aesStrength: UInt8?
+    /// Método de compresión real cuando la entrada es AES (el de cabecera es 99).
+    public let aesRealMethod: UInt16?
 
     /// La entrada está cifrada (cualquier método).
     public var isEncrypted: Bool { flags & 0x0001 != 0 }
@@ -128,6 +134,14 @@ public struct ZipReader: Sendable {
                 if let v = z.offset { localOffset = v }
             }
 
+            // AES de WinZip: el campo extra 0x9901 da la fuerza y el método real.
+            var aesStrength: UInt8?
+            var aesRealMethod: UInt16?
+            if method == 99, let aes = aesExtra(cd, start: nameStart + nameLen, length: extraLen) {
+                aesStrength = aes.strength
+                aesRealMethod = aes.method
+            }
+
             entries.append(ArchiveEntry(
                 path: name,
                 compressedSize: compSize,
@@ -137,12 +151,31 @@ public struct ZipReader: Sendable {
                 crc32: crc,
                 localHeaderOffset: localOffset,
                 modificationDate: Self.dosDate(time: modTime, date: modDate),
-                flags: flags
+                dosTime: modTime,
+                flags: flags,
+                aesStrength: aesStrength,
+                aesRealMethod: aesRealMethod
             ))
             p = nameStart + nameLen + extraLen + commentLen
             if let progress, entryCount > 0 { progress(Double(index + 1) / Double(entryCount)) }
         }
         return entries
+    }
+
+    /// Lee el campo extra AES de WinZip (id 0x9901): fuerza y método real.
+    private func aesExtra(_ b: [UInt8], start: Int, length: Int) -> (strength: UInt8, method: UInt16)? {
+        var p = start
+        let end = min(start + length, b.count)
+        while p + 4 <= end {
+            let id = readU16(b, p)
+            let size = Int(readU16(b, p + 2))
+            if id == 0x9901, p + 4 + 7 <= end {
+                // versión(2) + vendor(2) + fuerza(1) + método(2)
+                return (b[p + 4 + 4], readU16(b, p + 4 + 5))
+            }
+            p += 4 + size
+        }
+        return nil
     }
 
     /// Lee el registro ZIP64 EOCD (56 bytes) en `offset`, de la cola si está ahí
