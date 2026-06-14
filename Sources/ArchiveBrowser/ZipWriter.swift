@@ -25,7 +25,7 @@ public struct ZipEntryInput: Sendable {
 }
 
 /// Cifrado a aplicar al escribir el ZIP.
-public enum ZipEncryption: Sendable, Equatable {
+public enum ZipEncryption: Sendable, Equatable, Hashable {
     case none
     /// ZipCrypto / PKWARE clásico ("Débil"). Interoperable pero inseguro.
     case zipCrypto

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import ArchiveBrowser
 
 /// Conflicto al extraer: ya existe un fichero/carpeta con ese nombre en destino.
 private struct ExtractionConflict: Identifiable {
@@ -13,25 +14,52 @@ private struct ExtractionConflict: Identifiable {
 /// Petición de contraseña: para abrir un archivo cifrado o para guardar cifrando.
 private enum PasswordRequest: Identifiable {
     case open(URL)
-    case saveEncrypted(URL)
 
     var id: String {
         switch self {
         case .open(let url): return "open:" + url.path
-        case .saveEncrypted(let url): return "save:" + url.path
         }
     }
-    var title: String {
-        switch self {
-        case .open: return "Contraseña para abrir el archivo"
-        case .saveEncrypted: return "Contraseña para cifrar el archivo"
+    var title: String { "Contraseña para abrir el archivo" }
+    var confirmLabel: String { "Abrir" }
+}
+
+/// Hoja "Guardar archivo": formato, cifrado y contraseña (opcional).
+private struct SaveOptionsSheet: View {
+    @Binding var encryption: ZipEncryption
+    @Binding var password: String
+    var onSave: () -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Guardar archivo").font(.headline)
+            Form {
+                Picker("Formato", selection: .constant(0)) {
+                    Text("ZIP (recomendado)").tag(0)
+                }
+                .disabled(true)
+                Picker("Cifrado", selection: $encryption) {
+                    Text("No cifrado").tag(ZipEncryption.none)
+                    Text("Débil (PKZip2 compatible)").tag(ZipEncryption.zipCrypto)
+                    Text("Fuerte (AES-256)").tag(ZipEncryption.aes256)
+                }
+                if encryption != .none {
+                    SecureField("Contraseña", text: $password)
+                        .onSubmit { if !password.isEmpty { onSave() } }
+                }
+            }
+            .formStyle(.grouped)
+            HStack {
+                Spacer()
+                Button("Cancelar", role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Guardar…", action: onSave)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(encryption != .none && password.isEmpty)
+            }
         }
-    }
-    var confirmLabel: String {
-        switch self {
-        case .open: return "Abrir"
-        case .saveEncrypted: return "Cifrar y guardar"
-        }
+        .padding(20)
+        .frame(width: 400)
     }
 }
 
@@ -72,6 +100,9 @@ struct ContentView: View {
     @State private var confirmingClose = false
     @State private var passwordRequest: PasswordRequest?
     @State private var passwordInput = ""
+    @State private var showingSaveOptions = false
+    @State private var saveEncryptionChoice: ZipEncryption = .none
+    @State private var saveOptionsPassword = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -121,6 +152,12 @@ struct ContentView: View {
                           password: $passwordInput,
                           onConfirm: { confirmPassword(request) },
                           onCancel: { dismissPassword() })
+        }
+        .sheet(isPresented: $showingSaveOptions) {
+            SaveOptionsSheet(encryption: $saveEncryptionChoice,
+                             password: $saveOptionsPassword,
+                             onSave: { confirmSaveOptions() },
+                             onCancel: { showingSaveOptions = false })
         }
     }
 
@@ -172,7 +209,7 @@ struct ContentView: View {
                 .fontWeight(.medium)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            if doc.isEncrypted {
+            if doc.isEncrypted || doc.saveEncryption != .none {
                 Image(systemName: "lock.fill")
                     .foregroundStyle(.secondary)
                     .help("Archivo cifrado")
@@ -184,11 +221,6 @@ struct ContentView: View {
             }
             Spacer()
             Button("Cerrar") { attemptClose() }
-            Button { promptSaveEncrypted() } label: {
-                Image(systemName: "lock")
-            }
-            .help("Guardar cifrado con contraseña…")
-            .disabled(doc.isEmpty)
             Button("Guardar") { saveDocument() }
                 .disabled(!doc.hasUnsavedChanges)
                 .keyboardShortcut("s", modifiers: .command)
@@ -268,27 +300,12 @@ struct ContentView: View {
         }
     }
 
-    private func promptSaveEncrypted() {
-        let panel = NSSavePanel()
-        let base = doc.documentName == ArchiveDocument.untitledName
-            ? doc.documentName
-            : (doc.documentName as NSString).deletingPathExtension
-        panel.nameFieldStringValue = "\(base).\(ArchiveDocument.encryptedExtension)"
-        panel.prompt = "Cifrar y guardar"
-        if panel.runModal() == .OK, let url = panel.url {
-            passwordInput = ""
-            passwordRequest = .saveEncrypted(url)
-        }
-    }
-
     private func confirmPassword(_ request: PasswordRequest) {
         let password = passwordInput
         dismissPassword()
         switch request {
         case .open(let url):
             Task { await runAsync { try await doc.openEncrypted(url, password: password) } }
-        case .saveEncrypted(let url):
-            Task { await runAsync { try await doc.saveEncrypted(to: url, password: password) } }
         }
     }
 
@@ -322,16 +339,24 @@ struct ContentView: View {
         }
     }
 
-    /// Guarda: sobre el fichero de origen si existe, o pide ubicación si es nuevo.
+    /// Guarda: si ya tiene fichero, re-guarda con los ajustes; si es nuevo, abre el
+    /// diálogo de opciones (formato + cifrado + contraseña).
     private func saveDocument() {
         if let url = doc.sourceURL {
             Task { await runAsync { try await doc.save(to: url) } }
         } else {
-            saveAsPanel()
+            saveEncryptionChoice = doc.saveEncryption
+            saveOptionsPassword = ""
+            showingSaveOptions = true
         }
     }
 
-    private func saveAsPanel() {
+    /// Tras elegir opciones, pide ubicación y guarda el .zip con el cifrado elegido.
+    private func confirmSaveOptions() {
+        showingSaveOptions = false
+        let encryption = saveEncryptionChoice
+        let password = encryption == .none ? nil : saveOptionsPassword
+
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.zip]
         let base = doc.documentName == ArchiveDocument.untitledName
@@ -340,7 +365,7 @@ struct ContentView: View {
         panel.nameFieldStringValue = "\(base).zip"
         panel.prompt = "Guardar"
         if panel.runModal() == .OK, let url = panel.url {
-            Task { await runAsync { try await doc.save(to: url) } }
+            Task { await runAsync { try await doc.save(to: url, encryption: encryption, password: password) } }
         }
     }
 

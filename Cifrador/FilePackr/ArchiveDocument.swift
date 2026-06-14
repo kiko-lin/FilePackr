@@ -108,6 +108,9 @@ final class ArchiveDocument: ObservableObject {
     @Published var progress: ProgressState?
     /// El documento está protegido con contraseña (se abrió o se guardó cifrado).
     @Published private(set) var isEncrypted = false
+    /// Cifrado elegido al guardar (se recuerda para el botón Guardar).
+    @Published private(set) var saveEncryption: ZipEncryption = .none
+    private var savePassword: String?
 
     static let untitledName = "Sin título"
     static let encryptedExtension = "fpkz"
@@ -381,39 +384,22 @@ final class ArchiveDocument: ObservableObject {
         }
     }
 
-    /// Guarda el ZIP en `url`, en **streaming a disco** (sin cargarlo entero en
-    /// memoria) y en segundo plano con progreso. Si es cifrado, re-cifra.
-    func save(to url: URL) async throws {
-        if isEncrypted, let password = encryptionPassword {
-            try await saveEncrypted(to: url, password: password)
-            return
-        }
+    /// Guarda el ZIP en `url` con el formato/cifrado elegidos, en streaming a disco
+    /// y en segundo plano con progreso. Recuerda los ajustes para re-guardar.
+    func save(to url: URL, encryption: ZipEncryption, password: String?) async throws {
+        saveEncryption = encryption
+        savePassword = password
         let inputs = makeSaveInputs()
-        progress = ProgressState(label: "Comprimiendo \(documentName)…", fraction: 0)
+        progress = ProgressState(label: encryption == .none ? "Comprimiendo \(documentName)…"
+                                                            : "Cifrando \(documentName)…", fraction: 0)
         defer { progress = nil }
-        try await streamZip(inputs, to: url, writer: writer)
+        try await streamZip(inputs, to: url, encryption: encryption, password: password, writer: writer)
         markSaved(as: url)
     }
 
-    /// Comprime y cifra el archivo en `url`. El cifrado necesita los bytes en
-    /// memoria, así que aquí no hay streaming (construye y luego cifra).
-    func saveEncrypted(to url: URL, password: String) async throws {
-        let inputs = makeSaveInputs()
-        progress = ProgressState(label: "Cifrando \(documentName)…", fraction: 0)
-        defer { progress = nil }
-
-        let zipData = try await buildZipData(inputs, writer: writer)
-        await MainActor.run { progress?.fraction = nil } // cifrado: indeterminado
-
-        let crypto = self.crypto
-        let container = try await Task.detached(priority: .userInitiated) {
-            try crypto.encrypt(zipData, password: password)
-        }.value
-
-        try container.write(to: url, options: .atomic)
-        isEncrypted = true
-        encryptionPassword = password
-        markSaved(as: url)
+    /// Re-guarda con los ajustes ya elegidos (botón Guardar de un documento existente).
+    func save(to url: URL) async throws {
+        try await save(to: url, encryption: saveEncryption, password: savePassword)
     }
 
     /// Construye las entradas a escribir. Es ligero: los ficheros nuevos van como
@@ -442,7 +428,9 @@ final class ArchiveDocument: ObservableObject {
         return items
     }
 
-    nonisolated private func streamZip(_ inputs: [ZipEntryInput], to url: URL, writer: ZipWriter) async throws {
+    nonisolated private func streamZip(_ inputs: [ZipEntryInput], to url: URL,
+                                       encryption: ZipEncryption, password: String?,
+                                       writer: ZipWriter) async throws {
         try await Task.detached(priority: .userInitiated) {
             // Escribe a un temporal y luego reemplaza, para no dejar a medias el destino.
             let tmp = url.deletingLastPathComponent()
@@ -450,7 +438,7 @@ final class ArchiveDocument: ObservableObject {
             FileManager.default.createFile(atPath: tmp.path, contents: nil)
             let handle = try FileHandle(forWritingTo: tmp)
             do {
-                try writer.write(inputs, to: handle) { fraction in
+                try writer.write(inputs, to: handle, encryption: encryption, password: password) { fraction in
                     Task { @MainActor in self.progress?.fraction = fraction }
                 }
                 try handle.close()
@@ -463,14 +451,6 @@ final class ArchiveDocument: ObservableObject {
                 try FileManager.default.removeItem(at: url)
             }
             try FileManager.default.moveItem(at: tmp, to: url)
-        }.value
-    }
-
-    nonisolated private func buildZipData(_ inputs: [ZipEntryInput], writer: ZipWriter) async throws -> Data {
-        try await Task.detached(priority: .userInitiated) {
-            try writer.build(inputs) { fraction in
-                Task { @MainActor in self.progress?.fraction = fraction }
-            }
         }.value
     }
 
