@@ -11,9 +11,6 @@ extension NSUserInterfaceItemIdentifier {
     static let csizeColumn = NSUserInterfaceItemIdentifier("csize")
 }
 
-extension NSPasteboard.PasteboardType {
-    static let filePackrNode = NSPasteboard.PasteboardType("com.kiko.filepackr.node")
-}
 
 /// Vista de navegación de archivos basada en `NSOutlineView` (AppKit), que da de
 /// forma nativa: selección de fila completa, arrastrar para mover/extraer/añadir,
@@ -59,7 +56,9 @@ struct ArchiveOutlineView: NSViewRepresentable {
         outline.indentationPerLevel = 14
         outline.menu = coordinator.makeContextMenu()
 
-        outline.registerForDraggedTypes([.filePackrNode, .fileURL])
+        // .fileURL para añadir ficheros del Finder; los tipos de promesa para
+        // reconocer el arrastre interno (mover) de nuestras propias filas.
+        outline.registerForDraggedTypes([.fileURL] + NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) })
         outline.setDraggingSourceOperationMask(.copy, forLocal: false)
         outline.setDraggingSourceOperationMask(.move, forLocal: true)
 
@@ -388,7 +387,7 @@ extension ArchiveOutlineView {
 
         func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
             guard let node = item as? FileNode else { return nil }
-            let provider = FilePromiseProvider(fileType: utType(for: node).identifier, delegate: self)
+            let provider = NSFilePromiseProvider(fileType: utType(for: node).identifier, delegate: self)
             provider.userInfo = node
             return provider
         }
@@ -484,19 +483,3 @@ extension ArchiveOutlineView {
     }
 }
 
-/// Proveedor de promesa de fichero que además expone un tipo interno con el que
-/// el propio outline reconoce los arrastres internos (para mover).
-final class FilePromiseProvider: NSFilePromiseProvider {
-    override func writableTypes(for pasteboard: NSPasteboard) -> [NSPasteboard.PasteboardType] {
-        super.writableTypes(for: pasteboard) + [.filePackrNode]
-    }
-    override func pasteboardPropertyList(forType type: NSPasteboard.PasteboardType) -> Any? {
-        if type == .filePackrNode { return "1" }
-        return super.pasteboardPropertyList(forType: type)
-    }
-    override func writingOptions(forType type: NSPasteboard.PasteboardType,
-                                 pasteboard: NSPasteboard) -> NSPasteboard.WritingOptions {
-        if type == .filePackrNode { return [] }
-        return super.writingOptions(forType: type, pasteboard: pasteboard)
-    }
-}
