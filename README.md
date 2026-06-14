@@ -1,66 +1,80 @@
-# Cifrador
+# FilePackr
 
-App de macOS para **cifrar y descifrar** ficheros con una interfaz limpia, y para
-**explorar archivos comprimidos como un navegador, sin descomprimirlos**, con
-previsualización del contenido.
+Gestor de archivos comprimidos para **macOS**: abre y navega ZIP **sin
+descomprimirlos**, crea/edita archivos (añadir, borrar, renombrar, mover, carpetas),
+extrae, previsualiza con Quick Look y **cifra con contraseña** (estándar ZIP).
 
-Este repositorio contiene el **armazón**: el núcleo lógico ya funciona y está
-cubierto por tests; la interfaz SwiftUI es un esqueleto que se monta en Xcode.
+Interfaz nativa (SwiftUI + AppKit), con un navegador de ficheros basado en
+`NSOutlineView` tipo Finder.
 
-## Estado actual
+## Características
 
-| Pieza | Estado | Qué hace |
-|---|---|---|
-| `CryptoCore` | ✅ con tests | Cifra/descifra (AES-256-GCM + PBKDF2-SHA256). Detecta contraseña incorrecta y manipulación. |
-| `ArchiveBrowser` | ✅ con tests | Lista el contenido de un ZIP **leyendo sólo el índice**, sin descomprimir. Construye el árbol de carpetas. |
-| `App/` (SwiftUI) | 🟡 esqueleto | Panel Cifrar/Descifrar + explorador de archivos. Se compila en Xcode. |
-| Previsualización Quick Look | ⬜ pendiente | Extracción perezosa de una entrada + `QLPreviewView`. |
+- **Navegar sin descomprimir**: lee solo el índice (central directory) del ZIP;
+  abrir es rápido aunque el archivo sea de varios GB.
+- **Editar**: arrastrar/añadir ficheros y carpetas, borrar, **renombrar** en línea,
+  **mover** arrastrando sobre carpetas, crear carpetas.
+- **Extraer**: botón, menú contextual o **arrastrar al Finder**; diálogo de
+  conflictos (sobrescribir / guardar como / cancelar).
+- **Quick Look**: barra espaciadora, como en Finder.
+- **Columnas tipo Finder**: Nombre, Fecha, Tamaño, Clase, Comprimido; ordenables
+  por cabecera.
+- **Operaciones en segundo plano** con barra de progreso (abrir / guardar /
+  extraer); el guardado va en **streaming a disco** (no carga el ZIP en memoria).
+- **ZIP64**: lee y escribe archivos > 4 GB o con > 65.535 entradas.
+- **Cifrado ZIP estándar** (interoperable con Finder, Keka, WinZip, 7-Zip):
+  - **Débil** — ZipCrypto / PKWARE clásico (universal, inseguro).
+  - **Fuerte** — AES-256 de WinZip (AE-2).
+  - Diálogo de guardado: formato + cifrado + contraseña opcional.
 
 ## Arquitectura
 
 ```
-Cifrador/
-├── Package.swift              ← paquete con la lógica (testeable por CLI)
+Cifrador/                         (raíz del repo; remoto git: github.com/kiko-lin/packr)
+├── Package.swift                 paquete "CifradorCore" (lógica, testeable por CLI)
 ├── Sources/
-│   ├── CryptoCore/            ← cifrado/descifrado (CryptoKit + CommonCrypto)
-│   └── ArchiveBrowser/        ← lectura de ZIP sin descomprimir + árbol
-├── Tests/                     ← 12 tests (swift test)
-└── App/                       ← UI SwiftUI (se añade a un proyecto Xcode)
+│   ├── ArchiveBrowser/           motor ZIP (sin UI)
+│   │   ├── ZipReader.swift       lee el índice (central directory) + ZIP64
+│   │   ├── ZipExtractor.swift    extrae una entrada (deflate/almacenado, descifra)
+│   │   ├── ZipWriter.swift       escribe ZIP (streaming, ZIP64, cifrado)
+│   │   ├── ZipCrypto.swift       cifrado clásico "Débil"
+│   │   ├── ZipAES.swift          cifrado AES-256 de WinZip "Fuerte"
+│   │   ├── Deflate.swift         DEFLATE vía framework Compression
+│   │   └── CRC32.swift
+│   └── CryptoCore/               AES-256-GCM + PBKDF2 (formato propio .fpkz, legacy)
+├── Tests/                        26+ tests (swift test), con interop contra zip/unzip
+└── Cifrador/                     proyecto Xcode de la app
+    ├── FilePackr.xcodeproj
+    └── FilePackr/                fuentes de la app (SwiftUI/AppKit)
+        ├── FilePackrApp.swift
+        ├── ContentView.swift     barra superior + barra de documento + diálogos
+        ├── ArchiveDocument.swift modelo (árbol editable, abrir/guardar/extraer)
+        └── ArchiveOutlineView.swift  navegador NSOutlineView (selección, drag, QL)
 ```
 
-La lógica vive en paquetes Swift independientes de la UI: así la parte sensible
-(criptografía, parseo de archivos) se prueba sin levantar la interfaz.
+La lógica del ZIP vive en un paquete Swift independiente de la UI, así la parte
+sensible (formato, cifrado) se prueba sin levantar la interfaz.
 
-## Probar el núcleo (sin Xcode)
+## Compilar y probar
+
+Tests del motor (sin Xcode):
 
 ```bash
 swift test
 ```
 
-Demuestra: ida y vuelta de cifrado, fallo con contraseña incorrecta, detección de
-manipulación, y listado de un ZIP sin extraerlo.
+La app (requiere Xcode, macOS):
 
-## Montar la app en Xcode
+```bash
+open Cifrador/FilePackr.xcodeproj   # luego ⌘R (esquema FilePackr)
+# o por línea de comandos:
+xcodebuild -project Cifrador/FilePackr.xcodeproj -scheme FilePackr \
+  -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
+```
 
-1. `Xcode → File → New → Project → macOS → App` (SwiftUI), guárdalo dentro de este repo.
-2. Borra el `ContentView.swift` que genera Xcode y **arrastra los ficheros de `App/`** al proyecto.
-3. `File → Add Package Dependencies → Add Local…` y elige esta misma carpeta para
-   enlazar `CryptoCore` y `ArchiveBrowser`.
-4. En **Signing & Capabilities** añade **App Sandbox** y marca *User Selected File · Read/Write*.
-5. `⌘R`.
+> El icono de macOS 26 es *full-bleed* (cuadrado opaco): el sistema le aplica la
+> máscara redondeada.
 
-## Decisiones de diseño
+## Estado y pendientes
 
-- **Cifrado:** AES-256-GCM (cifra + autentica en un paso). Clave derivada de la
-  contraseña con PBKDF2-HMAC-SHA256, 600.000 iteraciones (OWASP), con *salt*
-  aleatorio de 16 bytes por fichero. Formato de contenedor: `CIFR | versión | salt | caja-GCM`.
-- **Explorar sin descomprimir:** se lee el *central directory* del ZIP (unos pocos
-  cientos de bytes al final) para obtener nombres, tamaños y offsets. No se toca
-  ningún dato de fichero hasta que el usuario abre una entrada concreta.
-
-## Siguientes pasos
-
-- Previsualización: extracción perezosa de la entrada seleccionada + Quick Look.
-- Sustituir el lector ZIP propio por **libarchive** para soportar 7z/tar/rar y ZIP64.
-- Considerar **Argon2id** (libsodium) en lugar de PBKDF2 para la derivación de clave.
-- Cifrar/descifrar **archivos completos manteniéndolos navegables** (cifrado a nivel de contenedor).
+Ver [`AGENTS.md`](AGENTS.md) para el detalle de lo hecho y los objetivos
+pendientes (TODO).
