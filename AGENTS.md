@@ -94,6 +94,10 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   el **descifrado de 7z solo en lectura** (passphrase). 7z con cabeceras cifradas →
   `requiresOpenPassword`/`provideOpenPassword`. `ArchiveFormat.isWritable` (rar=false)
   y `.usesLibArchive`. rar se excluye del diálogo Guardar.
+- **iso/cpio/xar/lha/cab** (misma libarchive): **lectura** de los cinco; **escritura**
+  de iso y xar (`LibArchive.WriteFormat`). cpio/lha/cab son solo lectura. Añadir más
+  formatos = un `case` en `ArchiveFormat` + detección + localización (la lectura ya
+  va por `support_format_all`; la escritura necesita su `archive_write_set_format_*`).
 - **Volúmenes** (división por bytes): `Volumes.swift` (split/join + naming, testeado).
   Esquema `nombre.zip`, `nombre_001.zip`, `nombre_002.zip`… (1ª parte = nombre base).
   Diálogo Guardar con toggle "Dividir en volúmenes" + tamaño/unidad, por formato
@@ -141,8 +145,7 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - [x] ~~xz/tar.xz~~ (Tier 2, hecho — `Compression` LZMA, ver "Hecho").
 - [x] ~~bzip2/tar.bz2~~ (Tier 3, hecho — `libbz2` del sistema, ver "Hecho").
 - [x] ~~7z/rar~~ (Tier 4, hecho — `libarchive` del sistema SIN vendorizar, ver "Hecho").
-- [ ] **Formatos extra casi gratis** vía la misma libarchive: iso/cpio/xar/lha/cab
-      (lectura), xar/iso (escritura). Solo falta añadir el case en `ArchiveFormat`.
+- [x] ~~iso/cpio/xar/lha/cab~~ (hecho — misma libarchive; lectura todos, escritura iso/xar).
 - [ ] **7z cifrado al escribir**: libarchive no lo soporta; haría falta otra librería.
 - [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
       `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
