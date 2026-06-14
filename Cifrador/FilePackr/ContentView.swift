@@ -11,6 +11,16 @@ private struct ExtractionConflict: Identifiable {
     let alternative: URL    // nombre libre propuesto (p.ej. "3d_2.svg")
 }
 
+/// Al guardar en volúmenes ya existe un fichero único con el nombre base.
+private struct VolumeBaseConflict: Identifiable {
+    let id = UUID()
+    let url: URL            // fichero base existente (p.ej. "foo.zip")
+    let format: ArchiveFormat
+    let encryption: ZipEncryption
+    let password: String?
+    let volumeSize: Int
+}
+
 /// Petición de contraseña: para abrir un archivo cifrado o para guardar cifrando.
 private enum PasswordRequest: Identifiable {
     case open(URL)
@@ -202,6 +212,7 @@ struct ContentView: View {
     @StateObject private var doc = ArchiveDocument()
     @State private var errorMessage: String?
     @State private var conflict: ExtractionConflict?
+    @State private var volumeConflict: VolumeBaseConflict?
     @State private var confirmingClose = false
     @State private var passwordRequest: PasswordRequest?
     @State private var passwordInput = ""
@@ -260,6 +271,31 @@ struct ContentView: View {
                 Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) } }
             }
             Button("Cancelar", role: .cancel) { conflict = nil }
+        }
+        .confirmationDialog(
+            volumeConflict.map { "Ya existe «\($0.url.lastPathComponent)»" } ?? "",
+            isPresented: Binding(get: { volumeConflict != nil },
+                                 set: { if !$0 { volumeConflict = nil } }),
+            presenting: volumeConflict
+        ) { item in
+            Button("Sustituir el fichero único", role: .destructive) {
+                volumeConflict = nil
+                Task { await runAsync {
+                    try? FileManager.default.removeItem(at: item.url)
+                    try await doc.save(to: item.url, format: item.format, encryption: item.encryption,
+                                       password: item.password, volumeSize: item.volumeSize)
+                } }
+            }
+            Button("Conservarlo y crear solo los volúmenes") {
+                volumeConflict = nil
+                Task { await runAsync {
+                    try await doc.save(to: item.url, format: item.format, encryption: item.encryption,
+                                       password: item.password, volumeSize: item.volumeSize)
+                } }
+            }
+            Button("Cancelar", role: .cancel) { volumeConflict = nil }
+        } message: { item in
+            Text("Vas a guardar en volúmenes (.001, .002…). ¿Qué hago con el fichero «\(item.url.lastPathComponent)» que ya existe?")
         }
         .overlay { progressOverlay }
         .sheet(item: $passwordRequest) { request in
@@ -573,6 +609,12 @@ struct ContentView: View {
         panel.nameFieldStringValue = "\(strippedBaseName(doc.documentName)).\(format.fileExtension)"
         panel.prompt = "Guardar"
         if panel.runModal() == .OK, let url = panel.url {
+            // Al guardar en volúmenes, si ya hay un fichero único con ese nombre, preguntar.
+            if let volumeSize, FileManager.default.fileExists(atPath: url.path) {
+                volumeConflict = VolumeBaseConflict(url: url, format: format, encryption: encryption,
+                                                    password: password, volumeSize: volumeSize)
+                return
+            }
             Task { await runAsync {
                 try await doc.save(to: url, format: format, encryption: encryption,
                                    password: password, volumeSize: volumeSize)
