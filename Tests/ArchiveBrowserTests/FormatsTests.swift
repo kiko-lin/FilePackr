@@ -175,4 +175,61 @@ final class FormatsTests: XCTestCase {
         let content = String(decoding: try run("/usr/bin/tar", ["-xOJf", url.path, "leeme.txt"]), as: UTF8.self)
         XCTAssertEqual(content, "escrito por FilePackr")
     }
+
+    // MARK: bzip2
+
+    func testBzip2RoundTrip() throws {
+        let payload = Data(String(repeating: "contenido bzip2 ñ áé ", count: 300).utf8)
+        let bz = Bzip2.compress(payload)
+        XCTAssertEqual(Array(bz.prefix(3)), [0x42, 0x5A, 0x68])  // "BZh"
+        XCTAssertEqual(try Bzip2.decompress(bz), payload)
+        XCTAssertLessThan(bz.count, payload.count)
+    }
+
+    func testBzip2Empty() throws {
+        XCTAssertEqual(try Bzip2.decompress(Bzip2.compress(Data())), Data())
+    }
+
+    func testSystemBunzip2ReadsOurBz2() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/bunzip2"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let payload = Data("datos para bunzip2 del sistema".utf8)
+        try Bzip2.compress(payload).write(to: dir.appendingPathComponent("f.bz2"))
+        let out = try run("/usr/bin/bunzip2", ["-c", dir.appendingPathComponent("f.bz2").path])
+        XCTAssertEqual(out, payload)
+    }
+
+    func testReadsSystemBz2() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/bzip2"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let payload = "creado por el bzip2 del sistema"
+        try payload.write(to: dir.appendingPathComponent("f.txt"), atomically: true, encoding: .utf8)
+        try run("/usr/bin/bzip2", ["f.txt"], cwd: dir)
+        let bz = try Data(contentsOf: dir.appendingPathComponent("f.txt.bz2"))
+        XCTAssertEqual(String(decoding: try Bzip2.decompress(bz), as: UTF8.self), payload)
+    }
+
+    func testBsdtarReadsOurTarBz2() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/tar"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let tarbz = Bzip2.compress(Tar.write([
+            Tar.WriteItem(path: "leeme.txt", data: Data("escrito por FilePackr".utf8), modifiedAt: nil, isDirectory: false),
+        ]))
+        let url = dir.appendingPathComponent("ours.tar.bz2")
+        try tarbz.write(to: url)
+        let listing = String(decoding: try run("/usr/bin/tar", ["-tjf", url.path]), as: UTF8.self)
+        XCTAssertTrue(listing.contains("leeme.txt"))
+        let content = String(decoding: try run("/usr/bin/tar", ["-xOjf", url.path, "leeme.txt"]), as: UTF8.self)
+        XCTAssertEqual(content, "escrito por FilePackr")
+    }
+
+    func testReadsBsdtarTarBz2() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: "/usr/bin/tar"))
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        try "hola bz2".write(to: dir.appendingPathComponent("hola.txt"), atomically: true, encoding: .utf8)
+        try run("/usr/bin/tar", ["-cjf", "out.tar.bz2", "hola.txt"], cwd: dir)
+        let tar = try Bzip2.decompress(try Data(contentsOf: dir.appendingPathComponent("out.tar.bz2")))
+        let entry = try XCTUnwrap(try Tar.listEntries(in: tar).first { $0.path == "hola.txt" })
+        XCTAssertEqual(String(decoding: try Tar.entryData(for: entry, in: tar), as: UTF8.self), "hola bz2")
+    }
 }
