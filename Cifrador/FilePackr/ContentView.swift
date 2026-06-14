@@ -24,11 +24,27 @@ private enum PasswordRequest: Identifiable {
     var confirmLabel: String { "Abrir" }
 }
 
-/// Hoja "Guardar archivo": formato, cifrado y contraseña (opcional).
+/// Unidad de tamaño de volumen.
+enum VolumeUnit: String, CaseIterable, Identifiable {
+    case kilobytes = "KB", megabytes = "MB", gigabytes = "GB"
+    var id: String { rawValue }
+    var multiplier: Int {
+        switch self {
+        case .kilobytes: return 1024
+        case .megabytes: return 1024 * 1024
+        case .gigabytes: return 1024 * 1024 * 1024
+        }
+    }
+}
+
+/// Hoja "Guardar archivo": formato, cifrado, contraseña y división en volúmenes.
 private struct SaveOptionsSheet: View {
     @Binding var format: ArchiveFormat
     @Binding var encryption: ZipEncryption
     @Binding var password: String
+    @Binding var splitEnabled: Bool
+    @Binding var volumeSize: Double
+    @Binding var volumeUnit: VolumeUnit
     /// `.gz` (un solo fichero) solo se ofrece cuando el documento es un único fichero.
     let allowGzip: Bool
     var onSave: () -> Void
@@ -36,6 +52,13 @@ private struct SaveOptionsSheet: View {
 
     private var formats: [ArchiveFormat] {
         ArchiveFormat.allCases.filter { $0 != .gzip || allowGzip }
+    }
+
+    /// El botón Guardar se bloquea si falta la contraseña o el tamaño de volumen no es válido.
+    private var canSave: Bool {
+        if format.supportsEncryption && encryption != .none && password.isEmpty { return false }
+        if splitEnabled && format.supportsVolumeSplit && volumeSize <= 0 { return false }
+        return true
     }
 
     var body: some View {
@@ -55,11 +78,31 @@ private struct SaveOptionsSheet: View {
                     }
                     if encryption != .none {
                         SecureField("Contraseña", text: $password)
-                            .onSubmit { if !password.isEmpty { onSave() } }
+                            .onSubmit { if canSave { onSave() } }
                     }
                 } else {
                     Text("Este formato no admite cifrado.")
                         .font(.callout).foregroundStyle(.secondary)
+                }
+                if format.supportsVolumeSplit {
+                    Toggle("Dividir en volúmenes", isOn: $splitEnabled)
+                    if splitEnabled {
+                        HStack {
+                            Text("Tamaño de cada volumen")
+                            Spacer()
+                            TextField("", value: $volumeSize, format: .number)
+                                .frame(width: 70)
+                                .multilineTextAlignment(.trailing)
+                                .textFieldStyle(.roundedBorder)
+                            Picker("", selection: $volumeUnit) {
+                                ForEach(VolumeUnit.allCases) { Text($0.rawValue).tag($0) }
+                            }
+                            .labelsHidden()
+                            .frame(width: 70)
+                        }
+                        Text("Se generarán «nombre.\(format.fileExtension).001», «.002»… Para abrirlo, selecciona el «.001».")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -68,11 +111,11 @@ private struct SaveOptionsSheet: View {
                 Button("Cancelar", role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
                 Button("Guardar…", action: onSave)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(format.supportsEncryption && encryption != .none && password.isEmpty)
+                    .disabled(!canSave)
             }
         }
         .padding(20)
-        .frame(width: 400)
+        .frame(width: 420)
     }
 }
 
@@ -166,6 +209,9 @@ struct ContentView: View {
     @State private var saveFormatChoice: ArchiveFormat = .zip
     @State private var saveEncryptionChoice: ZipEncryption = .none
     @State private var saveOptionsPassword = ""
+    @State private var splitEnabled = false
+    @State private var volumeSizeValue: Double = 100
+    @State private var volumeUnit: VolumeUnit = .megabytes
     @State private var showingEntryPassword = false
     @State private var entryPasswordInput = ""
     @State private var entryPasswordWrong = false
@@ -227,6 +273,9 @@ struct ContentView: View {
             SaveOptionsSheet(format: $saveFormatChoice,
                              encryption: $saveEncryptionChoice,
                              password: $saveOptionsPassword,
+                             splitEnabled: $splitEnabled,
+                             volumeSize: $volumeSizeValue,
+                             volumeUnit: $volumeUnit,
                              allowGzip: doc.isSingleFile,
                              onSave: { confirmSaveOptions() },
                              onCancel: { showingSaveOptions = false })
@@ -325,6 +374,11 @@ struct ContentView: View {
                 Image(systemName: "lock.fill")
                     .foregroundStyle(.secondary)
                     .help("Archivo cifrado")
+            }
+            if doc.saveVolumeSize != nil {
+                Image(systemName: "rectangle.split.3x1")
+                    .foregroundStyle(.secondary)
+                    .help("Guardado en volúmenes")
             }
             if doc.hasUnsavedChanges {
                 Text("— sin guardar")
@@ -494,6 +548,13 @@ struct ContentView: View {
             saveFormatChoice = doc.isSingleFile ? doc.saveFormat : (doc.saveFormat == .gzip ? .zip : doc.saveFormat)
             saveEncryptionChoice = doc.saveEncryption
             saveOptionsPassword = ""
+            if let size = doc.saveVolumeSize {
+                splitEnabled = true
+                volumeUnit = .megabytes
+                volumeSizeValue = max(1, (Double(size) / Double(VolumeUnit.megabytes.multiplier)).rounded())
+            } else {
+                splitEnabled = false
+            }
             showingSaveOptions = true
         }
     }
@@ -504,13 +565,18 @@ struct ContentView: View {
         let format = saveFormatChoice
         let encryption = format.supportsEncryption ? saveEncryptionChoice : .none
         let password = encryption == .none ? nil : saveOptionsPassword
+        let volumeSize = (splitEnabled && format.supportsVolumeSplit && volumeSizeValue > 0)
+            ? Int(volumeSizeValue * Double(volumeUnit.multiplier)) : nil
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = format == .zip ? [.zip] : []
         panel.nameFieldStringValue = "\(strippedBaseName(doc.documentName)).\(format.fileExtension)"
         panel.prompt = "Guardar"
         if panel.runModal() == .OK, let url = panel.url {
-            Task { await runAsync { try await doc.save(to: url, format: format, encryption: encryption, password: password) } }
+            Task { await runAsync {
+                try await doc.save(to: url, format: format, encryption: encryption,
+                                   password: password, volumeSize: volumeSize)
+            } }
         }
     }
 

@@ -36,6 +36,10 @@ enum ArchiveFormat: Sendable, CaseIterable, Hashable {
 
     /// Solo ZIP admite cifrado con contraseña.
     var supportsEncryption: Bool { self == .zip }
+
+    /// La división en volúmenes (por bytes, sufijo `.001`/`.002`…) es genérica y
+    /// vale para todos los formatos de salida que escribimos.
+    var supportsVolumeSplit: Bool { true }
 }
 
 /// Nodo del árbol editable que se muestra en el cuerpo central.
@@ -142,6 +146,8 @@ final class ArchiveDocument: ObservableObject {
     @Published private(set) var format: ArchiveFormat = .zip
     /// Formato por defecto del diálogo Guardar (se recuerda tras guardar).
     @Published private(set) var saveFormat: ArchiveFormat = .zip
+    /// Tamaño de volumen en bytes si el documento se guarda dividido (nil = un fichero).
+    @Published private(set) var saveVolumeSize: Int?
     /// El archivo abierto tiene entradas cifradas y aún no tenemos la contraseña.
     @Published private(set) var requiresEntryPassword = false
     /// Contraseña para descifrar las entradas del archivo abierto.
@@ -177,14 +183,20 @@ final class ArchiveDocument: ObservableObject {
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
     func openArchive(_ url: URL) async throws {
-        let detected = detectFormat(for: url)
-        progress = ProgressState(label: "Abriendo \(url.lastPathComponent)…",
+        // Si es un volumen (.001/.002…), trabajamos con el nombre base y reunimos las partes.
+        let isPart = Volumes.isPartExtension(url.pathExtension)
+        let baseURL = isPart ? url.deletingPathExtension() : url
+        let parts = volumeParts(for: url)
+        let detected = detectFormat(for: baseURL)
+        progress = ProgressState(label: "Abriendo \(baseURL.lastPathComponent)…",
                                  fraction: detected == .zip ? 0 : nil)
         defer { progress = nil }
 
-        let fallbackName = url.deletingPathExtension().lastPathComponent
+        let fallbackName = baseURL.deletingPathExtension().lastPathComponent
         let result = try await Task.detached(priority: .userInitiated) { [weak self] () -> (ArchiveFormat, Data, [ArchiveEntry]) in
-            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            let data = parts.count == 1
+                ? try Data(contentsOf: parts[0], options: .mappedIfSafe)
+                : Volumes.join(try parts.map { try Data(contentsOf: $0) })
             switch detected {
             case .zip:
                 var lastReported = 0.0
@@ -215,8 +227,8 @@ final class ArchiveDocument: ObservableObject {
         sourceArchiveData = result.1
         roots = buildTree(from: result.2)
         selection = nil
-        sourceURL = url
-        documentName = url.lastPathComponent
+        sourceURL = baseURL
+        documentName = baseURL.lastPathComponent
         isEncrypted = false
         encryptionPassword = nil
         entryPassword = nil
@@ -226,6 +238,12 @@ final class ArchiveDocument: ObservableObject {
         saveEncryption = result.0 == .zip ? detectedEncryption(in: result.2) : .none
         savePassword = nil
         saveFormat = result.0
+        // Si venía en volúmenes, recordar el tamaño (el de la primera parte) para re-guardar igual.
+        if parts.count > 1, let size = try? parts[0].resourceValues(forKeys: [.fileSizeKey]).fileSize {
+            saveVolumeSize = size
+        } else {
+            saveVolumeSize = nil
+        }
         hasUnsavedChanges = false
         changed()
     }
@@ -302,6 +320,7 @@ final class ArchiveDocument: ObservableObject {
         requiresEntryPassword = result.1.contains { $0.isEncrypted }
         format = .zip
         saveFormat = .zip
+        saveVolumeSize = nil
         saveEncryption = detectedEncryption(in: result.1)
         savePassword = nil
         hasUnsavedChanges = false
@@ -321,6 +340,7 @@ final class ArchiveDocument: ObservableObject {
         savePassword = nil
         format = .zip
         saveFormat = .zip
+        saveVolumeSize = nil
     }
 
     /// Añade ficheros/carpetas del disco dentro de la carpeta destino actual.
@@ -444,6 +464,7 @@ final class ArchiveDocument: ObservableObject {
         savePassword = nil
         format = .zip
         saveFormat = .zip
+        saveVolumeSize = nil
         changed()
     }
 
@@ -530,40 +551,95 @@ final class ArchiveDocument: ObservableObject {
     /// Guarda el ZIP en `url` con el formato/cifrado elegidos, en streaming a disco
     /// y en segundo plano con progreso. Recuerda los ajustes para re-guardar.
     func save(to url: URL, format outputFormat: ArchiveFormat,
-              encryption: ZipEncryption, password: String?) async throws {
+              encryption: ZipEncryption, password: String?, volumeSize: Int? = nil) async throws {
         saveFormat = outputFormat
+        let volumes = (outputFormat.supportsVolumeSplit && (volumeSize ?? 0) > 0) ? volumeSize : nil
+        saveVolumeSize = volumes
         let cipher = outputFormat.supportsEncryption ? encryption : .none
         let pwd = outputFormat.supportsEncryption ? password : nil
+        if outputFormat == .zip { saveEncryption = cipher; savePassword = pwd }
         progress = ProgressState(label: cipher == .none ? "Comprimiendo \(documentName)…"
-                                                         : "Cifrando \(documentName)…", fraction: 0)
+                                                         : "Cifrando \(documentName)…",
+                                 fraction: outputFormat == .zip ? 0 : nil)
         defer { progress = nil }
 
-        switch outputFormat {
-        case .zip:
-            saveEncryption = cipher
-            savePassword = pwd
-            let inputs = makeSaveInputs()
-            try await streamZip(inputs, to: url, encryption: cipher, password: pwd, writer: writer)
-        case .tar:
-            let items = makeTarItems()
-            try await writeData({ Tar.write(items) }, to: url)
-        case .tarGzip:
-            let items = makeTarItems()
-            let name = documentName
-            try await writeData({ Gzip.compress(Tar.write(items), filename: name) }, to: url)
-        case .gzip:
-            guard let node = roots.first(where: { !$0.isDirectory }), let data = nodeData(node) else {
-                throw CocoaError(.fileWriteUnknown)
+        // 1) Producir el archivo completo en un fichero temporal.
+        let work = url.deletingLastPathComponent()
+            .appendingPathComponent(".\(UUID().uuidString).filepackr.work")
+        do {
+            switch outputFormat {
+            case .zip:
+                let inputs = makeSaveInputs()
+                try await streamZip(inputs, to: work, encryption: cipher, password: pwd, writer: writer)
+            case .tar:
+                let items = makeTarItems()
+                try await writeData({ Tar.write(items) }, to: work)
+            case .tarGzip:
+                let items = makeTarItems()
+                let name = documentName
+                try await writeData({ Gzip.compress(Tar.write(items), filename: name) }, to: work)
+            case .gzip:
+                guard let node = roots.first(where: { !$0.isDirectory }), let data = nodeData(node) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+                let name = node.name
+                try await writeData({ Gzip.compress(data, filename: name) }, to: work)
             }
-            let name = node.name
-            try await writeData({ Gzip.compress(data, filename: name) }, to: url)
+            // 2) Colocar el resultado: un solo fichero o dividido en volúmenes.
+            if let volumes {
+                progress = ProgressState(label: "Dividiendo en volúmenes…", fraction: nil)
+                try await splitFile(work, base: url, volumeSize: volumes)
+                try? FileManager.default.removeItem(at: work)
+            } else {
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+                try FileManager.default.moveItem(at: work, to: url)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: work)
+            throw error
         }
         markSaved(as: url)
     }
 
     /// Re-guarda con los ajustes ya elegidos (botón Guardar de un documento existente).
     func save(to url: URL) async throws {
-        try await save(to: url, format: saveFormat, encryption: saveEncryption, password: savePassword)
+        try await save(to: url, format: saveFormat, encryption: saveEncryption,
+                       password: savePassword, volumeSize: saveVolumeSize)
+    }
+
+    /// Divide `source` en volúmenes `base.001`, `base.002`… de `volumeSize` bytes,
+    /// en segundo plano y leyendo por trozos (sin cargar todo en memoria). Borra
+    /// volúmenes sobrantes de un guardado anterior con más partes.
+    nonisolated private func splitFile(_ source: URL, base: URL, volumeSize: Int) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            let handle = try FileHandle(forReadingFrom: source)
+            defer { try? handle.close() }
+            let fm = FileManager.default
+            var index = 1
+
+            func writePart(_ data: Data) throws {
+                let part = base.appendingPathExtension(Volumes.partExtension(index))
+                try? fm.removeItem(at: part)
+                try data.write(to: part)
+                index += 1
+            }
+
+            var wroteAny = false
+            while let chunk = try handle.read(upToCount: volumeSize), !chunk.isEmpty {
+                try writePart(chunk)
+                wroteAny = true
+            }
+            if !wroteAny { try writePart(Data()) }   // archivo vacío: al menos un volumen
+
+            while true {   // limpiar volúmenes sobrantes
+                let stale = base.appendingPathExtension(Volumes.partExtension(index))
+                guard fm.fileExists(atPath: stale.path) else { break }
+                try fm.removeItem(at: stale)
+                index += 1
+            }
+        }.value
     }
 
     /// Construye las entradas (con datos en memoria) para escribir un TAR.
@@ -774,11 +850,34 @@ final class ArchiveDocument: ObservableObject {
         return "\(base) \(n)"
     }
 
-    /// `true` si la extensión corresponde a un contenedor que sabemos abrir.
+    /// `true` si la extensión corresponde a un contenedor que sabemos abrir, o a un
+    /// volumen (.001/.002…) cuyo nombre base es un contenedor.
     func isOpenableArchive(_ url: URL) -> Bool {
-        let name = url.lastPathComponent.lowercased()
-        return name.hasSuffix(".zip") || name.hasSuffix(".tar")
+        if Volumes.isPartExtension(url.pathExtension) {
+            return hasArchiveSuffix(url.deletingPathExtension().lastPathComponent.lowercased())
+        }
+        return hasArchiveSuffix(url.lastPathComponent.lowercased())
+    }
+
+    private func hasArchiveSuffix(_ name: String) -> Bool {
+        name.hasSuffix(".zip") || name.hasSuffix(".tar")
             || name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") || name.hasSuffix(".gz")
+    }
+
+    /// Volúmenes que forman el archivo, en orden. Si `url` no es un volumen,
+    /// devuelve `[url]`. Si lo es, reúne todos los `base.NNN` del directorio.
+    private func volumeParts(for url: URL) -> [URL] {
+        guard Volumes.isPartExtension(url.pathExtension) else { return [url] }
+        let base = url.deletingPathExtension()
+        let baseName = base.lastPathComponent
+        let directory = base.deletingLastPathComponent()
+        let siblings = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)) ?? []
+        let parts = siblings.filter {
+            Volumes.isPartExtension($0.pathExtension)
+                && $0.deletingPathExtension().lastPathComponent == baseName
+        }.sorted { $0.pathExtension.localizedStandardCompare($1.pathExtension) == .orderedAscending }
+        return parts.isEmpty ? [url] : parts
     }
 
     /// Formato deducido del nombre del fichero (refinado al leer para `.gz` → `.tar.gz`).
