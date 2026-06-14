@@ -67,7 +67,22 @@ private extension Localizer {
         "toolbar.extract": "Extract",
         "toolbar.extract.help": "Extract the selected item to a location",
         "toolbar.settings": "Settings",
+
+        // Settings window
+        "settings.title": "Settings",
         "settings.language": "Language",
+        "settings.appearance": "Appearance",
+        "theme.system": "Follow System",
+        "theme.light": "Light",
+        "theme.dark": "Dark",
+        "settings.appIcon": "App Icon",
+        "settings.defaultFormat": "Default format",
+        "settings.defaultEncryption": "Default encryption",
+        "settings.extractTo": "Extract to",
+        "extract.dest.archiveFolder": "The archive's folder",
+        "extract.dest.fixedFolder": "A fixed folder",
+        "settings.noFolder": "No folder chosen",
+        "button.done": "Done",
 
         // Document bar
         "doc.encrypted.help": "Encrypted archive",
@@ -173,7 +188,22 @@ private extension Localizer {
         "toolbar.extract": "Extraer",
         "toolbar.extract.help": "Extraer el elemento seleccionado a una ubicación",
         "toolbar.settings": "Ajustes",
+
+        // Settings window
+        "settings.title": "Ajustes",
         "settings.language": "Idioma",
+        "settings.appearance": "Apariencia",
+        "theme.system": "Según el sistema",
+        "theme.light": "Claro",
+        "theme.dark": "Oscuro",
+        "settings.appIcon": "Icono de la app",
+        "settings.defaultFormat": "Formato por defecto",
+        "settings.defaultEncryption": "Cifrado por defecto",
+        "settings.extractTo": "Extraer en",
+        "extract.dest.archiveFolder": "La carpeta del archivo",
+        "extract.dest.fixedFolder": "Una carpeta fija",
+        "settings.noFolder": "Ninguna carpeta elegida",
+        "button.done": "Hecho",
 
         // Document bar
         "doc.encrypted.help": "Archivo cifrado",

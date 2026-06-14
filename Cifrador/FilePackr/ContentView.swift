@@ -203,8 +203,10 @@ private struct PasswordSheet: View {
 /// central (zona de arrastre cuando está vacío, o el navegador `NSOutlineView`).
 struct ContentView: View {
     @EnvironmentObject private var loc: Localizer
+    @EnvironmentObject private var settings: AppSettings
     @StateObject private var doc = ArchiveDocument()
     @State private var errorMessage: String?
+    @State private var showingSettings = false
     @State private var conflict: ExtractionConflict?
     @State private var confirmingClose = false
     @State private var passwordRequest: PasswordRequest?
@@ -233,7 +235,12 @@ struct ContentView: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .preferredColorScheme(settings.theme.colorScheme)
+        .onAppear { settings.applyAppIcon() }
         .toolbar { toolbarContent }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(onClose: { showingSettings = false })
+        }
         .confirmationDialog(loc("close.title", doc.displayName),
                             isPresented: $confirmingClose, titleVisibility: .visible) {
             Button(loc("close.discard"), role: .destructive) { doc.close() }
@@ -446,14 +453,7 @@ struct ContentView: View {
             .disabled(doc.selection == nil)
             .help(loc("toolbar.extract.help"))
 
-            Menu {
-                Picker(loc("settings.language"), selection: $loc.language) {
-                    ForEach(Language.allCases) { lang in
-                        Text(lang.displayName).tag(lang)
-                    }
-                }
-                .pickerStyle(.inline)
-            } label: {
+            Button { showingSettings = true } label: {
                 Label(loc("toolbar.settings"), systemImage: "gearshape")
             }
             .help(loc("toolbar.settings"))
@@ -511,8 +511,14 @@ struct ContentView: View {
     /// Extrae un nodo concreto: pide carpeta destino y gestiona conflictos de nombre.
     /// Abre el diálogo compacto de extracción (destino por defecto: carpeta del zip).
     private func extract(_ node: FileNode) {
-        extractDestination = doc.sourceURL?.deletingLastPathComponent()
-            ?? FileManager.default.homeDirectoryForCurrentUser
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let archiveFolder = doc.sourceURL?.deletingLastPathComponent()
+        switch settings.extractMode {
+        case .archiveFolder:
+            extractDestination = archiveFolder ?? settings.fixedExtractFolder ?? home
+        case .fixedFolder:
+            extractDestination = settings.fixedExtractFolder ?? archiveFolder ?? home
+        }
         extractPassword = ""
         extractPasswordWrong = false
         extractNode = node
@@ -562,8 +568,12 @@ struct ContentView: View {
         if let url = doc.sourceURL {
             Task { await runAsync { try await doc.save(to: url) } }
         } else {
-            saveFormatChoice = doc.isSingleFile ? doc.saveFormat : (doc.saveFormat == .gzip ? .zip : doc.saveFormat)
-            saveEncryptionChoice = doc.saveEncryption
+            // Documento nuevo: defaults de Ajustes; abierto: lo que traía el archivo.
+            let isNew = doc.sourceURL == nil
+            var format = isNew ? settings.defaultFormat : doc.saveFormat
+            if format == .gzip && !doc.isSingleFile { format = .zip }
+            saveFormatChoice = format
+            saveEncryptionChoice = isNew ? settings.defaultEncryption : doc.saveEncryption
             saveOptionsPassword = ""
             if let size = doc.saveVolumeSize {
                 splitEnabled = true
@@ -628,4 +638,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environmentObject(Localizer.shared)
+        .environmentObject(AppSettings.shared)
 }

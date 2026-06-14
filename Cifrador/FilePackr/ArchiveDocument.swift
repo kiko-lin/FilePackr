@@ -12,7 +12,7 @@ enum NodeSource {
 }
 
 /// Formato del contenedor abierto o de salida.
-enum ArchiveFormat: Sendable, CaseIterable, Hashable {
+enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
     case zip, tar, tarGzip, gzip
 
     /// Clave de localización del nombre mostrado en el selector de formato.
