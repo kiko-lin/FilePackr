@@ -53,11 +53,10 @@ public struct ZipReader: Sendable {
         let bytes = [UInt8](data)
         guard let eocd = findEOCD(bytes) else { throw ArchiveError.notZipArchive }
 
-        let entryCount = readU16(bytes, eocd + 10)
-        let cdOffset = Int(readU32(bytes, eocd + 16))
+        let (entryCount, cdOffset) = centralDirectoryInfo(bytes, eocd: eocd)
 
         var entries: [ArchiveEntry] = []
-        entries.reserveCapacity(Int(entryCount))
+        entries.reserveCapacity(entryCount)
 
         var p = cdOffset
         for _ in 0..<entryCount {
@@ -68,18 +67,33 @@ public struct ZipReader: Sendable {
             let modTime = readU16(bytes, p + 12)
             let modDate = readU16(bytes, p + 14)
             let crc = readU32(bytes, p + 16)
-            let compSize = UInt64(readU32(bytes, p + 20))
-            let uncompSize = UInt64(readU32(bytes, p + 24))
+            let raw32Comp = readU32(bytes, p + 20)
+            let raw32Uncomp = readU32(bytes, p + 24)
             let nameLen = Int(readU16(bytes, p + 28))
             let extraLen = Int(readU16(bytes, p + 30))
             let commentLen = Int(readU16(bytes, p + 32))
-            let localOffset = UInt64(readU32(bytes, p + 42))
+            let raw32Offset = readU32(bytes, p + 42)
 
             let nameStart = p + 46
-            guard nameStart + nameLen <= bytes.count else {
+            guard nameStart + nameLen + extraLen <= bytes.count else {
                 throw ArchiveError.corruptCentralDirectory
             }
             let name = String(decoding: bytes[nameStart..<(nameStart + nameLen)], as: UTF8.self)
+
+            // ZIP64: si algún campo de 32 bits está saturado (0xFFFFFFFF), el valor
+            // real de 64 bits está en el campo extra (header id 0x0001).
+            var compSize = UInt64(raw32Comp)
+            var uncompSize = UInt64(raw32Uncomp)
+            var localOffset = UInt64(raw32Offset)
+            if raw32Comp == 0xFFFF_FFFF || raw32Uncomp == 0xFFFF_FFFF || raw32Offset == 0xFFFF_FFFF {
+                let z = zip64Extra(bytes, start: nameStart + nameLen, length: extraLen,
+                                   needUncomp: raw32Uncomp == 0xFFFF_FFFF,
+                                   needComp: raw32Comp == 0xFFFF_FFFF,
+                                   needOffset: raw32Offset == 0xFFFF_FFFF)
+                if let v = z.uncomp { uncompSize = v }
+                if let v = z.comp { compSize = v }
+                if let v = z.offset { localOffset = v }
+            }
 
             entries.append(ArchiveEntry(
                 path: name,
@@ -94,6 +108,50 @@ public struct ZipReader: Sendable {
             p = nameStart + nameLen + extraLen + commentLen
         }
         return entries
+    }
+
+    /// Devuelve (número de entradas, offset del central directory), siguiendo el
+    /// registro ZIP64 cuando los campos de 32 bits del EOCD están saturados.
+    private func centralDirectoryInfo(_ bytes: [UInt8], eocd: Int) -> (count: Int, offset: Int) {
+        let count16 = readU16(bytes, eocd + 10)
+        let size32 = readU32(bytes, eocd + 12)
+        let offset32 = readU32(bytes, eocd + 16)
+
+        if count16 == 0xFFFF || size32 == 0xFFFF_FFFF || offset32 == 0xFFFF_FFFF,
+           eocd >= 20, readU32(bytes, eocd - 20) == 0x0706_4b50 {
+            let recordOffset = Int(readU64(bytes, eocd - 20 + 8))
+            if recordOffset >= 0, recordOffset + 56 <= bytes.count,
+               readU32(bytes, recordOffset) == 0x0606_4b50 {
+                let count = Int(readU64(bytes, recordOffset + 32))
+                let offset = Int(readU64(bytes, recordOffset + 48))
+                return (count, offset)
+            }
+        }
+        return (Int(count16), Int(offset32))
+    }
+
+    /// Lee del campo extra ZIP64 (id 0x0001) los valores de 64 bits presentes,
+    /// en el orden fijo: descomprimido, comprimido, offset del local header.
+    private func zip64Extra(_ bytes: [UInt8], start: Int, length: Int,
+                            needUncomp: Bool, needComp: Bool, needOffset: Bool)
+        -> (uncomp: UInt64?, comp: UInt64?, offset: UInt64?) {
+        var p = start
+        let end = min(start + length, bytes.count)
+        while p + 4 <= end {
+            let id = readU16(bytes, p)
+            let size = Int(readU16(bytes, p + 2))
+            if id == 0x0001 {
+                var q = p + 4
+                let fieldEnd = min(p + 4 + size, end)
+                var uncomp: UInt64?, comp: UInt64?, offset: UInt64?
+                if needUncomp, q + 8 <= fieldEnd { uncomp = readU64(bytes, q); q += 8 }
+                if needComp, q + 8 <= fieldEnd { comp = readU64(bytes, q); q += 8 }
+                if needOffset, q + 8 <= fieldEnd { offset = readU64(bytes, q); q += 8 }
+                return (uncomp, comp, offset)
+            }
+            p += 4 + size
+        }
+        return (nil, nil, nil)
     }
 
     // MARK: - Lectura binaria (little-endian)
@@ -132,5 +190,11 @@ public struct ZipReader: Sendable {
 
     private func readU32(_ b: [UInt8], _ o: Int) -> UInt32 {
         UInt32(b[o]) | (UInt32(b[o + 1]) << 8) | (UInt32(b[o + 2]) << 16) | (UInt32(b[o + 3]) << 24)
+    }
+
+    private func readU64(_ b: [UInt8], _ o: Int) -> UInt64 {
+        var value: UInt64 = 0
+        for i in 0..<8 { value |= UInt64(b[o + i]) << (8 * i) }
+        return value
     }
 }

@@ -61,6 +61,22 @@ final class ZipEngineTests: XCTestCase {
         XCTAssertEqual(try extractor.extractedData(for: hola, in: archive), Data("Hola mundo cifrado".utf8))
     }
 
+    func testReadsZip64Archive() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "zip64", withExtension: "zip", subdirectory: "Fixtures"))
+        let archive = try Data(contentsOf: url)
+        let entries = try reader.listEntries(in: archive)
+
+        // La entrada forzada a ZIP64 debe leer su tamaño real (no 0xFFFFFFFF).
+        let big = try XCTUnwrap(entries.first { $0.path == "grande.txt" })
+        XCTAssertEqual(big.uncompressedSize, 520)
+        XCTAssertNotEqual(big.compressedSize, 0xFFFF_FFFF)
+
+        // Y debe poder extraerse correctamente pese al ZIP64.
+        let data = try extractor.extractedData(for: big, in: archive)
+        XCTAssertEqual(data.count, 520)
+        XCTAssertTrue(entries.contains { $0.path == "docs/normal.txt" })
+    }
+
     func testCopyRawEntryIntoNewZip() throws {
         // Abrimos un zip externo, copiamos una entrada SIN recomprimir a otro zip,
         // y comprobamos que el contenido se conserva.
