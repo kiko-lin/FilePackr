@@ -183,10 +183,10 @@ final class ArchiveDocument: ObservableObject {
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
     func openArchive(_ url: URL) async throws {
-        // Si es un volumen (.001/.002…), trabajamos con el nombre base y reunimos las partes.
-        let isPart = Volumes.isPartExtension(url.pathExtension)
-        let baseURL = isPart ? url.deletingPathExtension() : url
+        // Si forma parte de un juego de volúmenes, reunimos las partes en orden;
+        // la primera (nombre.zip) da el nombre base y el formato.
         let parts = volumeParts(for: url)
+        let baseURL = parts.first ?? url
         let detected = detectFormat(for: baseURL)
         progress = ProgressState(label: "Abriendo \(baseURL.lastPathComponent)…",
                                  fraction: detected == .zip ? 0 : nil)
@@ -596,6 +596,7 @@ final class ArchiveDocument: ObservableObject {
                     try FileManager.default.removeItem(at: url)
                 }
                 try FileManager.default.moveItem(at: work, to: url)
+                removeContinuationVolumes(of: url)   // limpiar restos de un split previo
             }
         } catch {
             try? FileManager.default.removeItem(at: work)
@@ -610,18 +611,33 @@ final class ArchiveDocument: ObservableObject {
                        password: savePassword, volumeSize: saveVolumeSize)
     }
 
-    /// Divide `source` en volúmenes `base.001`, `base.002`… de `volumeSize` bytes,
-    /// en segundo plano y leyendo por trozos (sin cargar todo en memoria). Borra
-    /// volúmenes sobrantes de un guardado anterior con más partes.
+    /// Borra los volúmenes de continuación ("nombre_001.zip"…) junto al fichero base.
+    private func removeContinuationVolumes(of base: URL) {
+        let directory = base.deletingLastPathComponent()
+        let baseName = base.lastPathComponent
+        var index = 2
+        while true {
+            let part = directory.appendingPathComponent(Volumes.partName(base: baseName, index: index))
+            guard FileManager.default.fileExists(atPath: part.path) else { break }
+            try? FileManager.default.removeItem(at: part)
+            index += 1
+        }
+    }
+
+    /// Divide `source` en volúmenes "nombre.zip", "nombre_001.zip"… de `volumeSize`
+    /// bytes, en segundo plano y leyendo por trozos (sin cargar todo en memoria).
+    /// Borra volúmenes de continuación sobrantes de un guardado anterior con más partes.
     nonisolated private func splitFile(_ source: URL, base: URL, volumeSize: Int) async throws {
         try await Task.detached(priority: .userInitiated) {
             let handle = try FileHandle(forReadingFrom: source)
             defer { try? handle.close() }
             let fm = FileManager.default
+            let directory = base.deletingLastPathComponent()
+            let baseName = base.lastPathComponent
             var index = 1
 
             func writePart(_ data: Data) throws {
-                let part = base.appendingPathExtension(Volumes.partExtension(index))
+                let part = directory.appendingPathComponent(Volumes.partName(base: baseName, index: index))
                 try? fm.removeItem(at: part)
                 try data.write(to: part)
                 index += 1
@@ -634,8 +650,8 @@ final class ArchiveDocument: ObservableObject {
             }
             if !wroteAny { try writePart(Data()) }   // archivo vacío: al menos un volumen
 
-            while true {   // limpiar volúmenes sobrantes
-                let stale = base.appendingPathExtension(Volumes.partExtension(index))
+            while true {   // limpiar volúmenes de continuación sobrantes (índice ≥2)
+                let stale = directory.appendingPathComponent(Volumes.partName(base: baseName, index: index))
                 guard fm.fileExists(atPath: stale.path) else { break }
                 try fm.removeItem(at: stale)
                 index += 1
@@ -851,13 +867,11 @@ final class ArchiveDocument: ObservableObject {
         return "\(base) \(n)"
     }
 
-    /// `true` si la extensión corresponde a un contenedor que sabemos abrir, o a un
-    /// volumen (.001/.002…) cuyo nombre base es un contenedor.
+    /// `true` si la extensión corresponde a un contenedor que sabemos abrir. Los
+    /// volúmenes de continuación ("nombre_001.zip") conservan la extensión, así que
+    /// también casan aquí.
     func isOpenableArchive(_ url: URL) -> Bool {
-        if Volumes.isPartExtension(url.pathExtension) {
-            return hasArchiveSuffix(url.deletingPathExtension().lastPathComponent.lowercased())
-        }
-        return hasArchiveSuffix(url.lastPathComponent.lowercased())
+        hasArchiveSuffix(url.lastPathComponent.lowercased())
     }
 
     private func hasArchiveSuffix(_ name: String) -> Bool {
@@ -865,20 +879,40 @@ final class ArchiveDocument: ObservableObject {
             || name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") || name.hasSuffix(".gz")
     }
 
-    /// Volúmenes que forman el archivo, en orden. Si `url` no es un volumen,
-    /// devuelve `[url]`. Si lo es, reúne todos los `base.NNN` del directorio.
+    /// Volúmenes que forman el archivo, en orden (nombre.zip, nombre_001.zip…). Si
+    /// `url` no forma parte de un juego, devuelve `[url]`.
     private func volumeParts(for url: URL) -> [URL] {
-        guard Volumes.isPartExtension(url.pathExtension) else { return [url] }
-        let base = url.deletingPathExtension()
-        let baseName = base.lastPathComponent
+        let directory = url.deletingLastPathComponent()
+        // ¿Es un volumen de continuación cuyo nombre base existe?
+        if let cont = Volumes.continuationVolume(url.lastPathComponent) {
+            let baseURL = directory.appendingPathComponent(cont.base)
+            if FileManager.default.fileExists(atPath: baseURL.path) {
+                return gatherVolumes(base: baseURL)
+            }
+            return [url]   // sin fichero base: tratar como fichero suelto
+        }
+        // ¿Es la primera parte (existe nombre_001.<ext>)?
+        let secondPart = directory.appendingPathComponent(
+            Volumes.partName(base: url.lastPathComponent, index: 2))
+        if FileManager.default.fileExists(atPath: secondPart.path) {
+            return gatherVolumes(base: url)
+        }
+        return [url]
+    }
+
+    /// Reúne las partes contiguas a partir del volumen base.
+    private func gatherVolumes(base: URL) -> [URL] {
         let directory = base.deletingLastPathComponent()
-        let siblings = (try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil)) ?? []
-        let parts = siblings.filter {
-            Volumes.isPartExtension($0.pathExtension)
-                && $0.deletingPathExtension().lastPathComponent == baseName
-        }.sorted { $0.pathExtension.localizedStandardCompare($1.pathExtension) == .orderedAscending }
-        return parts.isEmpty ? [url] : parts
+        var parts = [base]
+        var index = 2
+        while true {
+            let part = directory.appendingPathComponent(
+                Volumes.partName(base: base.lastPathComponent, index: index))
+            guard FileManager.default.fileExists(atPath: part.path) else { break }
+            parts.append(part)
+            index += 1
+        }
+        return parts
     }
 
     /// Formato deducido del nombre del fichero (refinado al leer para `.gz` → `.tar.gz`).

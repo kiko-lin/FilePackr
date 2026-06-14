@@ -3,18 +3,24 @@ import XCTest
 
 final class VolumesTests: XCTestCase {
 
-    func testPartExtension() {
-        XCTAssertEqual(Volumes.partExtension(1), "001")
-        XCTAssertEqual(Volumes.partExtension(12), "012")
-        XCTAssertEqual(Volumes.partExtension(7), "007")
+    func testPartName() {
+        XCTAssertEqual(Volumes.partName(base: "nombre.zip", index: 1), "nombre.zip")
+        XCTAssertEqual(Volumes.partName(base: "nombre.zip", index: 2), "nombre_001.zip")
+        XCTAssertEqual(Volumes.partName(base: "nombre.zip", index: 3), "nombre_002.zip")
+        XCTAssertEqual(Volumes.partName(base: "datos.tar.gz", index: 2), "datos_001.tar.gz")
+        XCTAssertEqual(Volumes.partName(base: "sinext", index: 2), "sinext_001")
     }
 
-    func testIsPartExtension() {
-        XCTAssertTrue(Volumes.isPartExtension("001"))
-        XCTAssertTrue(Volumes.isPartExtension("2"))
-        XCTAssertFalse(Volumes.isPartExtension("zip"))
-        XCTAssertFalse(Volumes.isPartExtension("7z"))
-        XCTAssertFalse(Volumes.isPartExtension(""))
+    func testContinuationVolume() {
+        XCTAssertNil(Volumes.continuationVolume("nombre.zip"))
+        XCTAssertNil(Volumes.continuationVolume("nombre.tar.gz"))
+        let z = Volumes.continuationVolume("nombre_001.zip")
+        XCTAssertEqual(z?.base, "nombre.zip")
+        XCTAssertEqual(z?.index, 2)
+        let g = Volumes.continuationVolume("datos_002.tar.gz")
+        XCTAssertEqual(g?.base, "datos.tar.gz")
+        XCTAssertEqual(g?.index, 3)
+        XCTAssertNil(Volumes.continuationVolume("_001.zip"))   // sin raíz
     }
 
     func testSplitAndJoinRoundTrip() {
