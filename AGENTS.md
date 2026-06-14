@@ -79,7 +79,12 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   framework* (`COMPRESSION_LZMA`, cuya salida es `.xz` estándar). `Xz.swift`
   (compress/decompress en streaming + parseo del Index para el tamaño). Interop
   **bidireccional** verificada: `.xz` contra `python3 lzma` (liblzma) y `.tar.xz`
-  contra `bsdtar -J` (liblzma 5.4.3). `ArchiveFormat.isSingleFileOnly` agrupa gz/xz.
+  contra `bsdtar -J` (liblzma 5.4.3).
+- **bzip2 / tar.bz2 (Tier 3)**: enlaza la **`libbz2` del sistema** (target SwiftPM
+  `Cbz2` = systemLibrary, modulemap expone `bzlib.h` del SDK + `link "bz2"`).
+  `Bzip2.swift` usa `BZ2_bzBuffToBuff*` (descompresión con búfer creciente porque
+  bzip2 no guarda el tamaño). Interop verificada: `.bz2` vs `bzip2`/`bunzip2`,
+  `.tar.bz2` vs `bsdtar -j`. `ArchiveFormat.isSingleFileOnly` agrupa gz/xz/bz2.
 - **Volúmenes** (división por bytes): `Volumes.swift` (split/join + naming, testeado).
   Esquema `nombre.zip`, `nombre_001.zip`, `nombre_002.zip`… (1ª parte = nombre base).
   Diálogo Guardar con toggle "Dividir en volúmenes" + tamaño/unidad, por formato
@@ -125,8 +130,9 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
       campo extra 0x9901, AE-2 CRC=0).
 - [x] ~~tar/gz/tar.gz en Swift puro~~ (Tier 1, hecho — ver "Hecho").
 - [x] ~~xz/tar.xz~~ (Tier 2, hecho — `Compression` LZMA, ver "Hecho").
-- [ ] **Más formatos**: bzip2 (`libbz2` ya viene en macOS, esfuerzo medio); luego
-      7z/rar/dmg con **libarchive** (vendorizar C — esfuerzo grande). Selector ya montado.
+- [x] ~~bzip2/tar.bz2~~ (Tier 3, hecho — `libbz2` del sistema, ver "Hecho").
+- [ ] **Más formatos**: 7z/rar/dmg con **libarchive** (vendorizar C — esfuerzo
+      grande; lectura de 7z con cifrado AES, rar solo lectura). Selector ya montado.
 - [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
       `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
 - [ ] **Cambiar cifrado/contraseña al re-guardar** ("Guardar como…"): hoy re-guardar
@@ -162,6 +168,9 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   produce/consume `.xz` estándar. El tamaño descomprimido se lee del **Index** del
   pie (Backward Size → Index → suma de "Uncompressed Size", todo en VLI) sin
   descomprimir. `.tar.xz` = TAR + xz; `.xz` suelto vs tar.xz: firma `ustar` tras inflar.
+- bzip2: firma `BZh`. `libbz2` del sistema (`-lbz2`, header en el SDK). One-shot
+  `BZ2_bzBuffToBuffCompress/Decompress`; al descomprimir bzip2 NO guarda el tamaño,
+  así que se reintenta con búfer ×2 si devuelve `BZ_OUTBUFF_FULL`. `.tar.bz2` = TAR + bz2.
 - Volúmenes: división **por bytes** (no spanning PKWARE nativo). La primera parte
   conserva el nombre base (`nombre.zip`) y las siguientes llevan `_NNN` antes de la
   extensión (`nombre_001.zip`, `nombre_002.zip`…). Reconstrucción = concatenar en
