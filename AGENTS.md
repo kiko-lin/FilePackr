@@ -61,6 +61,9 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - Cifrado ZIP estándar: **ZipCrypto (Débil)** — interop verificada contra
   `zip`/`unzip`; **AES-256 WinZip (Fuerte)** — round-trip propio verificado.
 - Diálogo de guardar: formato (ZIP) + cifrado (none/débil/fuerte) + contraseña.
+- **Pedir contraseña al abrir** un zip cifrado (de otra app): valida la clave
+  extrayendo la primera entrada y la recuerda (`entryPassword`) para extraer/
+  previsualizar/arrastrar. `ExportPlan.zipEntry` lleva la contraseña.
 - Icono de app (full-bleed macOS 26). Lectura `.fpkz` legacy.
 
 ## TODO (objetivos pendientes, en orden lógico)
@@ -68,10 +71,6 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - [ ] **Verificar interop AES-256 en Keka/7-Zip** (lo prueba el usuario; el agente
       no tiene esas herramientas). Si falla, revisar `ZipAES` (PBKDF2/CTR/HMAC,
       campo extra 0x9901, AE-2 CRC=0).
-- [ ] **Pedir contraseña al abrir** un zip cifrado de otra app: hoy lista los
-      ficheros pero al extraer/previsualizar lanza `ExtractError.needsPassword`.
-      Hay que: detectar entradas cifradas tras abrir, pedir la clave una vez,
-      guardarla (`entryPassword`) y pasarla a `ExportPlan`/extracción/Quick Look.
 - [ ] **Más formatos**: tar/gz/tar.gz en Swift puro (asequible); luego 7z/rar/dmg
       con **libarchive** (vendorizar C — esfuerzo grande). El diálogo de guardar
       ya tiene el hueco del selector de formato.

@@ -111,6 +111,10 @@ final class ArchiveDocument: ObservableObject {
     /// Cifrado elegido al guardar (se recuerda para el botón Guardar).
     @Published private(set) var saveEncryption: ZipEncryption = .none
     private var savePassword: String?
+    /// El archivo abierto tiene entradas cifradas y aún no tenemos la contraseña.
+    @Published private(set) var requiresEntryPassword = false
+    /// Contraseña para descifrar las entradas del archivo abierto.
+    private var entryPassword: String?
 
     static let untitledName = "Sin título"
     static let encryptedExtension = "fpkz"
@@ -165,8 +169,42 @@ final class ArchiveDocument: ObservableObject {
         documentName = url.lastPathComponent
         isEncrypted = false
         encryptionPassword = nil
+        entryPassword = nil
+        requiresEntryPassword = result.1.contains { $0.isEncrypted }
         hasUnsavedChanges = false
         changed()
+    }
+
+    /// Da la contraseña para las entradas cifradas del archivo abierto. La valida
+    /// extrayendo la primera entrada cifrada; devuelve `false` si es incorrecta.
+    func provideEntryPassword(_ password: String) -> Bool {
+        guard let archive = sourceArchiveData,
+              let node = firstEncryptedFile(in: roots),
+              case .zipEntry(let entry) = node.source else {
+            entryPassword = password
+            requiresEntryPassword = false
+            return true
+        }
+        do {
+            _ = try ZipExtractor().extractedData(for: entry, in: archive, password: password)
+        } catch {
+            return false
+        }
+        entryPassword = password
+        requiresEntryPassword = false
+        changed()
+        return true
+    }
+
+    private func firstEncryptedFile(in nodes: [FileNode]) -> FileNode? {
+        for node in nodes {
+            if node.isDirectory {
+                if let found = firstEncryptedFile(in: node.children) { return found }
+            } else if case .zipEntry(let entry) = node.source, entry.isEncrypted {
+                return node
+            }
+        }
+        return nil
     }
 
     /// `true` si el fichero está cifrado por FilePackr (extensión `.fpkz` o cabecera CIFR).
@@ -197,6 +235,8 @@ final class ArchiveDocument: ObservableObject {
         documentName = url.lastPathComponent
         isEncrypted = true
         encryptionPassword = password
+        entryPassword = nil
+        requiresEntryPassword = result.1.contains { $0.isEncrypted }
         hasUnsavedChanges = false
         changed()
     }
@@ -208,6 +248,10 @@ final class ArchiveDocument: ObservableObject {
         hasUnsavedChanges = false
         isEncrypted = false
         encryptionPassword = nil
+        entryPassword = nil
+        requiresEntryPassword = false
+        saveEncryption = .none
+        savePassword = nil
     }
 
     /// Añade ficheros/carpetas del disco dentro de la carpeta destino actual.
@@ -318,6 +362,10 @@ final class ArchiveDocument: ObservableObject {
         hasUnsavedChanges = false
         isEncrypted = false
         encryptionPassword = nil
+        entryPassword = nil
+        requiresEntryPassword = false
+        saveEncryption = .none
+        savePassword = nil
         changed()
     }
 
@@ -378,7 +426,7 @@ final class ArchiveDocument: ObservableObject {
         case .diskFile(let url):
             return ExportPlan(name: node.name, payload: .diskFile(url))
         case .zipEntry(let entry):
-            return ExportPlan(name: node.name, payload: .zipEntry(entry: entry, archive: sourceArchiveData ?? Data()))
+            return ExportPlan(name: node.name, payload: .zipEntry(entry: entry, archive: sourceArchiveData ?? Data(), password: entryPassword))
         case .folder:
             return ExportPlan(name: node.name, payload: .folder([]))
         }
@@ -596,7 +644,7 @@ struct ExportPlan: Sendable {
     enum Payload: Sendable {
         case folder([ExportPlan])
         case diskFile(URL)
-        case zipEntry(entry: ArchiveEntry, archive: Data)
+        case zipEntry(entry: ArchiveEntry, archive: Data, password: String?)
     }
 
     var isDirectory: Bool {
@@ -634,8 +682,8 @@ struct ExportPlan: Sendable {
         case .diskFile(let url):
             try FileManager.default.copyItem(at: url, to: destination)
             onFile()
-        case .zipEntry(let entry, let archive):
-            let data = try ZipExtractor().extractedData(for: entry, in: archive)
+        case .zipEntry(let entry, let archive, let password):
+            let data = try ZipExtractor().extractedData(for: entry, in: archive, password: password)
             try data.write(to: destination, options: .atomic)
             onFile()
         }

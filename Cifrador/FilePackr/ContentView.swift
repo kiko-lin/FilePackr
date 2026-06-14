@@ -68,6 +68,7 @@ private struct PasswordSheet: View {
     let title: String
     let confirmLabel: String
     @Binding var password: String
+    var note: String? = nil
     var onConfirm: () -> Void
     var onCancel: () -> Void
 
@@ -78,6 +79,9 @@ private struct PasswordSheet: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 280)
                 .onSubmit { if !password.isEmpty { onConfirm() } }
+            if let note {
+                Text(note).font(.callout).foregroundStyle(.red)
+            }
             HStack {
                 Spacer()
                 Button("Cancelar", role: .cancel, action: onCancel)
@@ -103,6 +107,9 @@ struct ContentView: View {
     @State private var showingSaveOptions = false
     @State private var saveEncryptionChoice: ZipEncryption = .none
     @State private var saveOptionsPassword = ""
+    @State private var showingEntryPassword = false
+    @State private var entryPasswordInput = ""
+    @State private var entryPasswordWrong = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -158,6 +165,30 @@ struct ContentView: View {
                              password: $saveOptionsPassword,
                              onSave: { confirmSaveOptions() },
                              onCancel: { showingSaveOptions = false })
+        }
+        .sheet(isPresented: $showingEntryPassword) {
+            PasswordSheet(title: "Contraseña del archivo",
+                          confirmLabel: "Abrir",
+                          password: $entryPasswordInput,
+                          note: entryPasswordWrong ? "Contraseña incorrecta." : nil,
+                          onConfirm: { confirmEntryPassword() },
+                          onCancel: { showingEntryPassword = false })
+        }
+        .onChange(of: doc.requiresEntryPassword) { _, requires in
+            if requires {
+                entryPasswordInput = ""
+                entryPasswordWrong = false
+                showingEntryPassword = true
+            }
+        }
+    }
+
+    private func confirmEntryPassword() {
+        if doc.provideEntryPassword(entryPasswordInput) {
+            showingEntryPassword = false
+        } else {
+            entryPasswordWrong = true
+            entryPasswordInput = ""
         }
     }
 
