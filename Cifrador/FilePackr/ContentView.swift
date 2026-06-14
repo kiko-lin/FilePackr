@@ -358,13 +358,30 @@ struct ContentView: View {
 
     /// Extrae un nodo concreto: pide carpeta destino y gestiona conflictos de nombre.
     private func extract(_ node: FileNode) {
-        if doc.requiresEntryPassword { promptEntryPassword(); return }
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.prompt = "Extraer aquí"
+        panel.message = "Elige dónde extraer «\(node.name)»"
+        // Por defecto, la carpeta donde está el zip.
+        if let folder = doc.sourceURL?.deletingLastPathComponent() {
+            panel.directoryURL = folder
+        }
+        // Si el archivo está cifrado y aún no hay contraseña, pedirla aquí mismo.
+        let passwordField = NSSecureTextField()
+        if doc.requiresEntryPassword {
+            panel.accessoryView = passwordAccessory(passwordField)
+        }
+
         guard panel.runModal() == .OK, let dir = panel.url else { return }
+
+        if doc.requiresEntryPassword, !passwordField.stringValue.isEmpty {
+            guard doc.provideEntryPassword(passwordField.stringValue) else {
+                errorMessage = "Contraseña incorrecta."
+                return
+            }
+        }
 
         let plan = doc.exportPlan(for: node)
         let destination = dir.appendingPathComponent(node.name)
@@ -375,6 +392,28 @@ struct ContentView: View {
         } else {
             Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) } }
         }
+    }
+
+    /// Campo accesorio (etiqueta + contraseña) para el panel de extracción.
+    private func passwordAccessory(_ field: NSSecureTextField) -> NSView {
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.placeholderString = "Contraseña del archivo"
+        let label = NSTextField(labelWithString: "Contraseña:")
+        label.translatesAutoresizingMaskIntoConstraints = false
+        let container = NSView()
+        container.addSubview(label)
+        container.addSubview(field)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
+            label.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            field.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 8),
+            field.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
+            field.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            field.widthAnchor.constraint(greaterThanOrEqualToConstant: 240),
+            container.heightAnchor.constraint(equalToConstant: 46),
+            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 380),
+        ])
+        return container
     }
 
     /// Guarda: si ya tiene fichero, re-guarda con los ajustes; si es nuevo, abre el
