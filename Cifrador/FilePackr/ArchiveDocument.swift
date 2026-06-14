@@ -116,7 +116,6 @@ final class ArchiveDocument: ObservableObject {
     /// Contraseña en memoria para volver a cifrar al guardar sin volver a pedirla.
     private var encryptionPassword: String?
 
-    private let reader = ZipReader()
     private let writer = ZipWriter()
     private let crypto = CryptoCore()
 
@@ -125,27 +124,37 @@ final class ArchiveDocument: ObservableObject {
     // MARK: - Entrada de elementos (arrastre o botón Añadir)
 
     /// Decide qué hacer con lo que llega: abrir un ZIP como base o añadir ficheros.
-    func handleIncoming(_ urls: [URL]) throws {
+    func handleIncoming(_ urls: [URL]) async throws {
         let cleaned = urls.filter { $0.isFileURL }
         guard !cleaned.isEmpty else { return }
 
         if isEmpty, cleaned.count == 1, isZip(cleaned[0]), !isDirectory(cleaned[0]) {
-            try openArchive(cleaned[0])
+            try await openArchive(cleaned[0])
         } else {
             if isEmpty { beginNewDocument() }
             addFiles(cleaned)
         }
     }
 
-    /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo).
-    func openArchive(_ url: URL) throws {
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        let entries = try reader.listEntries(in: data)
-        sourceArchiveData = data
-        roots = buildTree(from: entries)
+    /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
+    /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
+    func openArchive(_ url: URL) async throws {
+        progress = ProgressState(label: "Abriendo \(url.lastPathComponent)…", fraction: nil)
+        defer { progress = nil }
+
+        let result = try await Task.detached(priority: .userInitiated) { () -> (Data, [ArchiveEntry]) in
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            let entries = try ZipReader().listEntries(in: data)
+            return (data, entries)
+        }.value
+
+        sourceArchiveData = result.0
+        roots = buildTree(from: result.1)
         selection = nil
         sourceURL = url
         documentName = url.lastPathComponent
+        isEncrypted = false
+        encryptionPassword = nil
         hasUnsavedChanges = false
         changed()
     }
@@ -166,13 +175,13 @@ final class ArchiveDocument: ObservableObject {
         defer { progress = nil }
 
         let crypto = self.crypto
-        let zipData = try await Task.detached(priority: .userInitiated) {
-            try crypto.decrypt(container, password: password)
+        let result = try await Task.detached(priority: .userInitiated) { () -> (Data, [ArchiveEntry]) in
+            let zipData = try crypto.decrypt(container, password: password)
+            return (zipData, try ZipReader().listEntries(in: zipData))
         }.value
 
-        let entries = try reader.listEntries(in: zipData)
-        sourceArchiveData = zipData
-        roots = buildTree(from: entries)
+        sourceArchiveData = result.0
+        roots = buildTree(from: result.1)
         selection = nil
         sourceURL = url
         documentName = url.lastPathComponent

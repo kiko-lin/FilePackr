@@ -260,7 +260,7 @@ struct ContentView: View {
             passwordInput = ""
             passwordRequest = .open(urls[0])
         } else {
-            run { try doc.handleIncoming(urls) }
+            Task { await runAsync { try await doc.handleIncoming(urls) } }
         }
     }
 
