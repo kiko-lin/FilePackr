@@ -98,7 +98,7 @@ private extension Localizer {
 
         // Drop prompt
         "drop.title": "Drag files here",
-        "drop.subtitle": "A .zip, .tar, .tar.gz/.xz/.bz2, .gz, .xz or .bz2 opens for editing; other files create a new one.",
+        "drop.subtitle": "A .zip, .7z, .rar, .tar(.gz/.xz/.bz2), .gz, .xz or .bz2 opens for editing; other files create a new one.",
 
         // Save sheet
         "save.title": "Save Archive",
@@ -122,6 +122,8 @@ private extension Localizer {
         "format.gzip": "GZIP (single file)",
         "format.xz": "XZ (single file)",
         "format.bzip2": "BZIP2 (single file)",
+        "format.sevenZip": "7z",
+        "format.rar": "RAR (read only)",
 
         // Extract sheet
         "extract.title": "Extract “%@”",
@@ -133,6 +135,7 @@ private extension Localizer {
 
         // Passwords
         "password.field": "Password",
+        "password.openTitle": "Password to open the archive",
         "password.open": "Open",
         "password.entryTitle": "Archive password",
         "password.wrong": "Wrong password.",
@@ -226,7 +229,7 @@ private extension Localizer {
 
         // Drop prompt
         "drop.title": "Arrastra archivos aquí",
-        "drop.subtitle": "Un .zip, .tar, .tar.gz/.xz/.bz2, .gz, .xz o .bz2 se abrirá para editarlo; otros archivos crearán uno nuevo.",
+        "drop.subtitle": "Un .zip, .7z, .rar, .tar(.gz/.xz/.bz2), .gz, .xz o .bz2 se abrirá para editarlo; otros archivos crearán uno nuevo.",
 
         // Save sheet
         "save.title": "Guardar archivo",
@@ -250,6 +253,8 @@ private extension Localizer {
         "format.gzip": "GZIP (un fichero)",
         "format.xz": "XZ (un fichero)",
         "format.bzip2": "BZIP2 (un fichero)",
+        "format.sevenZip": "7z",
+        "format.rar": "RAR (solo lectura)",
 
         // Extract sheet
         "extract.title": "Extraer «%@»",
@@ -261,6 +266,7 @@ private extension Localizer {
 
         // Passwords
         "password.field": "Contraseña",
+        "password.openTitle": "Contraseña para abrir el archivo",
         "password.open": "Abrir",
         "password.entryTitle": "Contraseña del archivo",
         "password.wrong": "Contraseña incorrecta.",

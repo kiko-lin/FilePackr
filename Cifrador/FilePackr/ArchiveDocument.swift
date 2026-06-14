@@ -12,7 +12,7 @@ enum NodeSource {
 
 /// Formato del contenedor abierto o de salida.
 enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
-    case zip, tar, tarGzip, tarXz, tarBzip2, gzip, xz, bzip2
+    case zip, tar, tarGzip, tarXz, tarBzip2, gzip, xz, bzip2, sevenZip, rar
 
     /// Clave de localización del nombre mostrado en el selector de formato.
     var nameKey: String {
@@ -25,6 +25,8 @@ enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
         case .gzip: return "format.gzip"
         case .xz: return "format.xz"
         case .bzip2: return "format.bzip2"
+        case .sevenZip: return "format.sevenZip"
+        case .rar: return "format.rar"
         }
     }
 
@@ -39,10 +41,12 @@ enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
         case .gzip: return "gz"
         case .xz: return "xz"
         case .bzip2: return "bz2"
+        case .sevenZip: return "7z"
+        case .rar: return "rar"
         }
     }
 
-    /// Solo ZIP admite cifrado con contraseña.
+    /// Solo ZIP admite cifrado con contraseña al **escribir** (7z se descifra al leer).
     var supportsEncryption: Bool { self == .zip }
 
     /// La división en volúmenes (por bytes, sufijo `.001`/`.002`…) es genérica y
@@ -51,6 +55,12 @@ enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
 
     /// Formatos de un solo fichero (gzip/xz/bzip2): solo si el documento es un fichero.
     var isSingleFileOnly: Bool { self == .gzip || self == .xz || self == .bzip2 }
+
+    /// `false` para formatos solo de lectura (rar es propietario, no se puede crear).
+    var isWritable: Bool { self != .rar }
+
+    /// Se lee/escribe con la libarchive del sistema (no en Swift puro).
+    var usesLibArchive: Bool { self == .sevenZip || self == .rar }
 }
 
 /// Nodo del árbol editable que se muestra en el cuerpo central.
@@ -160,6 +170,9 @@ final class ArchiveDocument: ObservableObject {
     @Published private(set) var saveVolumeSize: Int?
     /// El archivo abierto tiene entradas cifradas y aún no tenemos la contraseña.
     @Published private(set) var requiresEntryPassword = false
+    /// Un 7z con cabeceras cifradas necesita contraseña para **abrirse** (no solo extraer).
+    @Published private(set) var requiresOpenPassword = false
+    private var pendingArchiveURL: URL?
     /// Contraseña para descifrar las entradas del archivo abierto.
     private var entryPassword: String?
 
@@ -192,7 +205,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
-    func openArchive(_ url: URL) async throws {
+    func openArchive(_ url: URL, passphrase: String? = nil) async throws {
         // Si forma parte de un juego de volúmenes, reunimos las partes en orden;
         // la primera (nombre.zip) da el nombre base y el formato.
         let parts = volumeParts(for: url)
@@ -204,7 +217,9 @@ final class ArchiveDocument: ObservableObject {
 
         let fallbackName = baseURL.deletingPathExtension().lastPathComponent
         let report = makeProgressReporter()
-        let result = try await Task.detached(priority: .userInitiated) { () -> (ArchiveFormat, Data, [ArchiveEntry]) in
+        let result: (ArchiveFormat, Data, [ArchiveEntry])
+        do {
+            result = try await Task.detached(priority: .userInitiated) { () -> (ArchiveFormat, Data, [ArchiveEntry]) in
             let data = parts.count == 1
                 ? try Data(contentsOf: parts[0], options: .mappedIfSafe)
                 : Volumes.join(try parts.map { try Data(contentsOf: $0) })
@@ -251,8 +266,18 @@ final class ArchiveDocument: ObservableObject {
                     return (.tarBzip2, inner, try Tar.listEntries(in: inner))
                 }
                 return (.bzip2, data, Bzip2.entries(in: data, fallbackName: fallbackName))
+            case .sevenZip, .rar:
+                // 7z/rar vía libarchive (lectura). Puede lanzar passphraseRequired.
+                let (entries, _) = try LibArchive.listEntries(in: data, passphrase: passphrase)
+                return (detected, data, entries)
             }
-        }.value
+            }.value
+        } catch let error as LibArchiveError where error == .passphraseRequired {
+            // 7z con cabeceras cifradas: hay que pedir contraseña para abrir.
+            pendingArchiveURL = url
+            requiresOpenPassword = true
+            return
+        }
 
         format = result.0
         sourceArchiveData = result.1
@@ -260,9 +285,13 @@ final class ArchiveDocument: ObservableObject {
         selection = nil
         sourceURL = baseURL
         documentName = baseURL.lastPathComponent
-        entryPassword = nil
-        // Solo ZIP cifra entradas; tar/gz nunca piden contraseña.
-        requiresEntryPassword = result.0 == .zip && result.2.contains { $0.isEncrypted }
+        entryPassword = passphrase
+        requiresOpenPassword = false
+        // ZIP y 7z pueden tener entradas cifradas; si no dimos contraseña al abrir,
+        // se pedirá al extraer/previsualizar. tar/gz/xz/bz2 nunca cifran.
+        requiresEntryPassword = passphrase == nil
+            && (result.0 == .zip || result.0.usesLibArchive)
+            && result.2.contains { $0.isEncrypted }
         // Al re-guardar, conservar el cifrado original (con su contraseña, cuando se dé).
         saveEncryption = result.0 == .zip ? detectedEncryption(in: result.2) : .none
         savePassword = nil
@@ -295,7 +324,10 @@ final class ArchiveDocument: ObservableObject {
             return true
         }
         do {
-            _ = try ZipExtractor().extractedData(for: entry, in: archive, password: password)
+            switch format {
+            case .sevenZip, .rar: _ = try LibArchive.extractEntry(path: entry.path, in: archive, passphrase: password)
+            default: _ = try ZipExtractor().extractedData(for: entry, in: archive, password: password)
+            }
         } catch {
             return false
         }
@@ -304,6 +336,18 @@ final class ArchiveDocument: ObservableObject {
         requiresEntryPassword = false
         changed()
         return true
+    }
+
+    /// Da la contraseña para **abrir** un 7z con cabeceras cifradas. Reintenta la
+    /// apertura; devuelve `false` si es incorrecta (sigue pidiéndola).
+    func provideOpenPassword(_ password: String) async -> Bool {
+        guard let url = pendingArchiveURL else { return false }
+        do {
+            try await openArchive(url, passphrase: password)
+            return !requiresOpenPassword   // openArchive la limpia si funcionó
+        } catch {
+            return false   // contraseña incorrecta
+        }
     }
 
     private func firstEncryptedFile(in nodes: [FileNode]) -> FileNode? {
@@ -324,6 +368,8 @@ final class ArchiveDocument: ObservableObject {
         hasUnsavedChanges = false
         entryPassword = nil
         requiresEntryPassword = false
+        requiresOpenPassword = false
+        pendingArchiveURL = nil
         saveEncryption = .none
         savePassword = nil
         format = .zip
@@ -446,6 +492,8 @@ final class ArchiveDocument: ObservableObject {
         hasUnsavedChanges = false
         entryPassword = nil
         requiresEntryPassword = false
+        requiresOpenPassword = false
+        pendingArchiveURL = nil
         saveEncryption = .none
         savePassword = nil
         format = .zip
@@ -532,6 +580,7 @@ final class ArchiveDocument: ObservableObject {
             case .gzip: return try? Gzip.decompress(archive)
             case .xz: return try? Xz.decompress(archive)
             case .bzip2: return try? Bzip2.decompress(archive)
+            case .sevenZip, .rar: return try? LibArchive.extractEntry(path: entry.path, in: archive, passphrase: entryPassword)
             }
         }
     }
@@ -588,6 +637,11 @@ final class ArchiveDocument: ObservableObject {
                     throw CocoaError(.fileWriteUnknown)
                 }
                 try await writeData({ Bzip2.compress(data) }, to: work)
+            case .sevenZip:
+                let items = makeLibArchiveItems()
+                try await writeLibArchive(items, to: work)
+            case .rar:
+                throw CocoaError(.fileWriteUnsupportedScheme)   // rar es solo lectura
             }
             // 2) Colocar el resultado: un solo fichero o dividido en volúmenes.
             if let volumes {
@@ -682,10 +736,37 @@ final class ArchiveDocument: ObservableObject {
         return items
     }
 
+    /// Como `makeTarItems`, pero para el escritor de 7z de libarchive.
+    private func makeLibArchiveItems() -> [LibArchive.WriteItem] {
+        var items: [LibArchive.WriteItem] = []
+        func walk(_ nodes: [FileNode], prefix: String) {
+            for node in nodes {
+                let path = prefix + node.name
+                if node.isDirectory {
+                    items.append(LibArchive.WriteItem(path: path, data: Data(),
+                                                      modifiedAt: node.modificationDate, isDirectory: true))
+                    walk(node.children, prefix: path + "/")
+                } else if let data = nodeData(node) {
+                    items.append(LibArchive.WriteItem(path: path, data: data,
+                                                      modifiedAt: node.modificationDate, isDirectory: false))
+                }
+            }
+        }
+        walk(roots, prefix: "")
+        return items
+    }
+
     /// Escribe `make()` (cómputo en segundo plano) en `url` de forma atómica.
     nonisolated private func writeData(_ make: @escaping @Sendable () -> Data, to url: URL) async throws {
         try await Task.detached(priority: .userInitiated) {
             try make().write(to: url, options: .atomic)
+        }.value
+    }
+
+    /// Escribe un `.7z` (libarchive) en `url`, en segundo plano.
+    nonisolated private func writeLibArchive(_ items: [LibArchive.WriteItem], to url: URL) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            try LibArchive.write7z(items, to: url)
         }.value
     }
 
@@ -882,6 +963,7 @@ final class ArchiveDocument: ObservableObject {
             || name.hasSuffix(".tar.gz") || name.hasSuffix(".tgz") || name.hasSuffix(".gz")
             || name.hasSuffix(".tar.xz") || name.hasSuffix(".txz") || name.hasSuffix(".xz")
             || name.hasSuffix(".tar.bz2") || name.hasSuffix(".tbz") || name.hasSuffix(".tbz2") || name.hasSuffix(".bz2")
+            || name.hasSuffix(".7z") || name.hasSuffix(".rar")
     }
 
     /// Volúmenes que forman el archivo, en orden (nombre.zip, nombre_001.zip…). Si
@@ -930,6 +1012,8 @@ final class ArchiveDocument: ObservableObject {
         if name.hasSuffix(".gz") { return .gzip }
         if name.hasSuffix(".xz") { return .xz }
         if name.hasSuffix(".bz2") { return .bzip2 }
+        if name.hasSuffix(".7z") { return .sevenZip }
+        if name.hasSuffix(".rar") { return .rar }
         return .zip
     }
 
@@ -1020,6 +1104,7 @@ struct ExportPlan: Sendable {
             case .gzip: data = try Gzip.decompress(archive)
             case .xz: data = try Xz.decompress(archive)
             case .bzip2: data = try Bzip2.decompress(archive)
+            case .sevenZip, .rar: data = try LibArchive.extractEntry(path: entry.path, in: archive, passphrase: password)
             }
             try data.write(to: destination, options: .atomic)
             onFile()

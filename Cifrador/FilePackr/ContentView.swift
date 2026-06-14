@@ -39,7 +39,7 @@ private struct SaveOptionsSheet: View {
     var onCancel: () -> Void
 
     private var formats: [ArchiveFormat] {
-        ArchiveFormat.allCases.filter { !$0.isSingleFileOnly || allowSingleFileFormats }
+        ArchiveFormat.allCases.filter { $0.isWritable && (!$0.isSingleFileOnly || allowSingleFileFormats) }
     }
 
     /// El botón Guardar se bloquea si falta la contraseña o el tamaño de volumen no es válido.
@@ -206,6 +206,9 @@ struct ContentView: View {
     @State private var showingEntryPassword = false
     @State private var entryPasswordInput = ""
     @State private var entryPasswordWrong = false
+    @State private var showingOpenPassword = false
+    @State private var openPasswordInput = ""
+    @State private var openPasswordWrong = false
     @State private var extractNode: FileNode?
     @State private var extractDestination = FileManager.default.homeDirectoryForCurrentUser
     @State private var extractPassword = ""
@@ -287,8 +290,23 @@ struct ContentView: View {
                                 onExtract: { performExtract() },
                                 onCancel: { extractNode = nil })
         }
+        .sheet(isPresented: $showingOpenPassword) {
+            PasswordSheet(title: loc("password.openTitle"),
+                          confirmLabel: loc("password.open"),
+                          password: $openPasswordInput,
+                          note: openPasswordWrong ? loc("password.wrong") : nil,
+                          onConfirm: { confirmOpenPassword() },
+                          onCancel: { showingOpenPassword = false; doc.close() })
+        }
         .onChange(of: doc.requiresEntryPassword) { _, requires in
             if requires { promptEntryPassword() }
+        }
+        .onChange(of: doc.requiresOpenPassword) { _, requires in
+            if requires {
+                openPasswordInput = ""
+                openPasswordWrong = false
+                showingOpenPassword = true
+            }
         }
     }
 
@@ -306,6 +324,18 @@ struct ContentView: View {
         } else {
             entryPasswordWrong = true
             entryPasswordInput = ""
+        }
+    }
+
+    private func confirmOpenPassword() {
+        let password = openPasswordInput
+        Task {
+            if await doc.provideOpenPassword(password) {
+                showingOpenPassword = false
+            } else {
+                openPasswordWrong = true
+                openPasswordInput = ""
+            }
         }
     }
 
@@ -524,12 +554,14 @@ struct ContentView: View {
     /// diálogo de opciones (formato + cifrado + contraseña).
     private func saveDocument() {
         if doc.requiresEntryPassword { promptEntryPassword(); return }
-        if let url = doc.sourceURL {
+        // Re-guardar en el sitio solo si el formato es escribible (rar no lo es).
+        if let url = doc.sourceURL, doc.saveFormat.isWritable {
             Task { await runAsync { try await doc.save(to: url) } }
         } else {
             // Documento nuevo: defaults de Ajustes; abierto: lo que traía el archivo.
             let isNew = doc.sourceURL == nil
             var format = isNew ? settings.defaultFormat : doc.saveFormat
+            if !format.isWritable { format = .zip }                            // rar → zip
             if format.isSingleFileOnly && !doc.isSingleFile { format = .zip }
             saveFormatChoice = format
             saveEncryptionChoice = isNew ? settings.defaultEncryption : doc.saveEncryption
