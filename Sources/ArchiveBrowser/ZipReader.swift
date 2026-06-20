@@ -1,40 +1,5 @@
 import Foundation
 
-/// Una entrada dentro de un archivo comprimido, leída SIN descomprimir su contenido.
-public struct ArchiveEntry: Equatable, Identifiable, Sendable {
-    public var id: String { path }
-    /// Ruta completa dentro del archivo, p.ej. "docs/anidado.txt".
-    public let path: String
-    /// Tamaño que ocupa comprimida dentro del archivo.
-    public let compressedSize: UInt64
-    /// Tamaño real una vez descomprimida.
-    public let uncompressedSize: UInt64
-    /// `true` si es una carpeta (la ruta acaba en "/").
-    public let isDirectory: Bool
-    /// Método de compresión ZIP (0 = almacenado, 8 = deflate).
-    public let compressionMethod: UInt16
-    /// CRC-32 del contenido sin comprimir (lo exige el formato ZIP).
-    public let crc32: UInt32
-    /// Offset del *local file header* de esta entrada dentro del ZIP.
-    /// Necesario para extraer o copiar los bytes comprimidos sin releer el índice.
-    public let localHeaderOffset: UInt64
-    /// Fecha de modificación (campo MS-DOS del ZIP), si es válida.
-    public let modificationDate: Date?
-    /// Hora MS-DOS en crudo (para la verificación de contraseña de ZipCrypto).
-    public let dosTime: UInt16
-    /// Bandera de propósito general (bit 0 = entrada cifrada).
-    public let flags: UInt16
-    /// Fuerza AES (1/2/3) si la entrada usa AES de WinZip; `nil` en otro caso.
-    public let aesStrength: UInt8?
-    /// Método de compresión real cuando la entrada es AES (el de cabecera es 99).
-    public let aesRealMethod: UInt16?
-
-    /// La entrada está cifrada (cualquier método).
-    public var isEncrypted: Bool { flags & 0x0001 != 0 }
-    /// Cifrada con AES (WinZip): método 99. Si no, y está cifrada, es ZipCrypto.
-    public var isAESEncrypted: Bool { isEncrypted && compressionMethod == 99 }
-}
-
 public enum ArchiveError: Error, Equatable {
     case notZipArchive
     case corruptCentralDirectory
@@ -147,14 +112,16 @@ public struct ZipReader: Sendable {
                 compressedSize: compSize,
                 uncompressedSize: uncompSize,
                 isDirectory: name.hasSuffix("/"),
-                compressionMethod: method,
-                crc32: crc,
-                localHeaderOffset: localOffset,
                 modificationDate: Self.dosDate(time: modTime, date: modDate),
-                dosTime: modTime,
-                flags: flags,
-                aesStrength: aesStrength,
-                aesRealMethod: aesRealMethod
+                isEncrypted: flags & 0x0001 != 0,
+                zip: ZipEntryInfo(
+                    compressionMethod: method,
+                    crc32: crc,
+                    localHeaderOffset: localOffset,
+                    dosTime: modTime,
+                    flags: flags,
+                    aesStrength: aesStrength,
+                    aesRealMethod: aesRealMethod)
             ))
             p = nameStart + nameLen + extraLen + commentLen
             if let progress, entryCount > 0 { progress(Double(index + 1) / Double(entryCount)) }

@@ -67,9 +67,7 @@ public enum Gzip {
         return [ArchiveEntry(
             path: storedFilename(data) ?? fallbackName,
             compressedSize: UInt64(data.count), uncompressedSize: size,
-            isDirectory: false, compressionMethod: 8, crc32: 0,
-            localHeaderOffset: 0, modificationDate: nil,
-            dosTime: 0, flags: 0, aesStrength: nil, aesRealMethod: nil)]
+            isDirectory: false, modificationDate: nil, isEncrypted: false)]
     }
 
     /// Nombre del fichero contenido (de la cabecera FNAME), si lo hay.

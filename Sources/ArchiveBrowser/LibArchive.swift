@@ -42,10 +42,9 @@ public enum LibArchive {
                 let mtime = archive_entry_mtime(entry)
                 entries.append(ArchiveEntry(
                     path: path, compressedSize: size, uncompressedSize: size,
-                    isDirectory: isDir, compressionMethod: 0, crc32: 0,
-                    localHeaderOffset: 0,
+                    isDirectory: isDir,
                     modificationDate: mtime == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(mtime)),
-                    dosTime: 0, flags: isEnc ? 1 : 0, aesStrength: nil, aesRealMethod: nil))
+                    isEncrypted: isEnc))
                 archive_read_data_skip(a)
             }
             if archive_read_has_encrypted_entries(a) > 0 { encrypted = true }

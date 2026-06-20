@@ -55,18 +55,25 @@ public enum Tar {
                 guard dataStart + Int(size) <= bytes.count else { throw TarError.corrupt }
                 entries.append(ArchiveEntry(
                     path: name, compressedSize: size, uncompressedSize: size,
-                    isDirectory: isDir, compressionMethod: 0, crc32: 0,
-                    localHeaderOffset: UInt64(dataStart), modificationDate: mtime,
-                    dosTime: 0, flags: 0, aesStrength: nil, aesRealMethod: nil))
+                    isDirectory: isDir, modificationDate: mtime,
+                    isEncrypted: false, dataOffset: UInt64(dataStart)))
             }
             p = dataStart + dataBlocks * blockSize
         }
         return entries
     }
 
+    /// `true` si `data` empieza con la firma ustar (es un TAR). Sirve para distinguir
+    /// un `.gz`/`.xz`/`.bz2` suelto de un `.tar.<x>` tras descomprimir.
+    public static func hasUstarMagic(_ data: Data) -> Bool {
+        guard data.count >= 263 else { return false }
+        let base = data.startIndex
+        return data[(base + 257)..<(base + 262)].elementsEqual("ustar".utf8)
+    }
+
     /// Datos (sin comprimir) de una entrada del TAR.
     public static func entryData(for entry: ArchiveEntry, in data: Data) throws -> Data {
-        let start = Int(entry.localHeaderOffset)
+        guard let start = entry.dataOffset.map(Int.init) else { throw TarError.corrupt }
         let end = start + Int(entry.uncompressedSize)
         guard end <= data.count else { throw TarError.corrupt }
         return data.subdata(in: start..<end)

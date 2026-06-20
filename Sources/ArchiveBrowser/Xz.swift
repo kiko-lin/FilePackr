@@ -29,9 +29,7 @@ public enum Xz {
             path: fallbackName,
             compressedSize: UInt64(data.count),
             uncompressedSize: uncompressedSize(of: data) ?? 0,
-            isDirectory: false, compressionMethod: 0, crc32: 0,
-            localHeaderOffset: 0, modificationDate: nil,
-            dosTime: 0, flags: 0, aesStrength: nil, aesRealMethod: nil)]
+            isDirectory: false, modificationDate: nil, isEncrypted: false)]
     }
 
     /// Tamaño descomprimido total leído del **Index** del `.xz` (suma de los registros),

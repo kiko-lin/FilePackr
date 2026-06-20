@@ -60,8 +60,6 @@ public enum Bzip2 {
         return [ArchiveEntry(
             path: fallbackName,
             compressedSize: UInt64(data.count), uncompressedSize: size,
-            isDirectory: false, compressionMethod: 0, crc32: 0,
-            localHeaderOffset: 0, modificationDate: nil,
-            dosTime: 0, flags: 0, aesStrength: nil, aesRealMethod: nil)]
+            isDirectory: false, modificationDate: nil, isEncrypted: false)]
     }
 }

@@ -27,13 +27,14 @@ public struct ZipExtractor: Sendable {
     /// Devuelve el contenido descomprimido de una entrada. Si está cifrada con
     /// ZipCrypto, hay que pasar `password`.
     public func extractedData(for entry: ArchiveEntry, in archive: Data, password: String? = nil) throws -> Data {
+        guard let zip = entry.zip else { throw ExtractError.corruptLocalHeader }
         var compressed = try rawCompressedData(for: entry, in: archive)
-        var method = entry.compressionMethod
+        var method = zip.compressionMethod
 
         if entry.isEncrypted {
             guard let password else { throw ExtractError.needsPassword }
             if entry.isAESEncrypted {
-                guard let strength = entry.aesStrength else { throw ExtractError.unsupportedEncryption }
+                guard let strength = zip.aesStrength else { throw ExtractError.unsupportedEncryption }
                 do {
                     compressed = Data(try ZipAES.decrypt([UInt8](compressed), password: password, strength: strength))
                 } catch ZipAESError.wrongPassword {
@@ -41,7 +42,7 @@ public struct ZipExtractor: Sendable {
                 } catch {
                     throw ExtractError.decompressionFailed
                 }
-                method = entry.aesRealMethod ?? 8
+                method = zip.aesRealMethod ?? 8
             } else {
                 compressed = try decryptZipCrypto(compressed, entry: entry, password: password)
             }
@@ -62,23 +63,24 @@ public struct ZipExtractor: Sendable {
 
     /// Descifra ZipCrypto: los primeros 12 bytes son la cabecera de verificación.
     private func decryptZipCrypto(_ data: Data, entry: ArchiveEntry, password: String) throws -> Data {
+        guard let zip = entry.zip else { throw ExtractError.wrongPassword }
         guard data.count >= 12 else { throw ExtractError.wrongPassword }
         var cipher = ZipCrypto(password: password)
         let decrypted = cipher.decrypt([UInt8](data))
         // El byte 11 de la cabecera verifica la contraseña: byte alto del CRC, o de
         // la hora MS-DOS si la entrada usa descriptor de datos (bit 3), como hace
         // el `zip` de Info-ZIP.
-        let hasDataDescriptor = entry.flags & 0x0008 != 0
+        let hasDataDescriptor = zip.flags & 0x0008 != 0
         let expected = hasDataDescriptor
-            ? UInt8((entry.dosTime >> 8) & 0xFF)
-            : UInt8((entry.crc32 >> 24) & 0xFF)
+            ? UInt8((zip.dosTime >> 8) & 0xFF)
+            : UInt8((zip.crc32 >> 24) & 0xFF)
         guard decrypted[11] == expected else { throw ExtractError.wrongPassword }
         return Data(decrypted[12...])
     }
 
     /// Localiza el inicio de los datos saltando el *local file header* variable.
     private func compressedDataStart(for entry: ArchiveEntry, in archive: Data) throws -> Int {
-        let base = Int(entry.localHeaderOffset)
+        guard let base = entry.zip.map({ Int($0.localHeaderOffset) }) else { throw ExtractError.corruptLocalHeader }
         // local header: firma(4) + 26 bytes fijos; longitudes en 26 (nombre) y 28 (extra).
         guard base + 30 <= archive.count else { throw ExtractError.corruptLocalHeader }
         let bytes = [UInt8](archive[base..<min(base + 30, archive.count)])

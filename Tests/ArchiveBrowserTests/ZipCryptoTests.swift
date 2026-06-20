@@ -50,8 +50,8 @@ final class ZipCryptoTests: XCTestCase {
                                    encryption: .aes256, password: "claveFuerte")
         let entry = try XCTUnwrap(try reader.listEntries(in: zip).first)
         XCTAssertTrue(entry.isAESEncrypted)
-        XCTAssertEqual(entry.aesStrength, 3)              // AES-256
-        XCTAssertEqual(entry.aesRealMethod, 8)            // deflate
+        XCTAssertEqual(entry.zip?.aesStrength, 3)              // AES-256
+        XCTAssertEqual(entry.zip?.aesRealMethod, 8)            // deflate
         XCTAssertEqual(try extractor.extractedData(for: entry, in: zip, password: "claveFuerte"), payload)
         XCTAssertThrowsError(try extractor.extractedData(for: entry, in: zip, password: "mala")) { error in
             XCTAssertEqual(error as? ExtractError, .wrongPassword)
@@ -98,5 +98,66 @@ final class ZipCryptoTests: XCTestCase {
 
         let out = try run("/usr/bin/unzip", ["-P", "secreta", "-p", zipURL.path, "doc.txt"])
         XCTAssertEqual(out, payload, "el unzip del sistema debe descifrar nuestro ZipCrypto")
+    }
+
+    // MARK: - Interop AES-256 (WinZip) contra `pyzipper`
+
+    private static let python = "/usr/bin/python3"
+
+    /// Salta si no hay forma de verificar AES con una herramienta externa. `pyzipper`
+    /// implementa el AES de WinZip (el mismo estándar que nuestro `ZipAES`).
+    private func skipUnlessPyzipper() throws {
+        try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: Self.python), "python3 no disponible")
+        let out = (try? run(Self.python, ["-c", "import pyzipper; print('ok')"])) ?? Data()
+        try XCTSkipUnless(String(decoding: out, as: UTF8.self).contains("ok"),
+            "Falta pyzipper para verificar la interop AES-256. Instala con `pip3 install pyzipper` y reejecuta `swift test`.")
+    }
+
+    /// Nuestro AES-256 debe poder abrirse desde otra implementación estándar (pyzipper).
+    func testPyzipperReadsOurAES256() throws {
+        try skipUnlessPyzipper()
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let payload = Data(String(repeating: "AES-256 interop FilePackr ñ áé ", count: 50).utf8)
+        let zip = try writer.build([ZipEntryInput(path: "secreto.txt", modifiedAt: nil, source: .data(payload))],
+                                   encryption: .aes256, password: "claveFuerte")
+        let zipURL = dir.appendingPathComponent("ours.zip"); try zip.write(to: zipURL)
+        let outURL = dir.appendingPathComponent("out.bin")
+
+        let script = """
+        import pyzipper, sys
+        with pyzipper.AESZipFile(sys.argv[1]) as zf:
+            zf.setpassword(b'claveFuerte')
+            data = zf.read('secreto.txt')
+        open(sys.argv[2], 'wb').write(data)
+        """
+        _ = try run(Self.python, ["-c", script, zipURL.path, outURL.path])
+        XCTAssertEqual(try Data(contentsOf: outURL), payload, "pyzipper debe descifrar nuestro AES-256")
+    }
+
+    /// Debemos poder leer un AES-256 de WinZip producido por otra implementación.
+    func testReadsAES256FromPyzipper() throws {
+        try skipUnlessPyzipper()
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let payload = Data(String(repeating: "datos cifrados por pyzipper ", count: 50).utf8)
+        let plainURL = dir.appendingPathComponent("plain.bin"); try payload.write(to: plainURL)
+        let zipURL = dir.appendingPathComponent("theirs.zip")
+
+        let script = """
+        import pyzipper, sys
+        data = open(sys.argv[2], 'rb').read()
+        with pyzipper.AESZipFile(sys.argv[1], 'w', compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES) as zf:
+            zf.setpassword(b'claveFuerte')
+            zf.writestr('doc.txt', data)
+        """
+        _ = try run(Self.python, ["-c", script, zipURL.path, plainURL.path])
+
+        let archive = try Data(contentsOf: zipURL)
+        let entry = try XCTUnwrap(try reader.listEntries(in: archive).first { $0.path == "doc.txt" })
+        XCTAssertTrue(entry.isAESEncrypted)
+        XCTAssertEqual(try extractor.extractedData(for: entry, in: archive, password: "claveFuerte"), payload,
+                       "debemos descifrar el AES-256 de pyzipper")
+        XCTAssertThrowsError(try extractor.extractedData(for: entry, in: archive, password: "mala"))
     }
 }

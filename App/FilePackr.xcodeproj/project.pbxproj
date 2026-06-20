@@ -9,16 +9,33 @@
 /* Begin PBXBuildFile section */
 		A97D1DD22FDEC223004667A6 /* ArchiveBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = A97D1DD12FDEC223004667A6 /* ArchiveBrowser */; };
 		A97D1DE12FDEC4C6004667A6 /* ArchiveBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = A97D1DE02FDEC4C6004667A6 /* ArchiveBrowser */; };
+		A9D45B022FE6F1C800242ADD /* ArchiveBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = A9D45B012FE6F1C800242ADD /* ArchiveBrowser */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A9D45AF72FE6F00900242ADD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A97D1DB62FDEC134004667A6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A97D1DBD2FDEC134004667A6;
+			remoteInfo = FilePackr;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A97D1DBE2FDEC134004667A6 /* FilePackr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FilePackr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A9D45AF32FE6F00900242ADD /* FilePackrTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FilePackrTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A97D1DC02FDEC134004667A6 /* FilePackr */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = FilePackr;
+			sourceTree = "<group>";
+		};
+		A9D45AF42FE6F00900242ADD /* FilePackrTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FilePackrTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +50,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A9D45AF02FE6F00900242ADD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A9D45B022FE6F1C800242ADD /* ArchiveBrowser in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -40,6 +65,8 @@
 			isa = PBXGroup;
 			children = (
 				A97D1DC02FDEC134004667A6 /* FilePackr */,
+				A9D45AF42FE6F00900242ADD /* FilePackrTests */,
+				A9D45B002FE6F1C800242ADD /* Frameworks */,
 				A97D1DBF2FDEC134004667A6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -48,8 +75,16 @@
 			isa = PBXGroup;
 			children = (
 				A97D1DBE2FDEC134004667A6 /* FilePackr.app */,
+				A9D45AF32FE6F00900242ADD /* FilePackrTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A9D45B002FE6F1C800242ADD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -79,6 +114,30 @@
 			productReference = A97D1DBE2FDEC134004667A6 /* FilePackr.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A9D45AF22FE6F00900242ADD /* FilePackrTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9D45AFB2FE6F00900242ADD /* Build configuration list for PBXNativeTarget "FilePackrTests" */;
+			buildPhases = (
+				A9D45AEF2FE6F00900242ADD /* Sources */,
+				A9D45AF02FE6F00900242ADD /* Frameworks */,
+				A9D45AF12FE6F00900242ADD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A9D45AF82FE6F00900242ADD /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A9D45AF42FE6F00900242ADD /* FilePackrTests */,
+			);
+			name = FilePackrTests;
+			packageProductDependencies = (
+				A9D45B012FE6F1C800242ADD /* ArchiveBrowser */,
+			);
+			productName = FilePackrTests;
+			productReference = A9D45AF32FE6F00900242ADD /* FilePackrTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -92,6 +151,10 @@
 					A97D1DBD2FDEC134004667A6 = {
 						CreatedOnToolsVersion = 26.5;
 					};
+					A9D45AF22FE6F00900242ADD = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = A97D1DBD2FDEC134004667A6;
+					};
 				};
 			};
 			buildConfigurationList = A97D1DB92FDEC134004667A6 /* Build configuration list for PBXProject "FilePackr" */;
@@ -104,7 +167,7 @@
 			mainGroup = A97D1DB52FDEC134004667A6;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				A97D1DDF2FDEC4C6004667A6 /* XCLocalSwiftPackageReference "../../Cifrador" */,
+				A97D1DDF2FDEC4C6004667A6 /* XCLocalSwiftPackageReference "../../FilePackr" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A97D1DBF2FDEC134004667A6 /* Products */;
@@ -112,12 +175,20 @@
 			projectRoot = "";
 			targets = (
 				A97D1DBD2FDEC134004667A6 /* FilePackr */,
+				A9D45AF22FE6F00900242ADD /* FilePackrTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A97D1DBC2FDEC134004667A6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9D45AF12FE6F00900242ADD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -134,7 +205,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A9D45AEF2FE6F00900242ADD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A9D45AF82FE6F00900242ADD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A97D1DBD2FDEC134004667A6 /* FilePackr */;
+			targetProxy = A9D45AF72FE6F00900242ADD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A97D1DC72FDEC135004667A6 /* Debug */ = {
@@ -317,6 +403,46 @@
 			};
 			name = Release;
 		};
+		A9D45AF92FE6F00900242ADD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J5HQ9TN2HX;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kiko..FilePackrTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FilePackr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FilePackr";
+			};
+			name = Debug;
+		};
+		A9D45AFA2FE6F00900242ADD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J5HQ9TN2HX;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kiko..FilePackrTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FilePackr.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FilePackr";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -338,12 +464,21 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A9D45AFB2FE6F00900242ADD /* Build configuration list for PBXNativeTarget "FilePackrTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9D45AF92FE6F00900242ADD /* Debug */,
+				A9D45AFA2FE6F00900242ADD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		A97D1DDF2FDEC4C6004667A6 /* XCLocalSwiftPackageReference "../../Cifrador" */ = {
+		A97D1DDF2FDEC4C6004667A6 /* XCLocalSwiftPackageReference "../../FilePackr" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../Cifrador;
+			relativePath = ../../FilePackr;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -354,6 +489,11 @@
 		};
 		A97D1DE02FDEC4C6004667A6 /* ArchiveBrowser */ = {
 			isa = XCSwiftPackageProductDependency;
+			productName = ArchiveBrowser;
+		};
+		A9D45B012FE6F1C800242ADD /* ArchiveBrowser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A97D1DDF2FDEC4C6004667A6 /* XCLocalSwiftPackageReference "../../FilePackr" */;
 			productName = ArchiveBrowser;
 		};
 /* End XCSwiftPackageProductDependency section */

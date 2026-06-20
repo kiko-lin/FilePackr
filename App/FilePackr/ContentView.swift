@@ -229,7 +229,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(onClose: { showingSettings = false })
         }
-        .confirmationDialog(loc("close.title", doc.displayName),
+        .confirmationDialog(loc("close.title", documentDisplayName),
                             isPresented: $confirmingClose, titleVisibility: .visible) {
             Button(loc("close.discard"), role: .destructive) { doc.close() }
             Button(loc("button.cancel"), role: .cancel) {}
@@ -339,6 +339,24 @@ struct ContentView: View {
         }
     }
 
+    /// Nombre a mostrar del documento: el del fichero guardado, o "Sin título" (en el
+    /// idioma actual) mientras no se haya guardado. La i18n vive en la vista, no en el modelo.
+    private var documentDisplayName: String {
+        doc.sourceURL == nil ? loc("doc.untitled") : doc.documentName
+    }
+
+    /// Traduce el token de progreso del modelo. Resolver el nombre vacío a "Sin título"
+    /// reproduce el antiguo `displayName` para un documento aún sin guardar.
+    private func progressLabel(_ kind: ProgressKind) -> String {
+        switch kind {
+        case .opening(let name): return loc("progress.opening", name)
+        case .extracting: return loc("progress.extracting")
+        case .compressing(let name): return loc("progress.compressing", name.isEmpty ? loc("doc.untitled") : name)
+        case .encrypting(let name): return loc("progress.encrypting", name.isEmpty ? loc("doc.untitled") : name)
+        case .splitting: return loc("progress.splitting")
+        }
+    }
+
     @ViewBuilder
     private var progressOverlay: some View {
         if let progress = doc.progress {
@@ -346,7 +364,7 @@ struct ContentView: View {
                 // Fondo opaco: oculta por completo lo que haya debajo.
                 Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
                 VStack(spacing: 14) {
-                    Text(progress.label)
+                    Text(progressLabel(progress.kind))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     if let fraction = progress.fraction {
@@ -386,7 +404,7 @@ struct ContentView: View {
             Image(nsImage: NSWorkspace.shared.icon(for: .zip))
                 .resizable()
                 .frame(width: 16, height: 16)
-            Text(doc.displayName)
+            Text(documentDisplayName)
                 .fontWeight(.medium)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -450,7 +468,7 @@ struct ContentView: View {
             .disabled(doc.selection == nil)
             .help(loc("toolbar.delete.help"))
 
-            Button { editGuarded { doc.createFolder() } } label: {
+            Button { editGuarded { doc.createFolder(defaultName: loc("doc.newFolder")) } } label: {
                 Label(loc("toolbar.newFolder"), systemImage: "folder.badge.plus")
             }
             .help(loc("toolbar.newFolder.help"))
@@ -588,7 +606,7 @@ struct ContentView: View {
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = format == .zip ? [.zip] : []
-        panel.nameFieldStringValue = "\(strippedBaseName(doc.displayName)).\(format.fileExtension)"
+        panel.nameFieldStringValue = "\(strippedBaseName(documentDisplayName)).\(format.fileExtension)"
         panel.prompt = loc("panel.save")
         if panel.runModal() == .OK, let url = panel.url {
             Task { await runAsync {
@@ -600,7 +618,7 @@ struct ContentView: View {
 
     /// Nombre base sin la extensión de archivo conocida (zip/tar/tar.gz/tgz/gz).
     private func strippedBaseName(_ name: String) -> String {
-        if name == ArchiveDocument.untitledName { return name }
+        if name == loc("doc.untitled") { return name }
         let lower = name.lowercased()
         for ext in [".tar.gz", ".tgz", ".tar", ".zip", ".gz"] where lower.hasSuffix(ext) {
             return String(name.dropLast(ext.count))

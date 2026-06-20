@@ -9,8 +9,7 @@ App de macOS (SwiftUI + AppKit) para gestionar archivos comprimidos **ZIP**:
 abrir/navegar sin descomprimir, editar, extraer, previsualizar y **cifrar con
 contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 
-- **Repo local**: `~/Desktop/Repos/Cifrador` (la carpeta se llama `Cifrador` por
-  historia; la app y el producto son **FilePackr**).
+- **Repo local**: `~/Desktop/Repos/FilePackr` (la app y el producto son **FilePackr**).
 - **Remoto git**: `git@github.com:kiko-lin/packr.git` (SSH). El entorno del agente
   **no tiene red** → los `git push` los hace el usuario.
 - **Plataforma**: macOS 26 (Tahoe), Swift 6.3, Xcode 26. App target `FilePackr`,
@@ -18,9 +17,18 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 
 ## Cómo trabajar (importante)
 
-- **Tests del motor**: `swift test` (rápido, sin Xcode). Hay tests de interop que
-  llaman a `/usr/bin/zip` y `/usr/bin/unzip` (ZipCrypto).
-- **Compilar la app**: `xcodebuild -project Cifrador/FilePackr.xcodeproj -scheme FilePackr -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build`.
+- **Tests del motor**: `swift test` (rápido, sin Xcode). 61 tests.
+- **Tests de la app** (modelo `ArchiveDocument`): target `FilePackrTests` en Xcode,
+  se corren con **⌘U** (o `xcodebuild test`). NO los recoge `swift test` (viven en el
+  `.pbxproj`, no en el paquete). 5 tests.
+- **Tests de interop** (verifican compatibilidad con herramientas externas): llaman a
+  un binario del sistema y se **saltan solos** (`XCTSkipUnless`) si no está, de modo que
+  `swift test` siempre queda en verde sin instalar nada (exit 0; salen como *skipped*).
+  - ZipCrypto: `/usr/bin/zip` y `/usr/bin/unzip` (Info-ZIP, casi siempre presentes).
+  - **AES-256**: contra `pyzipper` (Python). Para activarlos: `pip3 install pyzipper`
+    y reejecutar `swift test`. Patrón a seguir para futuros tests de interop: guardar
+    con `XCTSkipUnless` al principio del test, nunca asumir que la herramienta está.
+- **Compilar la app**: `xcodebuild -project App/FilePackr.xcodeproj -scheme FilePackr -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build`.
   - El agente **no puede ejecutar la GUI** ni verificar comportamiento visual:
     solo compilar. El usuario prueba en Xcode (⌘R) y reporta.
   - ⚠️ **No compiles con `CODE_SIGNING_ALLOWED=NO` en el DerivedData de Xcode**:
@@ -42,16 +50,44 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 
 ## Arquitectura (dónde está cada cosa)
 
-- Motor (paquete `CifradorCore`, `Sources/`):
+- Motor (paquete `FilePackrCore`, `Sources/`):
   - `ArchiveBrowser`: `ZipReader` (índice + ZIP64; **solo lee la cola + central
     directory**, no copia el fichero), `ZipExtractor` (extrae/descifra),
     `ZipWriter` (escribe; `build` en memoria y `write` en streaming a `FileHandle`;
     ZIP64; `ZipEncryption .none/.zipCrypto/.aes256`), `ZipCrypto`, `ZipAES`,
-    `Deflate` (framework Compression), `CRC32`. También `Tar`, `Gzip`, `Volumes`.
-- App (`Cifrador/FilePackr/`):
-  - `ArchiveDocument` (`@MainActor ObservableObject`): árbol `FileNode`, abrir
-    (`openArchive` async), guardar (`save(to:encryption:password:)` en streaming),
-    extraer, mover/renombrar, plan de exportación (`ExportPlan`), progreso.
+    `Deflate` (framework Compression), `CRC32`. También `Tar`, `Gzip`, `Xz`,
+    `Bzip2`, `LibArchive`, `Volumes`.
+  - **`ArchiveEntry`** (tipo común a todos los formatos): campos **neutrales** (ruta,
+    tamaños, fecha, `isDirectory`, `isEncrypted`) + `dataOffset?` (offset de datos, lo
+    usa TAR) + `zip: ZipEntryInfo?` (método/CRC/local header/AES…, presente **solo** en
+    entradas de ZIP). Ningún otro formato inventa campos de ZIP a cero.
+  - **`ArchiveFormat`** (enum del formato; capacidades `supportsEncryption`/
+    `isWritable`/`usesLibArchive`…, `fileExtension`, y detección por nombre
+    `detect(from:)`/`isOpenableArchive(_:)`). El `nameKey` (localización) vive en la
+    app (`ArchiveFormat+App.swift`).
+  - **`ArchiveCodec`** (protocolo + registro `ArchiveFormat.codec`): centraliza
+    **leer** (`open` → `ArchiveReadResult`, refina `.gz`→`.tar.gz`) y **extraer una
+    entrada** (`entryData`) de cada formato. Antes era un `switch` repetido por el
+    documento. Codecs: `ZipCodec`, `TarCodec`, `SingleFileCodec`, `LibArchiveCodec`.
+    La **escritura** no va por aquí (rutas dispares: ver `ArchiveSaver`).
+  - **`VolumeStore`**: volúmenes sobre disco (`parts`/`gather`/`removeContinuations`/
+    `split(file:)` y `joinToTemporaryFile` —concatena las partes a un temporal mapeado
+    sin cargarlas en RAM), sobre el esquema de nombres de `Volumes`.
+  - Detección de formato en `ArchiveFormat`: `detectByExtension` (por nombre),
+    `detectByMagic` (por firma) y `detect(from:contents:)` (extensión y, si no decide,
+    firma). `openArchive` y la decisión abrir-vs-añadir caen a la firma si la extensión falla.
+- App (`App/FilePackr/`):
+  - `ArchiveDocument` (`@MainActor ObservableObject`): árbol `FileNode` (en
+    `FileNode.swift`), abrir (`openArchive` async, delega en `format.codec`),
+    extraer (`format.codec.entryData`), mover/renombrar, progreso. Para guardar,
+    **ensambla un `SavePayload`** (`makeSavePayload`, lee el árbol) y delega en
+    `ArchiveSaver`.
+  - **`ArchiveSaver`** (`ArchiveSaver.swift`): codifica un `SavePayload` (`Sendable`)
+    a disco en segundo plano (streaming ZIP, `Data` para tar/gz/xz/bz2, libarchive a
+    fichero). El documento decide *qué* escribir y *colocar* (fichero único o
+    volúmenes vía `VolumeStore`); el saver decide *cómo* codificar.
+  - `ExportPlan` (`ExportPlan.swift`): instantánea `Sendable` de un nodo para
+    extraer en segundo plano al soltar en el Finder.
   - `ArchiveOutlineView` (`NSViewRepresentable` + `Coordinator`): el navegador
     `NSOutlineView` — selección, columnas ordenables, arrastre (mover/extraer/
     añadir), Quick Look (barra espaciadora), renombrado en línea, menú contextual.
@@ -96,8 +132,10 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   y `.usesLibArchive`. rar se excluye del diálogo Guardar.
 - **iso/cpio/xar/lha/cab** (misma libarchive): **lectura** de los cinco; **escritura**
   de iso y xar (`LibArchive.WriteFormat`). cpio/lha/cab son solo lectura. Añadir más
-  formatos = un `case` en `ArchiveFormat` + detección + localización (la lectura ya
-  va por `support_format_all`; la escritura necesita su `archive_write_set_format_*`).
+  formatos = un `case` en `ArchiveFormat` + su `case` en el registro `ArchiveFormat.codec`
+  + detección (`ArchiveFormat.detect`) + `nameKey` (localización) + el `case` de
+  escritura en `makeSavePayload`/`ArchiveSaver` si es escribible (la lectura por
+  libarchive ya va por `support_format_all`; la escritura necesita su `archive_write_set_format_*`).
 - **Volúmenes** (división por bytes): `Volumes.swift` (split/join + naming, testeado).
   Esquema `nombre.zip`, `nombre_001.zip`, `nombre_002.zip`… (1ª parte = nombre base).
   Diálogo Guardar con toggle "Dividir en volúmenes" + tamaño/unidad, por formato
@@ -138,9 +176,11 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 
 ## TODO (objetivos pendientes, en orden lógico)
 
-- [ ] **Verificar interop AES-256 en Keka/7-Zip** (lo prueba el usuario; el agente
-      no tiene esas herramientas). Si falla, revisar `ZipAES` (PBKDF2/CTR/HMAC,
-      campo extra 0x9901, AE-2 CRC=0).
+- [x] ~~**Verificar interop AES-256**~~ (hecho 2026-06-20): **verificado bidireccional**
+      contra `pyzipper` — ambos sentidos pasan. Test automático en `ZipCryptoTests`
+      (`testPyzipperReadsOurAES256` / `testReadsAES256FromPyzipper`), que se **salta** si
+      falta la librería. Reejecutar: `pip3 install pyzipper && swift test`. Si alguna vez
+      fallara, revisar `ZipAES` (PBKDF2/CTR/HMAC, campo extra 0x9901, AE-2 CRC=0).
 - [x] ~~tar/gz/tar.gz en Swift puro~~ (Tier 1, hecho — ver "Hecho").
 - [x] ~~xz/tar.xz~~ (Tier 2, hecho — `Compression` LZMA, ver "Hecho").
 - [x] ~~bzip2/tar.bz2~~ (Tier 3, hecho — `libbz2` del sistema, ver "Hecho").

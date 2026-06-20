@@ -186,7 +186,7 @@ extension ArchiveOutlineView {
                 case "csize":
                     ascending = (a.compressedSize ?? 0) < (b.compressedSize ?? 0)
                 case "kind":
-                    ascending = a.kindDescription.localizedStandardCompare(b.kindDescription) == .orderedAscending
+                    ascending = kindDescription(for: a).localizedStandardCompare(kindDescription(for: b)) == .orderedAscending
                 default:
                     ascending = a.name.localizedStandardCompare(b.name) == .orderedAscending
                 }
@@ -222,7 +222,7 @@ extension ArchiveOutlineView {
                 return cell
             case .kindColumn?:
                 let cell = textCell(outlineView, .kindColumn, alignment: .left, mono: false)
-                cell.textField?.stringValue = node.kindDescription
+                cell.textField?.stringValue = kindDescription(for: node)
                 return cell
             case .csizeColumn?:
                 let cell = textCell(outlineView, .csizeColumn, alignment: .right, mono: true)
@@ -306,6 +306,18 @@ extension ArchiveOutlineView {
             let ext = (node.name as NSString).pathExtension
             guard !ext.isEmpty else { return .data }
             return UTType(filenameExtension: ext) ?? .data
+        }
+
+        /// Texto de la columna "Clase" ("Carpeta", "Imagen PNG"…), como en el Finder.
+        /// Es formateo de presentación, así que vive en la vista, no en `FileNode`.
+        private func kindDescription(for node: FileNode) -> String {
+            if node.isDirectory { return Localizer.shared("kind.folder") }
+            let ext = (node.name as NSString).pathExtension
+            if !ext.isEmpty, let type = UTType(filenameExtension: ext), let desc = type.localizedDescription {
+                return desc.prefix(1).uppercased() + desc.dropFirst()
+            }
+            return ext.isEmpty ? Localizer.shared("kind.document")
+                               : Localizer.shared("kind.documentExt", ext.uppercased())
         }
 
         // MARK: - Selección

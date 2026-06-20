@@ -33,7 +33,7 @@ final class ZipEngineTests: XCTestCase {
         XCTAssertEqual(Set(entries.map(\.path)), ["nota.txt", "datos/", "datos/raw.bin"])
 
         let nota = try XCTUnwrap(entries.first { $0.path == "nota.txt" })
-        XCTAssertEqual(nota.compressionMethod, 8, "el texto repetido debe comprimirse con deflate")
+        XCTAssertEqual(nota.zip?.compressionMethod, 8, "el texto repetido debe comprimirse con deflate")
         XCTAssertEqual(try extractor.extractedData(for: nota, in: zip), texto)
 
         let raw = try XCTUnwrap(entries.first { $0.path == "datos/raw.bin" })
@@ -44,7 +44,7 @@ final class ZipEngineTests: XCTestCase {
         let data = Data("verificación de integridad".utf8)
         let zip = try writer.build([dataInput("x.txt", data)])
         let entry = try XCTUnwrap(try reader.listEntries(in: zip).first)
-        XCTAssertEqual(entry.crc32, CRC32.checksum(data))
+        XCTAssertEqual(entry.zip?.crc32, CRC32.checksum(data))
     }
 
     func testWritesAndReadsBackModificationDate() throws {
@@ -84,7 +84,7 @@ final class ZipEngineTests: XCTestCase {
         let rawBytes = try extractor.rawCompressedData(for: source, in: archive)
         let rebuilt = try writer.build([
             ZipEntryInput(path: source.path, modifiedAt: source.modificationDate,
-                          source: .rawEntry(method: source.compressionMethod, crc32: source.crc32,
+                          source: .rawEntry(method: source.zip!.compressionMethod, crc32: source.zip!.crc32,
                                             compressed: rawBytes, uncompressedSize: source.uncompressedSize))
         ])
 
