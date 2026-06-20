@@ -3,7 +3,7 @@
 Dos capas: un **motor ZIP sin UI** (paquete Swift, testeable por CLI) y una **app**
 SwiftUI/AppKit que lo consume.
 
-## Motor — `Sources/` (paquete `CifradorCore`)
+## Motor — `Sources/` (paquete `FilePackrCore`)
 
 `ArchiveBrowser` (sin dependencias de UI):
 
@@ -27,7 +27,7 @@ Tests en `Tests/` (`ZipEngineTests`, `ZipCryptoTests`, `CryptoCoreTests`), con
 fixtures en `Tests/ArchiveBrowserTests/Fixtures` e **interop real** contra
 `zip`/`unzip`.
 
-## App — `Cifrador/FilePackr/`
+## App — `App/FilePackr/`
 
 - **`ArchiveDocument`** (`@MainActor ObservableObject`) — el modelo: árbol editable
   de `FileNode` (cada uno `folder` / `diskFile(url)` / `zipEntry(entry)`), abrir

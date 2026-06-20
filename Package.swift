@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "CifradorCore",
+    name: "FilePackrCore",
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "ArchiveBrowser", targets: ["ArchiveBrowser"]),

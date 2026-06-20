@@ -34,8 +34,8 @@ Ver [`docs/encryption.md`](docs/encryption.md) y [`docs/architecture.md`](docs/a
 ## Arquitectura
 
 ```
-Cifrador/                         (raíz del repo; remoto git: github.com/kiko-lin/packr)
-├── Package.swift                 paquete "CifradorCore" (lógica, testeable por CLI)
+FilePackr/                        (raíz del repo; remoto git: github.com/kiko-lin/packr)
+├── Package.swift                 paquete "FilePackrCore" (lógica, testeable por CLI)
 ├── Sources/
 │   ├── ArchiveBrowser/           motor ZIP (sin UI)
 │   │   ├── ZipReader.swift       lee el índice (central directory) + ZIP64
@@ -47,7 +47,7 @@ Cifrador/                         (raíz del repo; remoto git: github.com/kiko-l
 │   │   └── CRC32.swift
 │   └── CryptoCore/               AES-256-GCM + PBKDF2 (formato propio .fpkz, legacy)
 ├── Tests/                        26+ tests (swift test), con interop contra zip/unzip
-└── Cifrador/                     proyecto Xcode de la app
+└── App/                          proyecto Xcode de la app
     ├── FilePackr.xcodeproj
     └── FilePackr/                fuentes de la app (SwiftUI/AppKit)
         ├── FilePackrApp.swift
@@ -70,9 +70,9 @@ swift test
 La app (requiere Xcode, macOS):
 
 ```bash
-open Cifrador/FilePackr.xcodeproj   # luego ⌘R (esquema FilePackr)
+open App/FilePackr.xcodeproj   # luego ⌘R (esquema FilePackr)
 # o por línea de comandos:
-xcodebuild -project Cifrador/FilePackr.xcodeproj -scheme FilePackr \
+xcodebuild -project App/FilePackr.xcodeproj -scheme FilePackr \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
