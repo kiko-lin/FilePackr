@@ -336,12 +336,26 @@ extension ArchiveOutlineView {
             isSyncingSelection = true
             defer { isSyncingSelection = false }
             if let id = doc.selection, let node = doc.node(with: id) {
+                expandAncestors(of: node, in: outline)   // revelar (p. ej. carpeta recién creada)
                 let row = outline.row(forItem: node)
                 if row >= 0, outline.selectedRow != row {
                     outline.selectRowIndexes([row], byExtendingSelection: false)
+                    outline.scrollRowToVisible(row)
                 }
             } else if outline.selectedRow >= 0 {
                 outline.deselectAll(nil)
+            }
+        }
+
+        /// Despliega las carpetas ancestro de `node` (de la raíz hacia abajo) para que sea
+        /// visible. En el caso normal ya están desplegadas, así que es un no-op.
+        private func expandAncestors(of node: FileNode, in outline: NSOutlineView) {
+            var ancestors: [FileNode] = []
+            var parent = node.parent
+            while let current = parent { ancestors.append(current); parent = current.parent }
+            for ancestor in ancestors.reversed() {
+                outline.expandItem(ancestor)
+                expandedNodeIDs.insert(ancestor.id)
             }
         }
 

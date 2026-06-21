@@ -215,6 +215,8 @@ struct ContentView: View {
     @State private var volumeSizeValue: Double = 100
     @State private var volumeUnit: VolumeUnit = .megabytes
     @State private var showingEntryPassword = false
+    /// Edición a ejecutar tras desbloquear (si se pidió contraseña al pulsarla).
+    @State private var pendingEditAction: (() -> Void)?
     @State private var entryPasswordInput = ""
     @State private var entryPasswordWrong = false
     @State private var showingOpenPassword = false
@@ -288,7 +290,7 @@ struct ContentView: View {
                           password: $entryPasswordInput,
                           note: entryPasswordWrong ? loc("password.wrong") : nil,
                           onConfirm: { confirmEntryPassword() },
-                          onCancel: { showingEntryPassword = false })
+                          onCancel: { showingEntryPassword = false; pendingEditAction = nil })
         }
         .sheet(item: $extractRequest) { req in
             ExtractOptionsSheet(nodeName: req.name,
@@ -309,7 +311,7 @@ struct ContentView: View {
                           onCancel: { showingOpenPassword = false; doc.close() })
         }
         .onChange(of: doc.requiresEntryPassword) { _, requires in
-            if requires { promptEntryPassword() }
+            if requires { pendingEditAction = nil; promptEntryPassword() }
         }
         .onChange(of: doc.requiresOpenPassword) { _, requires in
             if requires {
@@ -331,6 +333,9 @@ struct ContentView: View {
     private func confirmEntryPassword() {
         if doc.provideEntryPassword(entryPasswordInput) {
             showingEntryPassword = false
+            let action = pendingEditAction      // ya desbloqueado: ejecutar lo pendiente
+            pendingEditAction = nil
+            action?()
         } else {
             entryPasswordWrong = true
             entryPasswordInput = ""
@@ -517,20 +522,27 @@ struct ContentView: View {
 
     // MARK: - Acciones con paneles del sistema
 
-    /// Ejecuta una edición; si el archivo está cifrado y bloqueado, pide la contraseña.
-    private func editGuarded(_ action: () -> Void) {
-        if doc.isLocked { promptEntryPassword() } else { action() }
+    /// Ejecuta una edición; si el archivo está cifrado y bloqueado, pide la contraseña y,
+    /// al desbloquear, ejecuta la acción (en vez de descartarla).
+    private func editGuarded(_ action: @escaping () -> Void) {
+        if doc.isLocked {
+            pendingEditAction = action
+            promptEntryPassword()
+        } else {
+            action()
+        }
     }
 
     private func addAction() {
-        if doc.isLocked { promptEntryPassword(); return }
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = true
-        panel.prompt = loc("panel.add")
-        if panel.runModal() == .OK {
-            handleOpen(panel.urls)
+        editGuarded {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = true
+            panel.canChooseDirectories = true
+            panel.allowsMultipleSelection = true
+            panel.prompt = loc("panel.add")
+            if panel.runModal() == .OK {
+                handleOpen(panel.urls)
+            }
         }
     }
 
