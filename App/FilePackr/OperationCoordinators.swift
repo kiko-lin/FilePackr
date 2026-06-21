@@ -10,12 +10,13 @@ import ArchiveBrowser
 // ejecución async con su manejo de error) se pasan por llamada, para no acoplar un
 // @StateObject dentro de otro ni sacar el manejo de error de la vista.
 
-/// Conflicto al extraer: ya existe un fichero/carpeta con ese nombre en destino.
+/// Conflicto al extraer: ya existe un fichero/carpeta con ese nombre en destino. El nombre
+/// libre alternativo ("conservar ambos") se calcula al resolver, no aquí, para que tenga en
+/// cuenta lo que se haya extraído antes en el mismo lote.
 struct ExtractionConflict: Identifiable {
     let id = UUID()
     let plan: ExportPlan
     let destination: URL    // ruta que ya existe
-    let alternative: URL    // nombre libre propuesto (p.ej. "3d_2.svg")
 }
 
 /// Conflicto al añadir: ya existe un elemento con ese nombre en la carpeta destino.
@@ -165,8 +166,7 @@ final class ExtractCoordinator: ObservableObject {
         let plan = queue.removeFirst()
         let dest = destinationFolder.appendingPathComponent(plan.name)
         if FileManager.default.fileExists(atPath: dest.path) {
-            conflict = ExtractionConflict(plan: plan, destination: dest,
-                                          alternative: doc.conflictFreeURL(for: dest))
+            conflict = ExtractionConflict(plan: plan, destination: dest)
         } else {
             Task {
                 await perform(plan, dest, false)
@@ -175,11 +175,12 @@ final class ExtractCoordinator: ObservableObject {
         }
     }
 
-    /// Resuelve el conflicto: sobrescribe (destino existente) o guarda como (alternativa),
-    /// extrae y sigue con la cola.
+    /// Resuelve el conflicto: sobrescribe el destino existente, o conserva ambos extrayendo
+    /// a un nombre libre **recalculado ahora** (`conflictFreeURL` itera hasta uno que no
+    /// exista, así cubre también lo creado antes en el mismo lote). Luego sigue con la cola.
     func resolveConflict(_ item: ExtractionConflict, overwrite: Bool,
                          doc: ArchiveDocument, perform: @escaping Perform) {
-        let dest = overwrite ? item.destination : item.alternative
+        let dest = overwrite ? item.destination : doc.conflictFreeURL(for: item.destination)
         conflict = nil
         Task {
             await perform(item.plan, dest, overwrite)

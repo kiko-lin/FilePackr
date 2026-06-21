@@ -71,10 +71,12 @@ struct ContentView: View {
             Button(loc("conflict.overwrite"), role: .destructive) {
                 extractCoord.resolveConflict(item, overwrite: true, doc: doc, perform: runExtraction)
             }
-            Button(loc("conflict.saveAs", item.alternative.lastPathComponent)) {
+            Button(loc("conflict.keepBoth")) {
                 extractCoord.resolveConflict(item, overwrite: false, doc: doc, perform: runExtraction)
             }
             Button(loc("button.cancel"), role: .cancel) { extractCoord.cancelConflict() }
+        } message: { item in
+            Text(loc("conflict.message", item.destination.lastPathComponent))
         }
         .confirmationDialog(
             addCoord.conflict.map { loc("add.conflict.title", $0.name) } ?? "",

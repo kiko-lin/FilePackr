@@ -161,8 +161,9 @@ private extension Localizer {
 
         // Extraction conflict
         "conflict.title": "“%@” already exists in the destination",
+        "conflict.message": "An item named “%@” already exists in the destination. Do you want to overwrite it or keep both?",
         "conflict.overwrite": "Overwrite",
-        "conflict.saveAs": "Save as %@",
+        "conflict.keepBoth": "Keep both",
 
         // Add conflict (same name already in the archive)
         "add.conflict.title": "“%@” already exists",
@@ -306,8 +307,9 @@ private extension Localizer {
 
         // Extraction conflict
         "conflict.title": "Ya existe «%@» en el destino",
+        "conflict.message": "Ya hay un elemento llamado «%@» en el destino. ¿Quieres sobrescribirlo o conservar ambos?",
         "conflict.overwrite": "Sobrescribir",
-        "conflict.saveAs": "Guardar como %@",
+        "conflict.keepBoth": "Conservar ambos",
 
         // Add conflict (mismo nombre ya en el archivo)
         "add.conflict.title": "Ya existe «%@»",
