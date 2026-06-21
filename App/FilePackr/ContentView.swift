@@ -3,44 +3,16 @@ import AppKit
 import UniformTypeIdentifiers
 import ArchiveBrowser
 
-/// Conflicto al extraer: ya existe un fichero/carpeta con ese nombre en destino.
-private struct ExtractionConflict: Identifiable {
-    let id = UUID()
-    let plan: ExportPlan
-    let destination: URL    // ruta que ya existe
-    let alternative: URL    // nombre libre propuesto (p.ej. "3d_2.svg")
-}
-
-/// Conflicto al añadir: ya existe un elemento con ese nombre en la carpeta destino.
-private struct AddConflict: Identifiable {
-    let id = UUID()
-    let url: URL
-    let name: String
-    let target: FileNode?
-}
-
-/// Lo que se va a extraer: uno o varios nodos, o **todo** el archivo. Los planes se
-/// construyen al confirmar (cuando ya tenemos la contraseña, si hacía falta). Con varios
-/// elementos, cada uno se extrae al destino y resuelve sus conflictos por separado.
-private struct ExtractRequest: Identifiable {
-    let id = UUID()
-    let name: String
-    let makePlans: () -> [ExportPlan]
-}
-
 /// Gestor de archivos comprimidos: barra superior + barra de documento + cuerpo
 /// central (zona de arrastre cuando está vacío, o el navegador `NSOutlineView`).
 struct ContentView: View {
     @EnvironmentObject private var loc: Localizer
     @EnvironmentObject private var settings: AppSettings
     @StateObject private var doc = ArchiveDocument()
+    /// Máquinas de estado de las colas de añadir y extraer (cola + diálogo de conflicto).
+    @StateObject private var addCoord = AddCoordinator()
+    @StateObject private var extractCoord = ExtractCoordinator()
     @State private var errorMessage: String?
-    @State private var conflict: ExtractionConflict?
-    /// Conflicto de nombre al añadir, y la cola de URLs pendientes con su carpeta destino.
-    @State private var addConflict: AddConflict?
-    @State private var addQueue: [URL] = []
-    @State private var addTarget: FileNode?
-    @State private var addedIDs: [FileNode.ID] = []
     @State private var showingSaveOptions = false
     /// La hoja de opciones está abierta para **Exportar** (copia aparte) en vez de Guardar.
     @State private var optionsSheetIsExport = false
@@ -61,14 +33,6 @@ struct ContentView: View {
     @State private var showingOpenPassword = false
     @State private var openPasswordInput = ""
     @State private var openPasswordWrong = false
-    @State private var extractRequest: ExtractRequest?
-    @State private var extractDestination = FileManager.default.homeDirectoryForCurrentUser
-    @State private var extractPassword = ""
-    @State private var extractPasswordWrong = false
-    /// Cola de planes pendientes de extraer (extracción en lote) y la carpeta destino
-    /// común, capturada al confirmar. Se procesan uno a uno encadenando los conflictos.
-    @State private var extractQueue: [ExportPlan] = []
-    @State private var extractDestinationFolder = FileManager.default.homeDirectoryForCurrentUser
 
     var body: some View {
         VStack(spacing: 0) {
@@ -99,55 +63,33 @@ struct ContentView: View {
             Button(loc("button.ok")) {}
         } message: { Text($0) }
         .confirmationDialog(
-            conflict.map { loc("conflict.title", $0.destination.lastPathComponent) } ?? "",
-            isPresented: Binding(get: { conflict != nil },
-                                 set: { if !$0 { conflict = nil } }),
-            presenting: conflict
+            extractCoord.conflict.map { loc("conflict.title", $0.destination.lastPathComponent) } ?? "",
+            isPresented: Binding(get: { extractCoord.conflict != nil },
+                                 set: { if !$0 { extractCoord.conflict = nil } }),
+            presenting: extractCoord.conflict
         ) { item in
             Button(loc("conflict.overwrite"), role: .destructive) {
-                let plan = item.plan, destination = item.destination
-                conflict = nil
-                Task {
-                    await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: true) }
-                    processNextExtraction()
-                }
+                extractCoord.resolveConflict(item, overwrite: true, doc: doc, perform: runExtraction)
             }
             Button(loc("conflict.saveAs", item.alternative.lastPathComponent)) {
-                let plan = item.plan, destination = item.alternative
-                conflict = nil
-                Task {
-                    await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) }
-                    processNextExtraction()
-                }
+                extractCoord.resolveConflict(item, overwrite: false, doc: doc, perform: runExtraction)
             }
-            Button(loc("button.cancel"), role: .cancel) { conflict = nil; extractQueue = [] }
+            Button(loc("button.cancel"), role: .cancel) { extractCoord.cancelConflict() }
         }
         .confirmationDialog(
-            addConflict.map { loc("add.conflict.title", $0.name) } ?? "",
-            isPresented: Binding(get: { addConflict != nil },
-                                 set: { if !$0 { addConflict = nil } }),
-            presenting: addConflict
+            addCoord.conflict.map { loc("add.conflict.title", $0.name) } ?? "",
+            isPresented: Binding(get: { addCoord.conflict != nil },
+                                 set: { if !$0 { addCoord.conflict = nil } }),
+            presenting: addCoord.conflict
         ) { item in
             Button(loc("add.conflict.overwrite"), role: .destructive) {
-                addConflict = nil
-                let existing = doc.child(named: item.name, in: item.target)
-                if let node = doc.addFile(item.url, into: item.target, replacing: existing) {
-                    addedIDs.append(node.id)
-                }
-                processNextAdd()
+                addCoord.overwrite(item, doc: doc)
             }
             Button(loc("add.conflict.keepBoth")) {
-                addConflict = nil
-                let unique = doc.uniqueChildName(item.name, in: item.target)
-                if let node = doc.addFile(item.url, into: item.target, renameTo: unique) {
-                    addedIDs.append(node.id)
-                }
-                processNextAdd()
+                addCoord.keepBoth(item, doc: doc)
             }
             Button(loc("button.cancel"), role: .cancel) {
-                addConflict = nil
-                addQueue = []
-                finishAdd()
+                addCoord.cancel(doc: doc)
             }
         } message: { item in
             Text(loc("add.conflict.message", item.name))
@@ -174,15 +116,15 @@ struct ContentView: View {
                           onConfirm: { confirmEntryPassword() },
                           onCancel: { showingEntryPassword = false; pendingEditAction = nil })
         }
-        .sheet(item: $extractRequest) { req in
+        .sheet(item: $extractCoord.request) { req in
             ExtractOptionsSheet(nodeName: req.name,
                                 needsPassword: doc.requiresEntryPassword,
-                                destination: $extractDestination,
-                                password: $extractPassword,
-                                passwordWrong: extractPasswordWrong,
-                                onChooseFolder: { chooseExtractFolder() },
-                                onExtract: { performExtract() },
-                                onCancel: { extractRequest = nil })
+                                destination: $extractCoord.destination,
+                                password: $extractCoord.password,
+                                passwordWrong: extractCoord.passwordWrong,
+                                onChooseFolder: { extractCoord.chooseFolder(prompt: loc("panel.choose")) },
+                                onExtract: { extractCoord.confirm(doc: doc, perform: runExtraction) },
+                                onCancel: { extractCoord.request = nil })
         }
         .sheet(isPresented: $showingOpenPassword) {
             PasswordSheet(title: loc("password.openTitle"),
@@ -465,47 +407,14 @@ struct ContentView: View {
         if let archive = doc.archiveToOpen(from: urls) {
             Task { await runAsync { try await doc.openArchive(archive) } }
         } else {
-            startAdd(urls, into: doc.addTargetFolder())
+            addCoord.start(urls, into: doc.addTargetFolder(), doc: doc)
         }
     }
 
     /// Añade ficheros arrastrados del Finder a una carpeta concreta. Si el archivo está
     /// cifrado y bloqueado, pide la contraseña y los añade tras desbloquear.
     private func addDropped(_ urls: [URL], into folder: FileNode?) {
-        editGuarded { startAdd(urls, into: folder) }
-    }
-
-    /// Añade una lista de URLs a `target`, pidiendo confirmación por cada nombre que ya
-    /// exista (sobrescribir / conservar ambos / cancelar). Al acabar, selecciona y revela
-    /// lo añadido (despliega la carpeta y le da el foco).
-    private func startAdd(_ urls: [URL], into target: FileNode?) {
-        let cleaned = urls.filter { $0.isFileURL }
-        guard !cleaned.isEmpty else { return }
-        addTarget = target
-        addQueue = cleaned
-        addedIDs = []
-        processNextAdd()
-    }
-
-    /// Procesa la siguiente URL pendiente: si su nombre ya existe en el destino, abre el
-    /// diálogo de conflicto (que reanuda la cola al resolverlo); si no, la añade y sigue.
-    private func processNextAdd() {
-        guard !addQueue.isEmpty else { finishAdd(); return }
-        let url = addQueue.removeFirst()
-        let name = url.lastPathComponent
-        if doc.child(named: name, in: addTarget) != nil {
-            addConflict = AddConflict(url: url, name: name, target: addTarget)
-        } else {
-            if let node = doc.addFile(url, into: addTarget) { addedIDs.append(node.id) }
-            processNextAdd()
-        }
-    }
-
-    /// Cierra el lote de añadir: fija la selección sobre lo añadido.
-    private func finishAdd() {
-        if !addedIDs.isEmpty { doc.selectedIDs = Set(addedIDs) }
-        addedIDs = []
-        addTarget = nil
+        editGuarded { addCoord.start(urls, into: folder, doc: doc) }
     }
 
     private func extractAction() {
@@ -516,85 +425,29 @@ struct ContentView: View {
 
     /// Extrae un nodo concreto: abre el diálogo compacto de extracción.
     private func extract(_ node: FileNode) {
-        prepareExtractDestination()
-        extractRequest = ExtractRequest(name: node.name) { [doc.exportPlan(for: node)] }
+        extractCoord.prepareDestination(doc: doc, settings: settings)
+        extractCoord.begin(name: node.name) { [doc.exportPlan(for: node)] }
     }
 
     /// Extrae varios nodos seleccionados: cada uno se coloca en la carpeta destino.
     private func extractNodes(_ nodes: [FileNode]) {
-        prepareExtractDestination()
-        extractRequest = ExtractRequest(name: loc("extract.items", String(nodes.count))) {
+        extractCoord.prepareDestination(doc: doc, settings: settings)
+        extractCoord.begin(name: loc("extract.items", String(nodes.count))) {
             nodes.map { doc.exportPlan(for: $0) }
         }
     }
 
     /// Extrae **todo** el archivo a una carpeta con el nombre del archivo (como Finder).
     private func extractAll() {
-        prepareExtractDestination()
+        extractCoord.prepareDestination(doc: doc, settings: settings)
         let name = strippedBaseName(documentDisplayName)
-        extractRequest = ExtractRequest(name: name) { [doc.exportPlanForAll(named: name)] }
+        extractCoord.begin(name: name) { [doc.exportPlanForAll(named: name)] }
     }
 
-    /// Fija el destino por defecto (carpeta del archivo o fija) y resetea la contraseña.
-    private func prepareExtractDestination() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let archiveFolder = doc.sourceURL?.deletingLastPathComponent()
-        switch settings.extractMode {
-        case .archiveFolder:
-            extractDestination = archiveFolder ?? settings.fixedExtractFolder ?? home
-        case .fixedFolder:
-            extractDestination = settings.fixedExtractFolder ?? archiveFolder ?? home
-        }
-        extractPassword = ""
-        extractPasswordWrong = false
-    }
-
-    /// "Elegir…": abre el navegador de carpetas solo si se quiere cambiar el destino.
-    private func chooseExtractFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = loc("panel.choose")
-        panel.directoryURL = extractDestination
-        if panel.runModal() == .OK, let url = panel.url {
-            extractDestination = url
-        }
-    }
-
-    /// Confirma la extracción (uno, varios o todo) al destino elegido: encola los planes
-    /// y arranca el procesado en lote.
-    private func performExtract() {
-        guard let req = extractRequest else { return }
-        if doc.requiresEntryPassword {
-            guard doc.provideEntryPassword(extractPassword) else {
-                extractPasswordWrong = true
-                extractPassword = ""
-                return
-            }
-        }
-        extractDestinationFolder = extractDestination
-        extractRequest = nil
-        extractQueue = req.makePlans()
-        processNextExtraction()
-    }
-
-    /// Extrae el siguiente plan de la cola en la carpeta destino. Si hay conflicto, abre
-    /// el diálogo (que reanuda la cola al resolverlo); si no, extrae y sigue con el resto.
-    private func processNextExtraction() {
-        guard !extractQueue.isEmpty else { return }
-        let plan = extractQueue.removeFirst()
-        let destination = extractDestinationFolder.appendingPathComponent(plan.name)
-        if FileManager.default.fileExists(atPath: destination.path) {
-            conflict = ExtractionConflict(plan: plan,
-                                          destination: destination,
-                                          alternative: doc.conflictFreeURL(for: destination))
-        } else {
-            Task {
-                await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) }
-                processNextExtraction()
-            }
-        }
+    /// Ejecuta la extracción de un plan (la inyecta el coordinador); canaliza el error a la
+    /// alerta de la vista.
+    private func runExtraction(_ plan: ExportPlan, to destination: URL, overwrite: Bool) async {
+        await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: overwrite) }
     }
 
     /// Guarda: si ya tiene fichero, re-guarda con los ajustes; si es nuevo, abre el
