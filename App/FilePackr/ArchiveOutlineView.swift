@@ -58,7 +58,7 @@ struct ArchiveOutlineView: NSViewRepresentable {
         outline.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
         coordinator.currentSort = (key: "name", ascending: true)
         outline.usesAlternatingRowBackgroundColors = true
-        outline.style = .inset
+        outline.style = .plain   // .inset añade un separador inicial en la cabecera
         outline.allowsMultipleSelection = false
         outline.indentationPerLevel = 14
         outline.menu = coordinator.makeContextMenu()
@@ -74,6 +74,7 @@ struct ArchiveOutlineView: NSViewRepresentable {
         scroll.documentView = outline
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
+        scroll.borderType = .noBorder            // sin borde del scroll view
         scroll.autohidesScrollers = true
         return scroll
     }

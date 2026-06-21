@@ -412,7 +412,7 @@ struct ContentView: View {
     private var documentBar: some View {
         HStack(spacing: 8) {
             Text(documentDisplayName)
-                .fontWeight(.medium)
+                .font(.system(size: 15, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
             if doc.saveEncryption != .none {
