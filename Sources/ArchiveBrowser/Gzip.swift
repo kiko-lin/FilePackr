@@ -123,7 +123,7 @@ public enum Gzip {
         guard bytes.count >= 10, bytes[0] == 0x1F, bytes[1] == 0x8B, (bytes[3] & 0x08) != 0 else { return nil }
         var p = 10
         if bytes[3] & 0x04 != 0, p + 2 <= bytes.count {
-            p += 2 + Int(bytes[p]) | (Int(bytes[p + 1]) << 8)
+            p += 2 + (Int(bytes[p]) | (Int(bytes[p + 1]) << 8))
         }
         var name = [UInt8]()
         while p < bytes.count, bytes[p] != 0 { name.append(bytes[p]); p += 1 }

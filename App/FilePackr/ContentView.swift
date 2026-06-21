@@ -611,9 +611,6 @@ struct ContentView: View {
         .onTapGesture { addAction() }   // la zona de arrastre es también el punto de entrada (clic)
     }
 
-    // MARK: - Barra superior
-
-
     // MARK: - Acciones con paneles del sistema
 
     /// Ejecuta una edición; si el archivo está cifrado y bloqueado, pide la contraseña y,

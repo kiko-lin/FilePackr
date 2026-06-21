@@ -106,19 +106,6 @@ final class ArchiveDocument: ObservableObject {
         return node
     }
 
-    /// Decide qué hacer con lo que llega: abrir un ZIP como base o añadir ficheros.
-    func handleIncoming(_ urls: [URL]) async throws {
-        let cleaned = urls.filter { $0.isFileURL }
-        guard !cleaned.isEmpty else { return }
-
-        if isEmpty, cleaned.count == 1, !isDirectory(cleaned[0]), isOpenableArchive(cleaned[0]) {
-            try await openArchive(cleaned[0])
-        } else {
-            if isEmpty { beginNewDocument() }
-            addFiles(cleaned)
-        }
-    }
-
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
     func openArchive(_ url: URL, passphrase: String? = nil) async throws {
