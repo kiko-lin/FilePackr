@@ -420,6 +420,12 @@ final class ArchiveDocument: ObservableObject {
         }
     }
 
+    /// Plan de exportación de **todo** el contenido, agrupado en una carpeta llamada
+    /// `name` (para "Extraer todo": descomprime el archivo entero, como hace Finder).
+    func exportPlanForAll(named name: String) -> ExportPlan {
+        ExportPlan(name: name, payload: .folder(roots.map { exportPlan(for: $0) }))
+    }
+
     /// Datos sin comprimir de un nodo, leídos según el formato del archivo de origen.
     /// Sirve para reconstruir el contenido al guardar en otro formato o al extraer.
     private func nodeData(_ node: FileNode) -> Data? {
@@ -432,16 +438,14 @@ final class ArchiveDocument: ObservableObject {
         }
     }
 
-    /// Guarda el ZIP en `url` con el formato/cifrado elegidos, en streaming a disco
-    /// y en segundo plano con progreso. Recuerda los ajustes para re-guardar.
-    func save(to url: URL, format outputFormat: ArchiveFormat,
-              encryption: ZipEncryption, password: String?, volumeSize: Int? = nil) async throws {
-        saveFormat = outputFormat
+    /// Escribe el documento en `url` con el formato/cifrado/volúmenes dados, en streaming
+    /// a disco y en segundo plano con progreso. **No toca el estado del documento** — es
+    /// la pieza común de `save` (que además adopta el fichero) y `export` (que no).
+    private func writeArchive(to url: URL, format outputFormat: ArchiveFormat,
+                              encryption: ZipEncryption, password: String?, volumeSize: Int?) async throws {
         let volumes = (outputFormat.supportsVolumeSplit && (volumeSize ?? 0) > 0) ? volumeSize : nil
-        saveVolumeSize = volumes
         let cipher = outputFormat.supportsEncryption ? encryption : .none
         let pwd = outputFormat.supportsEncryption ? password : nil
-        if outputFormat == .zip { saveEncryption = cipher; savePassword = pwd }
         progress = ProgressState(kind: cipher == .none ? .compressing(documentName) : .encrypting(documentName),
                                  fraction: outputFormat == .zip ? 0 : nil)
         defer { progress = nil }
@@ -469,6 +473,20 @@ final class ArchiveDocument: ObservableObject {
             try? FileManager.default.removeItem(at: work)
             throw error
         }
+    }
+
+    /// Guarda en `url`, **adopta** el fichero como documento activo y recuerda los ajustes
+    /// para re-guardar. (Primer guardado / botón Guardar.)
+    func save(to url: URL, format outputFormat: ArchiveFormat,
+              encryption: ZipEncryption, password: String?, volumeSize: Int? = nil) async throws {
+        saveFormat = outputFormat
+        saveVolumeSize = (outputFormat.supportsVolumeSplit && (volumeSize ?? 0) > 0) ? volumeSize : nil
+        if outputFormat == .zip {
+            saveEncryption = outputFormat.supportsEncryption ? encryption : .none
+            savePassword = outputFormat.supportsEncryption ? password : nil
+        }
+        try await writeArchive(to: url, format: outputFormat, encryption: encryption,
+                               password: password, volumeSize: volumeSize)
         markSaved(as: url)
     }
 
@@ -476,6 +494,16 @@ final class ArchiveDocument: ObservableObject {
     func save(to url: URL) async throws {
         try await save(to: url, format: saveFormat, encryption: saveEncryption,
                        password: savePassword, volumeSize: saveVolumeSize)
+    }
+
+    /// Exporta el documento a `url` con el formato/cifrado/volúmenes elegidos **sin**
+    /// cambiar el documento activo: el original sigue siendo el actual, con sus ajustes
+    /// y su `sourceURL` intactos. Es la vía para cambiar cifrado/contraseña o convertir
+    /// de formato escribiendo una copia aparte.
+    func export(to url: URL, format outputFormat: ArchiveFormat,
+                encryption: ZipEncryption, password: String?, volumeSize: Int? = nil) async throws {
+        try await writeArchive(to: url, format: outputFormat, encryption: encryption,
+                               password: password, volumeSize: volumeSize)
     }
 
     /// Ensambla, leyendo el árbol, el `SavePayload` (`Sendable`) para el formato de

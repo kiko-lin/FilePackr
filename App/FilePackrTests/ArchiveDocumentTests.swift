@@ -96,4 +96,37 @@ final class ArchiveDocumentTests: XCTestCase {
         try await reopened.openArchive(out)
         XCTAssertEqual(reopened.roots.map(\.name), ["dato.txt"])
     }
+
+    // MARK: - Exportar (item 2)
+
+    /// Exportar escribe una copia con otro cifrado/contraseña **sin** cambiar el
+    /// documento activo (su origen y ajustes quedan intactos).
+    func testExportDoesNotChangeDocument() async throws {
+        let srcZip = try ZipWriter().build([
+            ZipEntryInput(path: "f.txt", modifiedAt: nil, source: .data(Data("hola".utf8)))
+        ])
+        let srcURL = try writeTemp(srcZip, "origen.zip")
+        let doc = ArchiveDocument()
+        try await doc.openArchive(srcURL)
+        XCTAssertEqual(doc.sourceURL, srcURL)
+        XCTAssertEqual(doc.saveEncryption, .none)
+        XCTAssertFalse(doc.hasUnsavedChanges)
+
+        // Exportar a otro fichero, ahora cifrado AES-256 con contraseña nueva.
+        let outURL = srcURL.deletingLastPathComponent().appendingPathComponent("copia.zip")
+        try await doc.export(to: outURL, format: .zip, encryption: .aes256, password: "nuevaClave")
+
+        // El documento activo NO cambia: mismo origen, mismos ajustes, sin “guardado”.
+        XCTAssertEqual(doc.sourceURL, srcURL, "exportar no debe adoptar el fichero nuevo")
+        XCTAssertEqual(doc.saveFormat, .zip)
+        XCTAssertEqual(doc.saveEncryption, .none, "los ajustes recordados no cambian al exportar")
+        XCTAssertFalse(doc.hasUnsavedChanges)
+
+        // El fichero exportado existe y se descifra con la contraseña nueva.
+        let exported = try Data(contentsOf: outURL)
+        let entry = try XCTUnwrap(try ZipReader().listEntries(in: exported).first { $0.path == "f.txt" })
+        XCTAssertTrue(entry.isAESEncrypted)
+        XCTAssertEqual(try ZipExtractor().extractedData(for: entry, in: exported, password: "nuevaClave"),
+                       Data("hola".utf8))
+    }
 }

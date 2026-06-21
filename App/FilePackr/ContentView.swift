@@ -11,6 +11,14 @@ private struct ExtractionConflict: Identifiable {
     let alternative: URL    // nombre libre propuesto (p.ej. "3d_2.svg")
 }
 
+/// Lo que se va a extraer: un nodo concreto o **todo** el archivo. El plan se construye
+/// al confirmar (cuando ya tenemos la contraseña, si hacía falta).
+private struct ExtractRequest: Identifiable {
+    let id = UUID()
+    let name: String
+    let makePlan: () -> ExportPlan
+}
+
 /// Unidad de tamaño de volumen.
 enum VolumeUnit: String, CaseIterable, Identifiable {
     case kilobytes = "KB", megabytes = "MB", gigabytes = "GB"
@@ -35,6 +43,9 @@ private struct SaveOptionsSheet: View {
     @Binding var volumeUnit: VolumeUnit
     /// Los formatos de un solo fichero (gz/xz) solo se ofrecen si el documento es un fichero.
     let allowSingleFileFormats: Bool
+    /// Título de la hoja y etiqueta del botón de confirmar (Guardar vs Exportar).
+    let title: String
+    let confirmLabel: String
     var onSave: () -> Void
     var onCancel: () -> Void
 
@@ -51,7 +62,7 @@ private struct SaveOptionsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(loc("save.title")).font(.headline)
+            Text(title).font(.headline)
             Form {
                 Picker(loc("save.format"), selection: $format) {
                     ForEach(formats, id: \.self) { fmt in
@@ -97,7 +108,7 @@ private struct SaveOptionsSheet: View {
             HStack {
                 Spacer()
                 Button(loc("button.cancel"), role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
-                Button(loc("button.saveEllipsis"), action: onSave)
+                Button(confirmLabel, action: onSave)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSave)
             }
@@ -193,10 +204,10 @@ struct ContentView: View {
     @EnvironmentObject private var settings: AppSettings
     @StateObject private var doc = ArchiveDocument()
     @State private var errorMessage: String?
-    @State private var showingSettings = false
     @State private var conflict: ExtractionConflict?
-    @State private var confirmingClose = false
     @State private var showingSaveOptions = false
+    /// La hoja de opciones está abierta para **Exportar** (copia aparte) en vez de Guardar.
+    @State private var optionsSheetIsExport = false
     @State private var saveFormatChoice: ArchiveFormat = .zip
     @State private var saveEncryptionChoice: ZipEncryption = .none
     @State private var saveOptionsPassword = ""
@@ -209,33 +220,30 @@ struct ContentView: View {
     @State private var showingOpenPassword = false
     @State private var openPasswordInput = ""
     @State private var openPasswordWrong = false
-    @State private var extractNode: FileNode?
+    @State private var extractRequest: ExtractRequest?
     @State private var extractDestination = FileManager.default.homeDirectoryForCurrentUser
     @State private var extractPassword = ""
     @State private var extractPasswordWrong = false
 
     var body: some View {
         VStack(spacing: 0) {
-            if !doc.isEmpty {
-                documentBar
+            if doc.isEmpty {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                documentBar          // grupo 2 · Archivo (cabecera)
                 Divider()
+                HStack(spacing: 0) {
+                    interiorBar      // tira vertical de acciones (solo con archivo abierto)
+                    Divider()        // línea separadora de la columna
+                    content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .ignoresSafeArea(.container, edges: .top)   // el contenido sube a la zona del título
         .preferredColorScheme(settings.theme.colorScheme)
-        .onAppear { settings.applyAppIcon() }
-        .toolbar { toolbarContent }
-        .sheet(isPresented: $showingSettings) {
-            SettingsView(onClose: { showingSettings = false })
-        }
-        .confirmationDialog(loc("close.title", documentDisplayName),
-                            isPresented: $confirmingClose, titleVisibility: .visible) {
-            Button(loc("close.discard"), role: .destructive) { doc.close() }
-            Button(loc("button.cancel"), role: .cancel) {}
-        } message: {
-            Text(loc("close.message"))
-        }
+        .background(WindowGuard(edited: doc.hasUnsavedChanges))
         .alert(loc("error.title"),
                isPresented: Binding(get: { errorMessage != nil },
                                     set: { if !$0 { errorMessage = nil } }),
@@ -269,6 +277,8 @@ struct ContentView: View {
                              volumeSize: $volumeSizeValue,
                              volumeUnit: $volumeUnit,
                              allowSingleFileFormats: doc.isSingleFile,
+                             title: optionsSheetIsExport ? loc("export.title") : loc("save.title"),
+                             confirmLabel: optionsSheetIsExport ? loc("button.export") : loc("button.saveEllipsis"),
                              onSave: { confirmSaveOptions() },
                              onCancel: { showingSaveOptions = false })
         }
@@ -280,15 +290,15 @@ struct ContentView: View {
                           onConfirm: { confirmEntryPassword() },
                           onCancel: { showingEntryPassword = false })
         }
-        .sheet(item: $extractNode) { node in
-            ExtractOptionsSheet(nodeName: node.name,
+        .sheet(item: $extractRequest) { req in
+            ExtractOptionsSheet(nodeName: req.name,
                                 needsPassword: doc.requiresEntryPassword,
                                 destination: $extractDestination,
                                 password: $extractPassword,
                                 passwordWrong: extractPasswordWrong,
                                 onChooseFolder: { chooseExtractFolder() },
                                 onExtract: { performExtract() },
-                                onCancel: { extractNode = nil })
+                                onCancel: { extractRequest = nil })
         }
         .sheet(isPresented: $showingOpenPassword) {
             PasswordSheet(title: loc("password.openTitle"),
@@ -401,9 +411,6 @@ struct ContentView: View {
     /// Barra intermedia: icono + nombre del archivo y acciones Cerrar / Guardar.
     private var documentBar: some View {
         HStack(spacing: 8) {
-            Image(nsImage: NSWorkspace.shared.icon(for: .zip))
-                .resizable()
-                .frame(width: 16, height: 16)
             Text(documentDisplayName)
                 .fontWeight(.medium)
                 .lineLimit(1)
@@ -424,14 +431,66 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button(loc("button.extractAll")) { extractAll() }
+            Divider().frame(height: 16).padding(.horizontal, 2)
             Button(loc("button.close")) { attemptClose() }
+            Divider().frame(height: 16).padding(.horizontal, 2)
+            Button(loc("button.export")) { exportDocument() }
+                .help(loc("button.export.help"))
             Button(loc("button.save")) { saveDocument() }
                 .disabled(!doc.hasUnsavedChanges)
                 .keyboardShortcut("s", modifiers: .command)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.top, 24)        // espacio arriba (bajo los semáforos)
+        .padding(.bottom, 20)
+        .padding(.leading, 100)   // libre la columna de semáforos + margen
+        .padding(.trailing, 14)
         .background(.bar)
+    }
+
+    /// Tira **vertical** izquierda de acciones de interior (solo con archivo abierto).
+    /// Icono + etiqueta para no perder descubribilidad.
+    private var interiorBar: some View {
+        VStack(spacing: 4) {
+            interiorButton("toolbar.add", help: "toolbar.add.help",
+                           icon: "plus", action: addAction)
+            interiorButton("toolbar.newFolder", help: "toolbar.newFolder.help",
+                           icon: "folder.badge.plus") {
+                editGuarded { doc.createFolder(defaultName: loc("doc.newFolder")) }
+            }
+            interiorButton("toolbar.delete", help: "toolbar.delete.help",
+                           icon: "trash", disabled: doc.selection == nil) {
+                editGuarded { doc.removeSelected() }
+            }
+            interiorButton("toolbar.extract", help: "toolbar.extract.help",
+                           icon: "square.and.arrow.up", disabled: doc.selection == nil,
+                           action: extractAction)
+            Spacer()
+        }
+        .padding(.top, 30)        // bajo la cabecera de la tabla
+        .padding(.bottom, 10)
+        .padding(.horizontal, 6)
+        .frame(width: 78)
+    }
+
+    /// Un botón de la tira vertical: icono arriba, etiqueta pequeña debajo.
+    private func interiorButton(_ title: String, help: String, icon: String,
+                                disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: icon).font(.system(size: 17)).frame(height: 20)
+                Text(loc(title))
+                    .font(.system(size: 10))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .help(loc(help))
     }
 
     private var dropPrompt: some View {
@@ -450,41 +509,11 @@ struct ContentView: View {
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+        .onTapGesture { addAction() }   // la zona de arrastre es también el punto de entrada (clic)
     }
 
     // MARK: - Barra superior
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup {
-            Button(action: addAction) {
-                Label(loc("toolbar.add"), systemImage: "plus")
-            }
-            .help(loc("toolbar.add.help"))
-
-            Button { editGuarded { doc.removeSelected() } } label: {
-                Label(loc("toolbar.delete"), systemImage: "trash")
-            }
-            .disabled(doc.selection == nil)
-            .help(loc("toolbar.delete.help"))
-
-            Button { editGuarded { doc.createFolder(defaultName: loc("doc.newFolder")) } } label: {
-                Label(loc("toolbar.newFolder"), systemImage: "folder.badge.plus")
-            }
-            .help(loc("toolbar.newFolder.help"))
-
-            Button(action: extractAction) {
-                Label(loc("toolbar.extract"), systemImage: "square.and.arrow.up")
-            }
-            .disabled(doc.selection == nil)
-            .help(loc("toolbar.extract.help"))
-
-            Button { showingSettings = true } label: {
-                Label(loc("toolbar.settings"), systemImage: "gearshape")
-            }
-            .help(loc("toolbar.settings"))
-        }
-    }
 
     // MARK: - Acciones con paneles del sistema
 
@@ -515,9 +544,21 @@ struct ContentView: View {
         extract(node)
     }
 
-    /// Extrae un nodo concreto: pide carpeta destino y gestiona conflictos de nombre.
-    /// Abre el diálogo compacto de extracción (destino por defecto: carpeta del zip).
+    /// Extrae un nodo concreto: abre el diálogo compacto de extracción.
     private func extract(_ node: FileNode) {
+        prepareExtractDestination()
+        extractRequest = ExtractRequest(name: node.name) { doc.exportPlan(for: node) }
+    }
+
+    /// Extrae **todo** el archivo a una carpeta con el nombre del archivo (como Finder).
+    private func extractAll() {
+        prepareExtractDestination()
+        let name = strippedBaseName(documentDisplayName)
+        extractRequest = ExtractRequest(name: name) { doc.exportPlanForAll(named: name) }
+    }
+
+    /// Fija el destino por defecto (carpeta del archivo o fija) y resetea la contraseña.
+    private func prepareExtractDestination() {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let archiveFolder = doc.sourceURL?.deletingLastPathComponent()
         switch settings.extractMode {
@@ -528,7 +569,6 @@ struct ContentView: View {
         }
         extractPassword = ""
         extractPasswordWrong = false
-        extractNode = node
     }
 
     /// "Elegir…": abre el navegador de carpetas solo si se quiere cambiar el destino.
@@ -544,9 +584,9 @@ struct ContentView: View {
         }
     }
 
-    /// Confirma la extracción del nodo del diálogo al destino elegido.
+    /// Confirma la extracción (nodo o todo) al destino elegido.
     private func performExtract() {
-        guard let node = extractNode else { return }
+        guard let req = extractRequest else { return }
         if doc.requiresEntryPassword {
             guard doc.provideEntryPassword(extractPassword) else {
                 extractPasswordWrong = true
@@ -555,10 +595,10 @@ struct ContentView: View {
             }
         }
         let destinationFolder = extractDestination
-        extractNode = nil
+        extractRequest = nil
 
-        let plan = doc.exportPlan(for: node)
-        let destination = destinationFolder.appendingPathComponent(node.name)
+        let plan = req.makePlan()
+        let destination = destinationFolder.appendingPathComponent(plan.name)
         if FileManager.default.fileExists(atPath: destination.path) {
             conflict = ExtractionConflict(plan: plan,
                                           destination: destination,
@@ -576,28 +616,45 @@ struct ContentView: View {
         if let url = doc.sourceURL, doc.saveFormat.isWritable {
             Task { await runAsync { try await doc.save(to: url) } }
         } else {
-            // Documento nuevo: defaults de Ajustes; abierto: lo que traía el archivo.
-            let isNew = doc.sourceURL == nil
-            var format = isNew ? settings.defaultFormat : doc.saveFormat
-            if !format.isWritable { format = .zip }                            // rar → zip
-            if format.isSingleFileOnly && !doc.isSingleFile { format = .zip }
-            saveFormatChoice = format
-            saveEncryptionChoice = isNew ? settings.defaultEncryption : doc.saveEncryption
-            saveOptionsPassword = ""
-            if let size = doc.saveVolumeSize {
-                splitEnabled = true
-                volumeUnit = .megabytes
-                volumeSizeValue = max(1, (Double(size) / Double(VolumeUnit.megabytes.multiplier)).rounded())
-            } else {
-                splitEnabled = false
-            }
+            optionsSheetIsExport = false
+            prefillOptionsSheet()
             showingSaveOptions = true
         }
     }
 
-    /// Tras elegir opciones, pide ubicación y guarda el archivo con el formato/cifrado elegidos.
+    /// Exporta una copia aparte: siempre abre el diálogo de opciones (formato + cifrado +
+    /// contraseña + volúmenes), prerrellenado con los ajustes actuales. **No** cambia el
+    /// documento activo — sirve para cambiar contraseña/cifrado o convertir de formato.
+    private func exportDocument() {
+        if doc.requiresEntryPassword { promptEntryPassword(); return }
+        optionsSheetIsExport = true
+        prefillOptionsSheet()
+        showingSaveOptions = true
+    }
+
+    /// Prerrellena la hoja de opciones con el formato/cifrado/volúmenes actuales
+    /// (documento nuevo: defaults de Ajustes; abierto: lo que traía el archivo).
+    private func prefillOptionsSheet() {
+        let isNew = doc.sourceURL == nil
+        var format = isNew ? settings.defaultFormat : doc.saveFormat
+        if !format.isWritable { format = .zip }                            // rar → zip
+        if format.isSingleFileOnly && !doc.isSingleFile { format = .zip }
+        saveFormatChoice = format
+        saveEncryptionChoice = isNew ? settings.defaultEncryption : doc.saveEncryption
+        saveOptionsPassword = ""
+        if let size = doc.saveVolumeSize {
+            splitEnabled = true
+            volumeUnit = .megabytes
+            volumeSizeValue = max(1, (Double(size) / Double(VolumeUnit.megabytes.multiplier)).rounded())
+        } else {
+            splitEnabled = false
+        }
+    }
+
+    /// Tras elegir opciones, pide ubicación y guarda o exporta con el formato/cifrado elegidos.
     private func confirmSaveOptions() {
         showingSaveOptions = false
+        let isExport = optionsSheetIsExport
         let format = saveFormatChoice
         let encryption = format.supportsEncryption ? saveEncryptionChoice : .none
         let password = encryption == .none ? nil : saveOptionsPassword
@@ -607,11 +664,16 @@ struct ContentView: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = format == .zip ? [.zip] : []
         panel.nameFieldStringValue = "\(strippedBaseName(documentDisplayName)).\(format.fileExtension)"
-        panel.prompt = loc("panel.save")
+        panel.prompt = isExport ? loc("panel.export") : loc("panel.save")
         if panel.runModal() == .OK, let url = panel.url {
             Task { await runAsync {
-                try await doc.save(to: url, format: format, encryption: encryption,
-                                   password: password, volumeSize: volumeSize)
+                if isExport {
+                    try await doc.export(to: url, format: format, encryption: encryption,
+                                         password: password, volumeSize: volumeSize)
+                } else {
+                    try await doc.save(to: url, format: format, encryption: encryption,
+                                       password: password, volumeSize: volumeSize)
+                }
             } }
         }
     }
@@ -626,12 +688,12 @@ struct ContentView: View {
         return (name as NSString).deletingPathExtension
     }
 
-    /// Cierra el documento; si hay cambios sin guardar, pide confirmación.
+    /// Cierra el documento; si hay cambios sin guardar, pide confirmación con el mismo
+    /// aviso unificado que el cierre de ventana y el salir.
     private func attemptClose() {
-        if doc.hasUnsavedChanges {
-            confirmingClose = true
-        } else {
-            doc.close()
+        guard doc.hasUnsavedChanges else { doc.close(); return }
+        UnsavedChangesAlert.present(on: NSApp.keyWindow) { discard in
+            if discard { doc.close() }
         }
     }
 

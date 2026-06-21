@@ -189,13 +189,19 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
 - [ ] **7z cifrado al escribir**: libarchive no lo soporta; haría falta otra librería.
 - [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
       `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
-- [ ] **Cambiar cifrado/contraseña al re-guardar** ("Guardar como…"): hoy re-guardar
-      conserva el cifrado y la contraseña originales; no hay UI para cambiarlos.
+- [x] ~~**Cambiar cifrado/contraseña al re-guardar**~~ (hecho — vía **Exportar…**): botón
+      "Exportar…" en la barra de documento abre la hoja de opciones (formato/cifrado/
+      contraseña/volúmenes) y escribe una **copia aparte** SIN cambiar el documento activo
+      (`ArchiveDocument.export` reusa `writeArchive`; no llama a `markSaved` ni muta los
+      ajustes recordados, a diferencia de `save`). Test de app `testExportDoesNotChangeDocument`.
 - [ ] **Opciones de fuerza AES** (128/192) además de 256; ZipCrypto ya está.
 - [ ] **Streaming de compresión** de un único fichero enorme (hoy cada fichero se
       carga entero en memoria para comprimir).
 - [x] ~~Localización~~ (hecho: EN/ES con selector de idioma — ver "Hecho"). Pendiente
       menor: más idiomas, y que "Clase" use el idioma de la app y no el del SO.
+- [ ] **Traducir el menú de la app** (barra de menús de macOS: menú con el nombre de la
+      app, Archivo, Edición…) según el idioma **interno** de la app (`Localizer`), no el
+      del SO. Hoy el `WindowGroup` usa los menús por defecto y no siguen el selector de idioma.
 - [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
       notarización, `.dmg`.

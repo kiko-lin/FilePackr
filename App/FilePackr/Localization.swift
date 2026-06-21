@@ -75,7 +75,6 @@ private extension Localizer {
         "theme.system": "Follow System",
         "theme.light": "Light",
         "theme.dark": "Dark",
-        "settings.appIcon": "App Icon",
         "settings.defaultFormat": "Default format",
         "settings.defaultEncryption": "Default encryption",
         "settings.extractTo": "Extract to",
@@ -83,11 +82,6 @@ private extension Localizer {
         "extract.dest.fixedFolder": "A fixed folder",
         "settings.noFolder": "No folder chosen",
         "button.done": "Done",
-        "icon.orange": "Orange",
-        "icon.green": "Green",
-        "icon.purple": "Purple",
-        "icon.blue": "Blue",
-        "icon.red": "Red",
 
         // Document bar
         "doc.encrypted.help": "Encrypted archive",
@@ -95,9 +89,14 @@ private extension Localizer {
         "doc.unsaved": "— unsaved",
         "button.close": "Close",
         "button.save": "Save",
+        "button.export": "Export",
+        "button.extractAll": "Extract all",
+        "button.export.help": "Save a separate copy with a chosen format, encryption and password (the open document is unchanged).",
+        "export.title": "Export Archive",
+        "panel.export": "Export",
 
         // Drop prompt
-        "drop.title": "Drag files here",
+        "drop.title": "Drag files here or click to choose",
         "drop.subtitle": "A .zip, .7z, .rar, .tar(.gz/.xz/.bz2), .gz, .xz or .bz2 opens for editing; other files create a new one.",
 
         // Save sheet
@@ -146,9 +145,9 @@ private extension Localizer {
         "password.wrong": "Wrong password.",
 
         // Close confirmation
-        "close.title": "There are unsaved changes in “%@”",
-        "close.message": "If you close now you'll lose the unsaved changes.",
-        "close.discard": "Close without saving",
+        "unsaved.title": "Discard unsaved changes?",
+        "unsaved.message": "If you continue you'll lose the changes you haven't saved.",
+        "unsaved.discard": "Close and discard",
 
         // Errors
         "error.title": "The operation could not be completed",
@@ -211,7 +210,6 @@ private extension Localizer {
         "theme.system": "Según el sistema",
         "theme.light": "Claro",
         "theme.dark": "Oscuro",
-        "settings.appIcon": "Icono de la app",
         "settings.defaultFormat": "Formato por defecto",
         "settings.defaultEncryption": "Cifrado por defecto",
         "settings.extractTo": "Extraer en",
@@ -219,11 +217,6 @@ private extension Localizer {
         "extract.dest.fixedFolder": "Una carpeta fija",
         "settings.noFolder": "Ninguna carpeta elegida",
         "button.done": "Hecho",
-        "icon.orange": "Naranja",
-        "icon.green": "Verde",
-        "icon.purple": "Morado",
-        "icon.blue": "Azul",
-        "icon.red": "Rojo",
 
         // Document bar
         "doc.encrypted.help": "Archivo cifrado",
@@ -231,9 +224,14 @@ private extension Localizer {
         "doc.unsaved": "— sin guardar",
         "button.close": "Cerrar",
         "button.save": "Guardar",
+        "button.export": "Exportar",
+        "button.extractAll": "Extraer todo",
+        "button.export.help": "Guarda una copia aparte con el formato, cifrado y contraseña que elijas (el documento abierto no cambia).",
+        "export.title": "Exportar archivo",
+        "panel.export": "Exportar",
 
         // Drop prompt
-        "drop.title": "Arrastra archivos aquí",
+        "drop.title": "Arrastra archivos aquí o haz clic para elegir",
         "drop.subtitle": "Un .zip, .7z, .rar, .tar(.gz/.xz/.bz2), .gz, .xz o .bz2 se abrirá para editarlo; otros archivos crearán uno nuevo.",
 
         // Save sheet
@@ -282,9 +280,9 @@ private extension Localizer {
         "password.wrong": "Contraseña incorrecta.",
 
         // Close confirmation
-        "close.title": "Hay cambios sin guardar en «%@»",
-        "close.message": "Si cierras ahora perderás los cambios no guardados.",
-        "close.discard": "Cerrar sin guardar",
+        "unsaved.title": "¿Descartar los cambios sin guardar?",
+        "unsaved.message": "Si continúas perderás los cambios que no hayas guardado.",
+        "unsaved.discard": "Cerrar y descartar",
 
         // Errors
         "error.title": "No se pudo completar la operación",

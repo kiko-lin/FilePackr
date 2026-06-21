@@ -3,11 +3,11 @@ import AppKit
 import UniformTypeIdentifiers
 import ArchiveBrowser
 
-/// Ventana modal de Ajustes (se presenta como hoja, bloqueando lo de debajo).
+/// Ajustes de la app. Se presenta como ventana propia desde el menú (⌘,).
 struct SettingsView: View {
     @EnvironmentObject var loc: Localizer
     @EnvironmentObject var settings: AppSettings
-    var onClose: () -> Void
+    @Environment(\.dismiss) private var dismiss
 
     /// Formatos ofrecidos como "por defecto" (escribibles y multi-fichero).
     private var defaultFormats: [ArchiveFormat] {
@@ -27,10 +27,6 @@ struct SettingsView: View {
                     Picker(loc("settings.appearance"), selection: $settings.theme) {
                         ForEach(AppTheme.allCases) { Text(loc($0.nameKey)).tag($0) }
                     }
-                }
-
-                Section(loc("settings.appIcon")) {
-                    iconPicker
                 }
 
                 Section {
@@ -65,37 +61,11 @@ struct SettingsView: View {
 
             HStack {
                 Spacer()
-                Button(loc("button.done"), action: onClose).keyboardShortcut(.defaultAction)
+                Button(loc("button.done")) { dismiss() }.keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 20).padding(.vertical, 14)
         }
         .frame(width: 460)
-    }
-
-    /// Selector horizontal de iconos (muestra los del catálogo `AppIconOption.all`).
-    private var iconPicker: some View {
-        HStack(spacing: 14) {
-            ForEach(AppIconOption.all) { option in
-                Button {
-                    settings.appIconID = option.id
-                } label: {
-                    if let image = option.previewImage {
-                        Image(nsImage: image)
-                            .resizable().interpolation(.high)
-                            .frame(width: 52, height: 52)
-                            .clipShape(RoundedRectangle(cornerRadius: 11))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 11)
-                                    .strokeBorder(.tint, lineWidth: settings.appIconID == option.id ? 3 : 0)
-                            }
-                    }
-                }
-                .buttonStyle(.plain)
-                .help(loc(option.labelKey))
-            }
-            Spacer()
-        }
-        .padding(.vertical, 2)
     }
 
     private func chooseFixedFolder() {
