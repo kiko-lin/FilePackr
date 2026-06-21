@@ -11,6 +11,10 @@ enum SavePayload: Sendable {
     /// Formatos que se producen como un único `Data` (tar/tar.gz/tar.xz/tar.bz2/gz/xz/bz2).
     /// El cómputo va diferido en un cierre `@Sendable` para ejecutarse en segundo plano.
     case data(@Sendable () throws -> Data)
+    /// Compresión en **streaming** a disco: el cierre escribe el resultado en el
+    /// `FileHandle` por trozos, sin cargar el fichero entero en memoria (gz/xz/bz2 de
+    /// un fichero de disco).
+    case stream(write: @Sendable (FileHandle) throws -> Void)
     /// Formatos de libarchive (7z/iso/xar): se escriben directamente a un fichero.
     case libArchive(items: [LibArchive.WriteItem], format: LibArchive.WriteFormat)
 }
@@ -30,6 +34,8 @@ enum ArchiveSaver {
             try await Task.detached(priority: .userInitiated) {
                 try make().write(to: work, options: .atomic)
             }.value
+        case .stream(let write):
+            try await streamToFile(work, write: write)
         case .libArchive(let items, let format):
             try await Task.detached(priority: .userInitiated) {
                 try LibArchive.write(items, to: work, format: format)
@@ -50,6 +56,30 @@ enum ArchiveSaver {
             do {
                 try ZipWriter().write(inputs, to: handle, encryption: encryption,
                                       password: password, progress: progress)
+                try handle.close()
+            } catch {
+                try? handle.close()
+                try? FileManager.default.removeItem(at: tmp)
+                throw error
+            }
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            try FileManager.default.moveItem(at: tmp, to: url)
+        }.value
+    }
+
+    /// Escribe en `url` en streaming a un temporal y reemplaza al final, igual que
+    /// `streamZip` pero delegando la mecánica de compresión en el cierre `write`.
+    private static func streamToFile(_ url: URL,
+                                     write: @escaping @Sendable (FileHandle) throws -> Void) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            let tmp = url.deletingLastPathComponent()
+                .appendingPathComponent(".\(UUID().uuidString).filepackr.tmp")
+            FileManager.default.createFile(atPath: tmp.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: tmp)
+            do {
+                try write(handle)
                 try handle.close()
             } catch {
                 try? handle.close()

@@ -8,18 +8,44 @@ public enum XzError: Error, Equatable { case notXz, corrupt }
 /// estándar (firma `FD 37 7A 58 5A 00`), interoperable con `xz`, liblzma, Keka…
 public enum Xz {
 
-    /// Comprime `data` a un flujo `.xz`.
-    public static func compress(_ data: Data) -> Data {
-        run(data, COMPRESSION_STREAM_ENCODE) ?? Data()
+    /// Núcleo único: comprime a `.xz` leyendo la entrada por trozos (`next`) y emitiendo
+    /// la salida por trozos (`sink`). Los adaptadores en memoria / fichero cuelgan de aquí.
+    public static func compress(next: () throws -> Data?, sink: (Data) throws -> Void) throws {
+        try CompressionStream.run(operation: COMPRESSION_STREAM_ENCODE, algorithm: COMPRESSION_LZMA,
+                                  next: next, sink: sink)
     }
 
-    /// Descomprime un flujo `.xz`.
+    /// Comprime `data` a un flujo `.xz` (en memoria).
+    public static func compress(_ data: Data) -> Data {
+        var out = Data()
+        do { try compress(next: CompressionStream.once(data), sink: { out.append($0) }) } catch { return Data() }
+        return out
+    }
+
+    /// Comprime de `input` a `output` en **streaming** (memoria constante): produce el
+    /// mismo flujo `.xz` que `compress(_:)` pero sin cargar el fichero entero en RAM.
+    public static func compress(from input: FileHandle, to output: FileHandle) throws {
+        try compress(next: CompressionStream.reader(input), sink: { try output.write(contentsOf: $0) })
+    }
+
+    /// Descomprime un flujo `.xz` a memoria.
     public static func decompress(_ data: Data) throws -> Data {
+        var out = Data()
+        try decompress(data, sink: { out.append($0) })
+        return out
+    }
+
+    /// Descomprime un flujo `.xz` emitiendo la salida por trozos (`sink`), sin materializar
+    /// el resultado en RAM. La entrada `.xz` ya está en memoria (mapeada); lo grande es la
+    /// salida, que va al `sink` (p. ej. un fichero) trozo a trozo.
+    public static func decompress(_ data: Data, sink: (Data) throws -> Void) throws {
         guard data.count >= 6, Array(data.prefix(6)) == [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00] else {
             throw XzError.notXz
         }
-        guard let out = run(data, COMPRESSION_STREAM_DECODE) else { throw XzError.corrupt }
-        return out
+        do {
+            try CompressionStream.run(operation: COMPRESSION_STREAM_DECODE, algorithm: COMPRESSION_LZMA,
+                                      next: CompressionStream.once(data), sink: sink)
+        } catch is CompressionStreamError { throw XzError.corrupt }   // error del códec; los del sink se propagan
     }
 
     /// Una entrada `ArchiveEntry` para el único fichero de un `.xz` (para navegarlo).
@@ -69,43 +95,5 @@ public enum Xz {
             if shift >= 64 { return nil }
         }
         return nil
-    }
-
-    /// Procesa `input` por la *Compression framework* en streaming (maneja tamaño de
-    /// salida desconocido), devolviendo el resultado o `nil` si falla.
-    private static func run(_ input: Data, _ op: compression_stream_operation) -> Data? {
-        let dstCapacity = 64 * 1024
-        let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: dstCapacity)
-        defer { dst.deallocate() }
-
-        var stream = compression_stream(dst_ptr: dst, dst_size: dstCapacity,
-                                        src_ptr: UnsafePointer<UInt8>(bitPattern: 1)!, src_size: 0,
-                                        state: nil)
-        guard compression_stream_init(&stream, op, COMPRESSION_LZMA) == COMPRESSION_STATUS_OK else { return nil }
-        defer { compression_stream_destroy(&stream) }
-
-        let src = [UInt8](input)
-        return src.withUnsafeBufferPointer { srcBuf -> Data? in
-            stream.src_ptr = srcBuf.baseAddress ?? UnsafePointer<UInt8>(bitPattern: 1)!
-            stream.src_size = src.count
-            stream.dst_ptr = dst
-            stream.dst_size = dstCapacity
-
-            var output = Data()
-            let flags = Int32(COMPRESSION_STREAM_FINALIZE.rawValue)
-            var status = COMPRESSION_STATUS_OK
-            repeat {
-                status = compression_stream_process(&stream, flags)
-                switch status {
-                case COMPRESSION_STATUS_OK, COMPRESSION_STATUS_END:
-                    output.append(dst, count: dstCapacity - stream.dst_size)
-                    stream.dst_ptr = dst
-                    stream.dst_size = dstCapacity
-                default:
-                    return nil
-                }
-            } while status == COMPRESSION_STATUS_OK
-            return output
-        }
     }
 }

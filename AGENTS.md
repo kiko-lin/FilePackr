@@ -109,6 +109,57 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 ## Hecho
 
+- **Sesión 2026-06-21 (d) — tar en streaming + descompresión en streaming**:
+  - **Núcleo pull único por compresor**: `Gzip`/`Xz`/`Bzip2` exponen `compress(next:sink:)`
+    (lee por trozos `next`, emite por trozos `sink`); las variantes en memoria, fichero→
+    fichero y el pipe tar cuelgan de ahí. Se retiró `Deflate.deflate` (gzip ya usa el núcleo).
+  - **tar en streaming**: `Tar.WriteItem.Source` (`.data`/`.file(url)`) + `Tar.reader(items)`
+    (generador **pull** del flujo TAR que lee los ficheros de disco por trozos). `Tar.write(_:)`
+    es ahora un adaptador del generador. `makeTarItems` pasa los ficheros como URL. Los cuatro
+    formatos tar van por `.stream` encadenando `Tar.reader → compresor → fichero` (sin temporal).
+  - **descompresión/extracción en streaming**: `Gzip`/`Xz`/`Bzip2` ganan `decompress(_:sink:)`
+    (bzip2 con la API incremental `BZ2_bzDecompressInit/Decompress/End`; se retiró
+    `BZ2_bzBuffToBuffCompress` y `BZ_OUTBUFF_FULL`). `ZipExtractor.extract(_:in:password:sink:)`
+    infla y descifra al vuelo (ZipCrypto/AES); en AES valida la contraseña al empezar (pv) y el
+    **MAC al final**. `ArchiveCodec.extract(...,sink:)` (con fallback a `entryData` para tar ya
+    en RAM y libarchive) + sobrecargas en `ZipCodec`/`SingleFileCodec`. `ExportPlan` extrae a
+    un temporal y mueve al final (atomicidad + limpieza si el MAC falla a mitad).
+  - **DRY cifrado**: `ZipAES.CTRKeystream` (keystream CTR por trozos) lo comparten `ctrCrypt`,
+    `Encryptor` y el nuevo `ZipAES.Decryptor` (espejo del `Encryptor`).
+  - **Tests**: round-trip tar/tar.gz/.xz/.bz2 desde fichero de disco + interop `tar` del sistema;
+    descompresión gz/xz/bz2 a sink; extracción ZIP a sink (sin cifrar, ZipCrypto, AES + clave
+    incorrecta). 80 tests del motor verdes; app compila.
+
+- **Sesión 2026-06-21 (c) — streaming de compresión (memoria constante)**: comprimir ya
+  no requiere tener el fichero entero en RAM (pico antes ≈ original + comprimido).
+  - **Primitivas**: `CRC32.Accumulator` (CRC incremental por trozos) y `CompressionStream`
+    (centraliza el bucle de `compression_stream` leyendo/escribiendo por trozos; lo usan
+    gzip y xz, antes el bucle vivía dentro de `Xz`).
+  - **gz/xz/bz2**: cada uno gana `compress(from:to:)` (fichero→fichero). Clave de diseño:
+    **una sola implementación por algoritmo** con dos adaptadores (en memoria / fichero).
+    xz/gzip comparten `CompressionStream.run`; bzip2 tiene un núcleo incremental único
+    (`compressStream`, API `BZ2_bzCompressInit`/`Compress`/`End`) del que cuelgan ambas
+    variantes — ya **no** se usa `BZ2_bzBuffToBuffCompress`. Los puntos de entrada en
+    memoria siguen porque hay datos que ya están en RAM (tar montado, entradas de un
+    archivo abierto): ahí no hay fichero del que hacer streaming.
+  - **ZIP**: `ZipWriter` comprime cada entrada `.file` al vuelo desde disco. Como CRC y
+    tamaños no se conocen al escribir la cabecera local, usa **descriptor de datos** (bit 3)
+    + **ZIP64 siempre** en la entrada en streaming (tamaños 0xFFFFFFFF + extra; los valores
+    reales van en el descriptor tras los datos y en el central directory, que es el que lee
+    el lector). `makeRecord` ya no maneja `.file` (`preconditionFailure`).
+  - **Cifrado en streaming**: `ZipCrypto` ya era incremental; `ZipAES.Encryptor` (nuevo)
+    cifra AE-2 por trozos (CTR con contador continuo + HMAC-SHA1 incremental, MAC al final)
+    y es la **única** implementación del cifrado: `ZipAES.encrypt(buffer)` es ahora un
+    adaptador fino sobre `Encryptor` (antes duplicaba la secuencia CTR+HMAC). Refactor:
+    `ZipAES.keystreamBlock` (compartido con `ctrCrypt` del descifrado) y `aesExtraField` en
+    `ZipWriter` (compartido con `aesExtra`).
+  - **App**: nuevo `SavePayload.stream` + `ArchiveSaver.streamToFile`; `ArchiveDocument.
+    singleFilePayload` elige streaming si el origen es `diskFile`, si no la ruta en memoria.
+  - **Tests** (`StreamingCompressionTests` + extras): CRC incremental, round-trip gz/xz/bz2,
+    ZIP `.file` (round-trip + flag bit 3 + interop `unzip`), ZIP cifrado ZipCrypto/AES
+    (round-trip + contraseña incorrecta) e **interop pyzipper del AES en streaming**. 71
+    tests del motor verdes; app compila (xcodebuild).
+
 - **Sesión 2026-06-21 (b) — selección múltiple, multi-extraer, conflicto al añadir,
   aviso de cierre con 3 botones**:
   - `ArchiveDocument.selection` (un `FileNode.ID?`) pasó a **`selectedIDs: Set<FileNode.ID>`**.
@@ -260,8 +311,15 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       (`ArchiveDocument.export` reusa `writeArchive`; no llama a `markSaved` ni muta los
       ajustes recordados, a diferencia de `save`). Test de app `testExportDoesNotChangeDocument`.
 - [ ] **Opciones de fuerza AES** (128/192) además de 256; ZipCrypto ya está.
-- [ ] **Streaming de compresión** de un único fichero enorme (hoy cada fichero se
-      carga entero en memoria para comprimir).
+- [x] ~~**Streaming de compresión** de un único fichero enorme~~ (hecho — ver "Hecho").
+      gz/xz/bz2 (de un fichero de disco), cada entrada ZIP de un fichero (cifrada o no) y
+      **tar/tar.gz/tar.xz/tar.bz2** se comprimen al vuelo, con memoria constante.
+- [x] ~~**Streaming de descompresión/extracción**~~ (hecho — ver "Hecho"): gz/xz/bz2 y las
+      entradas ZIP (incl. ZipCrypto/AES) se extraen a disco sin materializar la salida en RAM.
+- [ ] **Streaming en libarchive (7z/iso/xar) y en la apertura de tar**: la escritura/lectura
+      de 7z aún pasa por `[Data]` en RAM, y abrir un `.tar.gz` descomprime el tar entero en
+      RAM (su `container`). Pendiente (otra sesión): escritura/extracción de libarchive a
+      fichero y un índice de tar que no exija el tar completo en memoria.
 - [x] ~~Localización~~ (hecho: EN/ES con selector de idioma — ver "Hecho"). Pendiente
       menor: más idiomas, y que "Clase" use el idioma de la app y no el del SO.
 - [ ] **Traducir el menú de la app** (barra de menús de macOS: menú con el nombre de la
@@ -281,6 +339,11 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   little-endian que empieza en 1. PBKDF2-HMAC-SHA1, 1000 vueltas.
 - ZIP64: el lector sigue EOCD64 + locator si el EOCD de 32 bits está saturado, y
   el campo extra 0x0001 por entrada. El escritor lo emite cuando hace falta.
+- ZIP en streaming (entrada `.file`): como CRC y tamaños no se conocen al escribir la
+  cabecera local, se usa **descriptor de datos** (bit 3) — firma `08074b50` + CRC +
+  tamaños — tras los datos, y **ZIP64 siempre** en esa entrada (sizes 0xFFFFFFFF + extra,
+  descriptor de 8 bytes). El central directory lleva los valores reales (lo que lee el
+  lector). Con bit 3, el byte de verificación de ZipCrypto es el de la **hora DOS**.
 - TAR (ustar): bloques de 512 B; `size`/`mtime` en octal; carpetas typeflag `5`.
   `bsdtar` de macOS emite **PAX** (typeflag `x`, registros `len key=value\n`) solo
   cuando un campo no cabe en ustar (rutas largas, mtime sub-segundo) y a veces

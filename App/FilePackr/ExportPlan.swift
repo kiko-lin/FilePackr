@@ -49,8 +49,26 @@ struct ExportPlan: Sendable {
             try FileManager.default.copyItem(at: url, to: destination)
             onFile()
         case .archiveEntry(let entry, let archive, let password, let format):
-            let data = try format.codec.entryData(for: entry, in: archive, password: password)
-            try data.write(to: destination, options: .atomic)
+            // Extracción en **streaming**: la salida descomprimida no se materializa en RAM.
+            // Se escribe a un temporal y se mueve al final (atomicidad + limpieza si falla,
+            // p. ej. si el MAC de AES no cuadra a mitad).
+            let tmp = destination.deletingLastPathComponent()
+                .appendingPathComponent(".\(UUID().uuidString).filepackr.tmp")
+            FileManager.default.createFile(atPath: tmp.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: tmp)
+            do {
+                try format.codec.extract(entry, in: archive, password: password,
+                                         sink: { try handle.write(contentsOf: $0) })
+                try handle.close()
+            } catch {
+                try? handle.close()
+                try? FileManager.default.removeItem(at: tmp)
+                throw error
+            }
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: tmp, to: destination)
             onFile()
         }
     }

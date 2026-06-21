@@ -14,12 +14,28 @@ public enum CRC32 {
         }
     }()
 
-    /// Calcula el CRC-32 de `data`.
+    /// Calcula el CRC-32 de `data` de una sola pasada.
     public static func checksum(_ data: Data) -> UInt32 {
-        var crc: UInt32 = 0xFFFF_FFFF
-        for byte in data {
-            crc = table[Int((crc ^ UInt32(byte)) & 0xFF)] ^ (crc >> 8)
+        var acc = Accumulator()
+        acc.update(data)
+        return acc.final
+    }
+
+    /// Acumulador incremental: permite calcular el CRC-32 por trozos (streaming)
+    /// sin tener todos los bytes a la vez. Usado por gzip y ZIP al comprimir al vuelo.
+    public struct Accumulator {
+        private var crc: UInt32 = 0xFFFF_FFFF
+
+        public init() {}
+
+        /// Incorpora un trozo más al cálculo.
+        public mutating func update(_ data: Data) {
+            for byte in data {
+                crc = table[Int((crc ^ UInt32(byte)) & 0xFF)] ^ (crc >> 8)
+            }
         }
-        return crc ^ 0xFFFF_FFFF
+
+        /// CRC-32 acumulado hasta ahora.
+        public var final: UInt32 { crc ^ 0xFFFF_FFFF }
     }
 }

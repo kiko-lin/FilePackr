@@ -8,46 +8,130 @@ public enum Bzip2Error: Error, Equatable { case notBzip2, corrupt }
 public enum Bzip2 {
 
     private static let BZ_OK: Int32 = 0
-    private static let BZ_OUTBUFF_FULL: Int32 = -8
+    private static let BZ_RUN: Int32 = 0
+    private static let BZ_FINISH: Int32 = 2
+    private static let BZ_RUN_OK: Int32 = 1
+    private static let BZ_FINISH_OK: Int32 = 3
+    private static let BZ_STREAM_END: Int32 = 4
 
-    /// Comprime `data` a un flujo `.bz2` (`blockSize` 1–9, por defecto el máximo).
-    public static func compress(_ data: Data, blockSize: Int32 = 9) -> Data {
-        var dstLen = UInt32(data.count + data.count / 100 + 600)   // cota segura documentada
-        let dst = UnsafeMutablePointer<CChar>.allocate(capacity: Int(dstLen))
-        defer { dst.deallocate() }
-        let src = UnsafeMutablePointer<CChar>.allocate(capacity: max(1, data.count))
-        defer { src.deallocate() }
-        data.copyBytes(to: UnsafeMutableRawBufferPointer(start: src, count: data.count))
-
-        let rc = BZ2_bzBuffToBuffCompress(dst, &dstLen, src, UInt32(data.count), blockSize, 0, 0)
-        guard rc == BZ_OK else { return Data() }
-        return Data(bytes: dst, count: Int(dstLen))
+    /// Comprime de `input` a `output` en **streaming** (memoria constante): adaptador del
+    /// núcleo incremental que lee por trozos del fichero y escribe por trozos al fichero.
+    public static func compress(from input: FileHandle, to output: FileHandle, blockSize: Int32 = 9) throws {
+        try compress(blockSize: blockSize, next: CompressionStream.reader(input),
+                     sink: { try output.write(contentsOf: $0) })
     }
 
-    /// Descomprime un flujo `.bz2`. Como bzip2 no guarda el tamaño original, se
-    /// reintenta con un búfer cada vez mayor si se queda corto.
+    /// Comprime `data` a un flujo `.bz2` (`blockSize` 1–9, por defecto el máximo).
+    /// Adaptador en memoria del mismo núcleo incremental (los bytes ya están en RAM).
+    public static func compress(_ data: Data, blockSize: Int32 = 9) -> Data {
+        var out = Data()
+        do {
+            try compress(blockSize: blockSize, next: CompressionStream.once(data), sink: { out.append($0) })
+        } catch { return Data() }
+        return out
+    }
+
+    /// Núcleo único de compresión bzip2 con la **API incremental** de `libbz2`: lee la
+    /// entrada por trozos (`next`) y emite la salida por trozos (`sink`), con memoria
+    /// constante. Lo comparten la ruta en memoria, la de fichero→fichero y el pipe tar.bz2.
+    public static func compress(blockSize: Int32 = 9, next: () throws -> Data?,
+                                sink: (Data) throws -> Void) throws {
+        var strm = bz_stream()
+        guard BZ2_bzCompressInit(&strm, blockSize, 0, 0) == BZ_OK else { throw Bzip2Error.corrupt }
+        defer { BZ2_bzCompressEnd(&strm) }
+
+        let cap = 64 * 1024
+        let outBuf = UnsafeMutablePointer<CChar>.allocate(capacity: cap)
+        let inBuf = UnsafeMutablePointer<CChar>.allocate(capacity: cap)
+        defer { outBuf.deallocate(); inBuf.deallocate() }
+
+        // Escribe lo producido en `outBuf` tras una llamada a BZ2_bzCompress.
+        func flushOut() throws {
+            let produced = cap - Int(strm.avail_out)
+            if produced > 0 { try sink(Data(bytes: outBuf, count: produced)) }
+        }
+
+        // Fase RUN: alimentar cada trozo de entrada hasta consumirlo. `next` puede dar
+        // trozos mayores que el búfer; los partimos en porciones de `cap`.
+        while let chunk = try next() {
+            var offset = 0
+            while offset < chunk.count {
+                let n = min(cap, chunk.count - offset)
+                chunk.withUnsafeBytes { raw in
+                    inBuf.update(from: raw.baseAddress!.advanced(by: offset).assumingMemoryBound(to: CChar.self), count: n)
+                }
+                offset += n
+                strm.next_in = inBuf
+                strm.avail_in = UInt32(n)
+                repeat {
+                    strm.next_out = outBuf
+                    strm.avail_out = UInt32(cap)
+                    guard BZ2_bzCompress(&strm, BZ_RUN) == BZ_RUN_OK else { throw Bzip2Error.corrupt }
+                    try flushOut()
+                } while strm.avail_in > 0 || strm.avail_out == 0
+            }
+        }
+
+        // Fase FINISH: vaciar lo pendiente hasta BZ_STREAM_END.
+        strm.next_in = inBuf
+        strm.avail_in = 0
+        var rc: Int32 = BZ_FINISH_OK
+        repeat {
+            strm.next_out = outBuf
+            strm.avail_out = UInt32(cap)
+            rc = BZ2_bzCompress(&strm, BZ_FINISH)
+            guard rc == BZ_FINISH_OK || rc == BZ_STREAM_END else { throw Bzip2Error.corrupt }
+            try flushOut()
+        } while rc != BZ_STREAM_END
+    }
+
+    /// Descomprime un flujo `.bz2` a memoria.
     public static func decompress(_ data: Data) throws -> Data {
-        let bytes = [UInt8](data)
-        guard bytes.count >= 3, bytes[0] == 0x42, bytes[1] == 0x5A, bytes[2] == 0x68 else {   // "BZh"
+        var out = Data()
+        try decompress(data, sink: { out.append($0) })
+        return out
+    }
+
+    /// Descomprime un flujo `.bz2` emitiendo la salida por trozos (`sink`), sin materializar
+    /// el resultado en RAM, con la **API incremental** de `libbz2`. La entrada (ya en
+    /// memoria/mapeada) se alimenta en trozos; lo grande es la salida, que va al `sink`.
+    public static func decompress(_ data: Data, sink: (Data) throws -> Void) throws {
+        let base = data.startIndex
+        guard data.count >= 3, data[base] == 0x42, data[base + 1] == 0x5A, data[base + 2] == 0x68 else {  // "BZh"
             throw Bzip2Error.notBzip2
         }
-        let src = UnsafeMutablePointer<CChar>.allocate(capacity: max(1, data.count))
-        defer { src.deallocate() }
-        data.copyBytes(to: UnsafeMutableRawBufferPointer(start: src, count: data.count))
+        var strm = bz_stream()
+        guard BZ2_bzDecompressInit(&strm, 0, 0) == BZ_OK else { throw Bzip2Error.corrupt }
+        defer { BZ2_bzDecompressEnd(&strm) }
 
-        var capacity = max(data.count * 4, 1024)
+        let cap = 64 * 1024
+        let outBuf = UnsafeMutablePointer<CChar>.allocate(capacity: cap)
+        let inBuf = UnsafeMutablePointer<CChar>.allocate(capacity: cap)
+        defer { outBuf.deallocate(); inBuf.deallocate() }
+
+        var offset = base
+        let end = data.endIndex
+        var moreInput = true
         while true {
-            var dstLen = UInt32(capacity)
-            let dst = UnsafeMutablePointer<CChar>.allocate(capacity: capacity)
-            let rc = BZ2_bzBuffToBuffDecompress(dst, &dstLen, src, UInt32(data.count), 0, 0)
-            if rc == BZ_OK {
-                let out = Data(bytes: dst, count: Int(dstLen))
-                dst.deallocate()
-                return out
+            if strm.avail_in == 0 {
+                if offset < end {
+                    let n = min(cap, end - offset)
+                    data.copyBytes(to: UnsafeMutableRawBufferPointer(start: inBuf, count: n), from: offset..<(offset + n))
+                    strm.next_in = inBuf
+                    strm.avail_in = UInt32(n)
+                    offset += n
+                } else {
+                    moreInput = false
+                }
             }
-            dst.deallocate()
-            guard rc == BZ_OUTBUFF_FULL, capacity < (1 << 34) else { throw Bzip2Error.corrupt }
-            capacity *= 2
+            strm.next_out = outBuf
+            strm.avail_out = UInt32(cap)
+            let rc = BZ2_bzDecompress(&strm)
+            let produced = cap - Int(strm.avail_out)
+            if produced > 0 { try sink(Data(bytes: outBuf, count: produced)) }
+            if rc == BZ_STREAM_END { break }
+            guard rc == BZ_OK else { throw Bzip2Error.corrupt }
+            if !moreInput && produced == 0 && strm.avail_in == 0 { throw Bzip2Error.corrupt }   // truncado
         }
     }
 
