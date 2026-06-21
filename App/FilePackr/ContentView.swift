@@ -518,8 +518,19 @@ struct ContentView: View {
         let count = doc.contentFileCount
         let word = count == 1 ? loc("status.file") : loc("status.files")
         let size = ByteCountFormatter.string(fromByteCount: Int64(doc.contentSize), countStyle: .file)
-        let packed = ByteCountFormatter.string(fromByteCount: Int64(doc.contentCompressedSize), countStyle: .file)
-        return "\(count) \(word) · \(size) · \(packed) \(loc("status.compressed"))"
+        var text = "\(count) \(word) · \(size)"
+        // El tamaño comprimido solo se muestra cuando se conoce para todo el contenido
+        // y hay compresión real: si no (ficheros sin comprimir, o un .tar que almacena
+        // sin comprimir → comprimido == tamaño), la cifra sería engañosa o redundante.
+        if doc.contentCompressedKnown && doc.contentCompressedSize < doc.contentSize {
+            let packed = ByteCountFormatter.string(fromByteCount: Int64(doc.contentCompressedSize), countStyle: .file)
+            text += " · \(packed) \(loc("status.compressed"))"
+            if doc.contentSize > 0 {
+                let ratio = Int((Double(doc.contentCompressedSize) / Double(doc.contentSize) * 100).rounded())
+                text += " (\(ratio) %)"
+            }
+        }
+        return text
     }
 
     private var dropPrompt: some View {

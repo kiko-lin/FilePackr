@@ -781,21 +781,27 @@ final class ArchiveDocument: ObservableObject {
     /// estructura, no en cada render): nº de ficheros y tamaño total descomprimido.
     private(set) var contentFileCount = 0
     private(set) var contentSize: UInt64 = 0
-    /// Tamaño comprimido total (solo lo conocen las entradas de un archivo abierto;
-    /// los ficheros añadidos aún sin comprimir cuentan 0).
+    /// Tamaño comprimido total. Solo lo conocen las entradas de un archivo abierto;
+    /// los ficheros añadidos aún sin comprimir no tienen tamaño comprimido conocido.
     private(set) var contentCompressedSize: UInt64 = 0
+    /// `true` solo si **todas** las entradas tienen tamaño comprimido conocido. Si hay
+    /// ficheros recién añadidos (aún sin comprimir), el total sería una mezcla engañosa
+    /// de tamaños reales y ceros, así que la barra de estado oculta la cifra.
+    private(set) var contentCompressedKnown = false
 
     private func recomputeContentSummary() {
         var files = 0
         var bytes: UInt64 = 0
         var compressed: UInt64 = 0
+        var compressedKnown = true
         func walk(_ nodes: [FileNode]) {
             for node in nodes {
                 if node.isDirectory { walk(node.children) }
                 else {
                     files += 1
                     bytes += node.fileSize ?? 0
-                    compressed += node.compressedSize ?? 0
+                    if let c = node.compressedSize { compressed += c }
+                    else { compressedKnown = false }
                 }
             }
         }
@@ -803,6 +809,7 @@ final class ArchiveDocument: ObservableObject {
         contentFileCount = files
         contentSize = bytes
         contentCompressedSize = compressed
+        contentCompressedKnown = files > 0 && compressedKnown
     }
 
     /// Las mutaciones tocan nodos (clases); subir `revision` (publicado) avisa a
