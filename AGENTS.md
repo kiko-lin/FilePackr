@@ -299,6 +299,11 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 ## TODO (objetivos pendientes, en orden lógico)
 
+> **Prioridad recomendada (revisión 2026-06-21):** lo de mayor valor pendiente es de UI —
+> **traducir el menú de macOS** al idioma interno (afecta a todos los usuarios). Los items de
+> formato/streaming que quedan son de *completitud*, en este orden: **DMG ≈ 7z-cifrado (baja)
+> > tar-open (muy baja) > multinúcleo (solo si el rendimiento duele)**.
+
 - [x] ~~**Verificar interop AES-256**~~ (hecho 2026-06-20): **verificado bidireccional**
       contra `pyzipper` — ambos sentidos pasan. Test automático en `ZipCryptoTests`
       (`testPyzipperReadsOurAES256` / `testReadsAES256FromPyzipper`), que se **salta** si
@@ -309,9 +314,10 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 - [x] ~~bzip2/tar.bz2~~ (Tier 3, hecho — `libbz2` del sistema, ver "Hecho").
 - [x] ~~7z/rar~~ (Tier 4, hecho — `libarchive` del sistema SIN vendorizar, ver "Hecho").
 - [x] ~~iso/cpio/xar/lha/cab~~ (hecho — misma libarchive; lectura todos, escritura iso/xar).
-- [ ] **7z cifrado al escribir**: libarchive no lo soporta (escribe 7z en claro). Haría
-      falta el **LZMA SDK** de Igor Pavlov (cifra contenido y nombres; además comprime
-      multihilo, ver "valorar" abajo). Confirmado en revisión externa (2026-06-21).
+- [ ] **7z cifrado al escribir** · **prioridad BAJA**: libarchive no lo soporta (escribe 7z
+      en claro). Haría falta el **LZMA SDK** de Igor Pavlov (cifra contenido y nombres; además
+      comprime multihilo, ver "valorar" abajo) → vendorizar dependencia, rompe el principio de
+      cero-deps. ZIP+AES-256 ya cubre "archivo seguro". Confirmado en revisión externa (2026-06-21).
 - [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
       `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
 - [x] ~~**Cambiar cifrado/contraseña al re-guardar**~~ (hecho — vía **Exportar…**): botón
@@ -327,15 +333,18 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       entradas ZIP (incl. ZipCrypto/AES) se extraen a disco sin materializar la salida en RAM.
 - [x] ~~**Streaming en libarchive (7z/iso/xar)**~~ (hecho — ver "Hecho"): escritura desde
       ficheros de disco al vuelo y extracción a `sink`, sin acumular el contenido en RAM.
-- [ ] **Streaming en la apertura de tar comprimido**: abrir un `.tar.gz`/`.xz`/`.bz2` aún
+- [ ] **Streaming en la apertura de tar comprimido** · **prioridad MUY BAJA** (casi descartado):
+      abrir un `.tar.gz`/`.xz`/`.bz2` aún
       descomprime el tar entero en RAM (su `container`). Haría falta un **índice de tar
       incremental** (parsear descomprimiendo una vez, sin guardar los bytes, cubriendo
       PAX/GNU) y una extracción que **re-descomprima** saltando hasta el offset de la entrada.
       Es el único caso de streaming que falta; mayor riesgo/menor valor (navegar un tar.gz enorme).
-- [ ] **Lectura de DMG** (imagen de disco de Mac): libarchive no la maneja; sería vía
-      `hdiutil` (montar/adjuntar) o parseo propio. Único formato relevante de Mac que no
-      leemos. Señalado en revisión externa (2026-06-21).
-- [ ] **(VALORAR) Compresión multinúcleo**: hoy comprimimos **secuencialmente** (un escritor
+- [ ] **Lectura de DMG** (imagen de disco de Mac) · **prioridad BAJA (opcional)**: libarchive
+      no la maneja; sería vía `hdiutil` (montar/adjuntar) o parseo propio. Único formato Mac
+      relevante que no leemos, pero es *scope creep* (imagen de disco, no archivo comprimido).
+      Señalado en revisión externa (2026-06-21).
+- [ ] **(VALORAR) Compresión multinúcleo** · **solo si el rendimiento es queja real**: hoy
+      comprimimos **secuencialmente** (un escritor
       en streaming por archivo). En Apple Silicon, comprimir entradas en paralelo y ensamblar
       aceleraría ZIP/7z con muchos ficheros. **Trade-off**: choca con el modelo actual de
       streaming a un único fichero secuencial (habría que comprimir a temporales en paralelo y
