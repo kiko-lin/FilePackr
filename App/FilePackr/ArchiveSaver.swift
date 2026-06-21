@@ -29,13 +29,16 @@ enum ArchiveSaver {
                        progress: @escaping @Sendable (Double) -> Void) async throws {
         switch payload {
         case .zip(let inputs, let encryption, let password):
-            try await streamZip(inputs, to: work, encryption: encryption, password: password, progress: progress)
+            try await writeAtomically(to: work) { handle in
+                try ZipWriter().write(inputs, to: handle, encryption: encryption,
+                                      password: password, progress: progress)
+            }
         case .data(let make):
             try await Task.detached(priority: .userInitiated) {
                 try make().write(to: work, options: .atomic)
             }.value
         case .stream(let write):
-            try await streamToFile(work, write: write)
+            try await writeAtomically(to: work, write)
         case .libArchive(let items, let format):
             try await Task.detached(priority: .userInitiated) {
                 try LibArchive.write(items, to: work, format: format)
@@ -43,53 +46,13 @@ enum ArchiveSaver {
         }
     }
 
-    /// Escribe el ZIP en `url` haciendo streaming a un temporal y reemplazando al final,
-    /// para no dejar el destino a medias si falla.
-    private static func streamZip(_ inputs: [ZipEntryInput], to url: URL,
-                                  encryption: ZipEncryption, password: String?,
-                                  progress: @escaping @Sendable (Double) -> Void) async throws {
+    /// Escribe `body` en `url` de forma atómica (temporal + reemplazo) en segundo plano.
+    /// `body` escribe el contenido en el `FileHandle` (el ZIP en streaming, o la compresión
+    /// gz/xz/bz2 del cierre `.stream`).
+    private static func writeAtomically(to url: URL,
+                                        _ body: @escaping @Sendable (FileHandle) throws -> Void) async throws {
         try await Task.detached(priority: .userInitiated) {
-            let tmp = url.deletingLastPathComponent()
-                .appendingPathComponent(".\(UUID().uuidString).filepackr.tmp")
-            FileManager.default.createFile(atPath: tmp.path, contents: nil)
-            let handle = try FileHandle(forWritingTo: tmp)
-            do {
-                try ZipWriter().write(inputs, to: handle, encryption: encryption,
-                                      password: password, progress: progress)
-                try handle.close()
-            } catch {
-                try? handle.close()
-                try? FileManager.default.removeItem(at: tmp)
-                throw error
-            }
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
-            }
-            try FileManager.default.moveItem(at: tmp, to: url)
-        }.value
-    }
-
-    /// Escribe en `url` en streaming a un temporal y reemplaza al final, igual que
-    /// `streamZip` pero delegando la mecánica de compresión en el cierre `write`.
-    private static func streamToFile(_ url: URL,
-                                     write: @escaping @Sendable (FileHandle) throws -> Void) async throws {
-        try await Task.detached(priority: .userInitiated) {
-            let tmp = url.deletingLastPathComponent()
-                .appendingPathComponent(".\(UUID().uuidString).filepackr.tmp")
-            FileManager.default.createFile(atPath: tmp.path, contents: nil)
-            let handle = try FileHandle(forWritingTo: tmp)
-            do {
-                try write(handle)
-                try handle.close()
-            } catch {
-                try? handle.close()
-                try? FileManager.default.removeItem(at: tmp)
-                throw error
-            }
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
-            }
-            try FileManager.default.moveItem(at: tmp, to: url)
+            try writeFileAtomically(to: url, body)
         }.value
     }
 }
