@@ -1,66 +1,96 @@
 # Arquitectura de FilePackr
 
-Dos capas: un **motor ZIP sin UI** (paquete Swift, testeable por CLI) y una **app**
-SwiftUI/AppKit que lo consume.
+Dos capas: un **motor de archivos sin UI** (paquete Swift `FilePackrCore`, testeable
+por CLI) y una **app** SwiftUI/AppKit que lo consume. La línea divisoria es estricta:
+el motor no importa AppKit/SwiftUI.
 
 ## Motor — `Sources/` (paquete `FilePackrCore`)
 
-`ArchiveBrowser` (sin dependencias de UI):
+`ArchiveBrowser` (sin dependencias de UI). La pieza central es la abstracción por
+**formato**:
 
-- **`ZipReader`** — lee el *central directory* para listar entradas sin
-  descomprimir. Optimización clave: **solo lee la cola** (EOCD/ZIP64) **y la región
-  del central directory**, nunca copia el fichero entero (mapeado en memoria).
-  Soporta **ZIP64** (EOCD64 + locator, campo extra 0x0001) y lee `flags`, `dosTime`,
-  y el campo AES `0x9901`.
-- **`ZipExtractor`** — extrae una entrada concreta (extracción perezosa): localiza el
-  *local header*, descomprime (store/deflate) y **descifra** (ZipCrypto/AES) si toca.
-- **`ZipWriter`** — escribe ZIP. `build` (en memoria) y `write` (**streaming** a un
-  `FileHandle`, sin cargar todo). Emite **ZIP64** cuando hace falta y **cifra**
-  (`ZipEncryption .none/.zipCrypto/.aes256`). API de entrada: `ZipEntryInput` con
-  `ZipEntrySource` (`.directory/.data/.file(url)/.rawEntry`).
-- **`ZipCrypto`**, **`ZipAES`** — los dos cifrados (ver `encryption.md`).
-- **`Deflate`** — DEFLATE vía framework `Compression`. **`CRC32`** — tabla estándar.
+- **`ArchiveFormat`** — enum de todos los formatos. Lleva sus **capacidades**
+  (`supportsEncryption`, `isWritable`, `usesLibArchive`, `isSingleFileOnly`,
+  `supportsVolumeSplit`, `libArchiveWriteFormat`) y la **detección**:
+  `detectByExtension` (por nombre), `detectByMagic` (por firma/magic bytes) y
+  `detect(from:contents:)` (extensión y, si no decide, firma).
+- **`ArchiveCodec`** (protocolo + registro `ArchiveFormat.codec`) — centraliza
+  **leer** (`open(_:fallbackName:passphrase:progress:)` → `ArchiveReadResult` con el
+  formato refinado, los bytes a conservar y las entradas) y **extraer una entrada**
+  (`entryData(for:in:password:)`). Concretos: `ZipCodec`, `TarCodec` (tar y variantes
+  comprimidas), `SingleFileCodec` (gz/xz/bz2; refina `.gz`→`.tar.gz` por firma ustar) y
+  `LibArchiveCodec`. La **escritura NO** pasa por aquí (rutas dispares: ver app/`ArchiveSaver`).
+- **`ArchiveEntry`** — entrada **neutral** común a todos los formatos: ruta, tamaños,
+  fecha, `isDirectory`, `isEncrypted`, `dataOffset?` (lo usa TAR) y `zip: ZipEntryInfo?`
+  (método/CRC/local header/dosTime/flags/AES, **solo** en entradas de ZIP). Ningún otro
+  formato inventa campos de ZIP a cero.
 
-`CryptoCore` — AES-256-GCM + PBKDF2 (formato `.fpkz`, **legacy**, solo lectura).
+Lectores/escritores por formato:
 
-Tests en `Tests/` (`ZipEngineTests`, `ZipCryptoTests`, `CryptoCoreTests`), con
-fixtures en `Tests/ArchiveBrowserTests/Fixtures` e **interop real** contra
-`zip`/`unzip`.
+- **ZIP** (Swift puro): `ZipReader` (índice por *central directory*, **solo lee la cola
+  + el central directory**, no copia el fichero; ZIP64), `ZipExtractor` (extracción
+  perezosa, descifra), `ZipWriter` (`build` en memoria / `write` en **streaming** a un
+  `FileHandle`; ZIP64; cifrado), `ZipCrypto`, `ZipAES`, `Deflate` (framework
+  `Compression`), `CRC32`.
+- **tar y compresores** (Swift puro): `Tar` (ustar + PAX + GNU L), `Gzip` (RFC 1952),
+  `Xz` (`COMPRESSION_LZMA`), `Bzip2` (`libbz2` del sistema vía target `Cbz2`).
+- **libarchive** (`LibArchive.swift`): puente a la **libarchive del sistema** (target
+  `Carchive` = systemLibrary, con `shim.h` de prototipos propios). Lee 7z/rar/iso/xar/
+  cpio/lha/cab; escribe 7z/iso/xar. API de **iterador en streaming**.
+- **Volúmenes**: `Volumes` (split/join por bytes en memoria + naming) y `VolumeStore`
+  (volúmenes sobre disco: descubrir partes, trocear un fichero ya escrito, y
+  `joinToTemporaryFile` —concatena las partes a un temporal mapeado sin cargarlas en RAM).
+
+Tests en `Tests/` (engine + codec + formatos + volúmenes + metadatos + detección + cifrado),
+con interop **opcional** (se salta si la herramienta no está): `zip`/`unzip` para
+ZipCrypto, `pyzipper` para AES‑256.
 
 ## App — `App/FilePackr/`
 
-- **`ArchiveDocument`** (`@MainActor ObservableObject`) — el modelo: árbol editable
-  de `FileNode` (cada uno `folder` / `diskFile(url)` / `zipEntry(entry)`), abrir
-  (`openArchive` async, en segundo plano con progreso), guardar
-  (`save(to:encryption:password:)` en streaming), extraer, renombrar/mover/borrar,
-  estado de cifrado (`requiresEntryPassword`, `isLocked`, `saveEncryption`).
-  `ExportPlan` (Sendable) materializa una entrada a disco en segundo plano (extraer,
-  arrastrar, Quick Look).
+- **`ArchiveDocument`** (`@MainActor ObservableObject`) — el modelo: árbol editable de
+  `FileNode` (`folder` / `diskFile(url)` / `zipEntry(entry)`). Abrir (`openArchive`
+  async, delega en `format.codec.open`), extraer (`format.codec.entryData`),
+  renombrar/mover/borrar/crear. **No usa i18n**: emite tokens `ProgressKind` (la vista
+  traduce) y recibe los nombres por defecto inyectados. Guardar/exportar: ensambla un
+  **`SavePayload`** (`makeSavePayload`, lee el árbol) y lo entrega al saver; `save`
+  adopta el fichero (`markSaved`), `export` no (copia aparte). Resumen para la barra de
+  estado cacheado (`contentFileCount`/`contentSize`/`contentCompressedSize`).
+- **`ArchiveSaver`** (`enum`) — codifica un `SavePayload` (`Sendable`) a disco en
+  segundo plano: streaming ZIP, `Data` para tar/gz/xz/bz2, libarchive a fichero. El
+  documento decide *qué* escribir y dónde *colocar* (fichero único o volúmenes vía
+  `VolumeStore`); el saver decide *cómo* codificar.
+- **`FileNode`** — nodo del árbol (dato puro). **`ExportPlan`** — instantánea `Sendable`
+  de un nodo para materializarlo a disco en segundo plano (extraer, arrastrar, Quick Look).
 - **`ArchiveOutlineView`** (`NSViewRepresentable` + `Coordinator`) — el navegador
-  `NSOutlineView`: selección, columnas ordenables, arrastre (mover/extraer/añadir,
-  con `NSFilePromiseProvider`), Quick Look (barra espaciadora vía `QLPreviewPanel`),
-  renombrado en línea, menú contextual. Recibe callbacks `onExtract`/`onNeedPassword`.
-- **`ContentView`** — barra superior (Añadir/Eliminar/Crear carpeta/Extraer), barra
-  de documento (icono+nombre, candado, Cerrar/Guardar), zona de arrastre vacía,
-  overlay de progreso, y los diálogos (conflicto, cerrar, contraseña, opciones de
-  guardar, opciones de extraer).
+  `NSOutlineView` (estilo `.plain`): selección, columnas ordenables, arrastre
+  (mover/extraer/añadir con `NSFilePromiseProvider`), Quick Look (espacio vía
+  `QLPreviewPanel`), renombrado en línea, menú contextual. Despliega y revela el nodo
+  seleccionado (p. ej. carpeta recién creada).
+- **`ContentView`** — la interfaz **sin barra de título** (`hiddenTitleBar`): cabecera
+  (nombre + estado + `Extraer todo · Cerrar · Exportar · Guardar`), columna vertical de
+  acciones de interior, el visor y una barra de estado inferior. Diálogos: conflicto,
+  contraseña, opciones de guardar/exportar, extraer, y el aviso unificado de cambios sin
+  guardar. `WindowGuard` intercepta el cierre de ventana; `FilePackrApp.AppDelegate` el
+  salir (⌘Q). Sin pestañas de ventana. **Ajustes** en el menú (⌘,, escena `Settings`).
 
 ## Flujo de datos típico
 
-- **Abrir**: `ContentView.handleOpen` → `doc.openArchive` (lee índice en 2.º plano)
-  → `buildTree` → el outline pinta. Si hay entradas cifradas → pide contraseña.
-- **Editar**: el outline/toolbar llaman a métodos de `doc` (rename/move/delete/…),
-  que marcan `revision` (el outline recarga) y `hasUnsavedChanges`.
-- **Guardar**: `doc.makeSaveInputs()` (plan ligero: `.file(url)` para nuevos,
-  `.rawEntry` para entradas sin cifrar, `.data` descifrada para cifradas) →
-  `ZipWriter.write` en streaming a un temporal → reemplazo atómico.
+- **Abrir**: `ContentView` → `doc.openArchive` (en 2.º plano: carga/mapea los bytes,
+  `detected.codec.open`) → `buildTree` → el outline pinta. Si hay entradas cifradas →
+  pide contraseña. Multivolumen → `VolumeStore.joinToTemporaryFile` + mapeo.
+- **Editar**: el outline/columna llaman a métodos de `doc`, que suben `revision` (el
+  outline recarga), recalculan el resumen y marcan `hasUnsavedChanges`.
+- **Guardar/Exportar**: `doc.makeSavePayload(for:)` (zip: `.rawEntry` copia en crudo las
+  entradas sin cifrar; resto: `Data` reconstruido) → `ArchiveSaver.encode` a un temporal
+  → colocar (mover atómico o `VolumeStore.split`). `export` no toca el documento activo.
 
 ## Cómo extender
 
-- **Nuevo formato de lectura** (tar, gz…): crear un `XReader`/`XExtractor` con la
-  misma forma que `ZipReader`/`ZipExtractor` y despachar por tipo en `openArchive`.
-  El modelo (`FileNode`, `ExportPlan`) es genérico salvo por `.zipEntry`.
+- **Nuevo formato**: un `case` en `ArchiveFormat`, su `case` en el registro
+  `ArchiveFormat.codec` (+ un codec si hace falta uno nuevo), detección
+  (`ArchiveFormat.detect*`), `nameKey` (en `ArchiveFormat+App.swift`) y, si es
+  escribible, su rama en `makeSavePayload`/`ArchiveSaver`.
 - **Nuevo cifrado**: añadir un caso a `ZipEncryption` y su rama en
   `ZipWriter`/`ZipExtractor` (+ campo extra si el formato lo requiere).
-- **Convenciones**: `.jsx`/`.swift` UI vs lógica; nada de código muerto; verificar
-  con `swift test` y `xcodebuild` (el agente no ejecuta la GUI).
+- **Convenciones**: motor sin UI; nada de código muerto; verificar con `swift test`
+  (motor) y `xcodebuild` + ⌘U (app); el agente no ejecuta la GUI.

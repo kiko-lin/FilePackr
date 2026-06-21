@@ -5,9 +5,12 @@ este archivo al día tras cada bloque de trabajo.
 
 ## Qué es
 
-App de macOS (SwiftUI + AppKit) para gestionar archivos comprimidos **ZIP**:
-abrir/navegar sin descomprimir, editar, extraer, previsualizar y **cifrar con
-contraseña** (estándar ZIP). Ver `README.md` para la visión general.
+App de macOS (SwiftUI + AppKit) para gestionar archivos comprimidos: abrir/navegar
+sin descomprimir, editar, extraer, previsualizar, **convertir entre formatos** y
+**cifrar con contraseña** (ZIP estándar). Formatos: **ZIP** (motor propio, lectura
+y escritura, con cifrado), **tar / tar.gz / tar.xz / tar.bz2 / gz / xz / bz2**
+(Swift puro), y **7z / rar / iso / xar / cpio / lha / cab** (vía libarchive del
+sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 - **Repo local**: `~/Desktop/Repos/FilePackr` (la app y el producto son **FilePackr**).
 - **Remoto git**: `git@github.com:kiko-lin/packr.git` (SSH). El entorno del agente
@@ -91,9 +94,18 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   - `ArchiveOutlineView` (`NSViewRepresentable` + `Coordinator`): el navegador
     `NSOutlineView` — selección, columnas ordenables, arrastre (mover/extraer/
     añadir), Quick Look (barra espaciadora), renombrado en línea, menú contextual.
-  - `ContentView`: barra superior (Añadir/Eliminar/Crear carpeta/Extraer), barra
-    de documento (icono+nombre, Cerrar/Guardar), zona de arrastre, overlay de
-    progreso, diálogos (conflicto, cerrar, contraseña, **opciones de guardar**).
+  - `ContentView`: la interfaz, **sin barra de título** (`hiddenTitleBar`, el contenido
+    sube). Con archivo abierto: **cabecera** (nombre del archivo + 🔒/volúmenes/“sin
+    guardar”, y a la derecha `Extraer todo · Cerrar · Exportar · Guardar`), **columna
+    vertical** de acciones de interior a la izquierda (Añadir/Crear carpeta/Eliminar/
+    Extraer, icono+etiqueta), el visor (`ArchiveOutlineView`) y una **barra de estado**
+    inferior (nº de ficheros + tamaño + comprimido). Estado vacío: zona de arrastre
+    **clicable**. Diálogos: conflicto de extracción, contraseña (entrada/apertura),
+    opciones de guardar/exportar, extraer, y el aviso unificado de cambios sin guardar.
+  - `WindowGuard` (`WindowGuard.swift`): `UnsavedChangesAlert` (aviso único de “cambios
+    sin guardar”) + delegado de `NSWindow` para interceptar el cierre de ventana; el
+    salir (⌘Q) lo cubre el `AppDelegate` (`FilePackrApp.swift`). **Sin pestañas de
+    ventana** (`allowsAutomaticWindowTabbing = false`): cada archivo en su ventana.
 
 ## Hecho
 
@@ -151,28 +163,50 @@ contraseña** (estándar ZIP). Ver `README.md` para la visión general.
   (renombrar/borrar/mover/crear/añadir); al intentarlo se pide la clave
   (`doc.isLocked`). Doble blindaje: guard en la UI y en el documento.
 - Diálogo de extracción compacto (destino = carpeta del zip; "Elegir…" abre el
-  navegador; contraseña si hace falta).
-- Icono de app (full-bleed macOS 26).
-- **Ajustes** (`SettingsView.swift` + `AppSettings.swift`): el engranaje de la barra
-  abre una **hoja modal** (no menú). `AppSettings` (@MainActor, ObservableObject,
-  UserDefaults, en caliente): **tema** (sistema/claro/oscuro → `preferredColorScheme`),
-  **formato por defecto**, **cifrado por defecto** (se aplican a documentos nuevos en
-  `saveDocument`), **destino de extracción** (carpeta del archivo o carpeta fija, se
-  aplica en `extract`), e **icono de app**. El idioma sigue en `Localizer`.
-- **Iconos de app** (5: naranja/verde/morado/azul/rojo): image sets en
-  `Assets.xcassets` (`AppIconOrange/Green/Purple/Blue/Red`), catálogo en
-  `AppIconOption.all`. Se aplican al **Dock** con `NSApp.applicationIconImage`
-  (recortado a esquinas redondeadas; se reaplica al arrancar). Nota: el icono del
-  **bundle** (Finder, `AppIcon`) es fijo y no cambia en caliente. Para añadir uno
-  nuevo: image set + entrada en `AppIconOption.all`.
+  navegador; contraseña si hace falta). **Extraer todo**: botón en la cabecera que
+  descomprime el archivo entero a una carpeta con su nombre (`exportPlanForAll`).
+- **Auditoría de arquitectura** (2026-06-20, items 1-7): `ArchiveCodec` (registro
+  `ArchiveFormat.codec`), `ArchiveDocument` troceado 1151→~760 LOC (`FileNode`,
+  `ExportPlan`, `ArchiveSaver`, `VolumeStore`), `ArchiveEntry` neutral, modelo sin
+  `Localizer`, multivolumen sin cargar todo en RAM, detección por firma. Tests 49→61.
+  Tests del modelo de la app en `FilePackrTests` (⌘U). Ver sección Arquitectura.
+- **Exportar** (`ArchiveDocument.export`): escribe una **copia** con otro formato/
+  cifrado/contraseña/volúmenes **sin cambiar el documento activo** (no llama a
+  `markSaved` ni muta los ajustes recordados, a diferencia de `save`). Comparten la
+  pieza `writeArchive`. Test de app `testExportDoesNotChangeDocument`.
+- **Aviso de cambios sin guardar** en los 3 caminos de cierre (botón Cerrar, cerrar
+  ventana, salir ⌘Q): un único `UnsavedChangesAlert` (NSAlert como hoja); `WindowGuard`
+  para la ventana y `AppDelegate.applicationShouldTerminate` para salir.
+- **Barra de estado** inferior (con contenido): nº de ficheros · tamaño · comprimido.
+  Resumen cacheado en el modelo (`contentFileCount`/`contentSize`/`contentCompressedSize`),
+  recalculado en `changed()` (no en cada render).
+- **Rediseño de UI** (sesión 2026-06-21): sin barra de título (`hiddenTitleBar`),
+  acciones de interior en **columna vertical** a la izquierda del visor, cabecera con
+  nombre + acciones de archivo, sin pestañas de ventana. La tabla usa estilo `.plain`
+  (el `.inset` pintaba un separador inicial en la cabecera). Al **crear una carpeta**
+  dentro de otra, la vista despliega y revela la nueva (`expandAncestors` en el
+  coordinator). Editar sobre un archivo bloqueado pide la clave y **ejecuta la acción
+  pendiente** al desbloquear (`editGuarded` recuerda la acción).
+- **Ajustes** (`SettingsView.swift` + `AppSettings.swift`): en el **menú nativo de la
+  app** (⌘,, escena `Settings`), no en la interfaz. `AppSettings` (@MainActor,
+  ObservableObject, UserDefaults, en caliente): **tema** (sistema/claro/oscuro →
+  `preferredColorScheme`), **formato por defecto**, **cifrado por defecto** (se aplican
+  a documentos nuevos en `saveDocument`) y **destino de extracción** (carpeta del archivo
+  o carpeta fija, se aplica en `extract`). El idioma sigue en `Localizer`.
+- **Icono de app**: único, generado desde un SVG (diamante) a `AppIcon.appiconset`
+  (todos los tamaños). Ya **no** hay selector de icono ni cambio en caliente (se
+  retiraron `AppIconOption` y los 5 image sets de color).
 - **i18n** (`Localization.swift`): `Localizer` (@MainActor, ObservableObject) con
   catálogo EN/ES en memoria y cambio de idioma **en caliente** (recordado en
-  UserDefaults). **Inglés por defecto**. Icono de ajustes (engranaje) en la barra →
-  menú con selector de idioma. Uso: en vistas `@EnvironmentObject var loc` y
-  `loc("clave")`/`loc("clave", arg)`; en modelo `Localizer.shared("clave")`. Para
-  añadir texto: nueva clave en `en`/`es`. `ArchiveOutlineView` recibe `language` y
-  re-titula columnas/menú al cambiar. Nota: los nombres de "Clase" vienen de
-  `UTType.localizedDescription` (siguen el idioma del SO, no el de la app).
+  UserDefaults). **Inglés por defecto**. El selector de idioma vive en la ventana de
+  **Ajustes** (⌘,). Uso: en vistas `@EnvironmentObject var loc` y `loc("clave")`/
+  `loc("clave", arg)`. **El modelo ya NO usa `Localizer`** (auditoría item 4): emite
+  tokens (`ProgressKind`) y las vistas traducen; los nombres por defecto (carpeta nueva,
+  "Sin título") los inyecta la vista. `ArchiveOutlineView` (coordinator) sí usa
+  `Localizer.shared` (es vista AppKit). Para añadir texto: nueva clave en `en`/`es`.
+  Nota: los nombres de "Clase" vienen de `UTType.localizedDescription` (siguen el idioma
+  del SO, no el de la app), y el **menú de la app** tampoco sigue aún el idioma interno
+  (ver TODO).
 
 ## TODO (objetivos pendientes, en orden lógico)
 

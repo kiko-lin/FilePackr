@@ -1,62 +1,82 @@
 # FilePackr
 
-Gestor de archivos comprimidos para **macOS**: abre y navega ZIP **sin
-descomprimirlos**, crea/edita archivos (añadir, borrar, renombrar, mover, carpetas),
-extrae, previsualiza con Quick Look y **cifra con contraseña** (estándar ZIP).
+Gestor de archivos comprimidos para **macOS**: abre y navega archivos **sin
+descomprimirlos**, edita (añadir, borrar, renombrar, mover, crear carpetas), extrae,
+previsualiza con Quick Look, **convierte entre formatos** y **cifra con contraseña**
+(estándar ZIP, interoperable con Finder/Keka/WinZip/7‑Zip).
 
-Interfaz nativa (SwiftUI + AppKit), con un navegador de ficheros basado en
-`NSOutlineView` tipo Finder.
+Interfaz nativa (SwiftUI + AppKit) con un navegador de ficheros tipo Finder
+(`NSOutlineView`).
+
+## Formatos
+
+| Familia | Formatos | Motor | Lectura | Escritura |
+|---|---|---|---|---|
+| ZIP | `.zip` | propio (Swift) | ✅ (+ZIP64, cifrado) | ✅ |
+| tar y compresores | `.tar` `.tar.gz` `.tar.xz` `.tar.bz2` `.gz` `.xz` `.bz2` | Swift puro / `Compression` / `libbz2` | ✅ | ✅ |
+| libarchive | `.7z` `.iso` `.xar`/`.pkg` | libarchive del sistema | ✅ | ✅ |
+| libarchive (solo lectura) | `.rar` `.cpio` `.lha`/`.lzh` `.cab` | libarchive del sistema | ✅ | — |
+
+Abrir un archivo en un formato y **guardarlo en otro** reconstruye el contenido.
 
 ## Características
 
-- **Navegar sin descomprimir**: lee solo el índice (central directory) del ZIP;
-  abrir es rápido aunque el archivo sea de varios GB.
-- **Editar**: arrastrar/añadir ficheros y carpetas, borrar, **renombrar** en línea,
-  **mover** arrastrando sobre carpetas, crear carpetas.
-- **Extraer**: botón, menú contextual o **arrastrar al Finder**; diálogo de
-  conflictos (sobrescribir / guardar como / cancelar).
-- **Quick Look**: barra espaciadora, como en Finder.
-- **Columnas tipo Finder**: Nombre, Fecha, Tamaño, Clase, Comprimido; ordenables
-  por cabecera.
-- **Operaciones en segundo plano** con barra de progreso (abrir / guardar /
-  extraer); el guardado va en **streaming a disco** (no carga el ZIP en memoria).
-- **ZIP64**: lee y escribe archivos > 4 GB o con > 65.535 entradas.
-- **Cifrado ZIP estándar** (interoperable con Finder, Keka, WinZip, 7-Zip):
+- **Navegar sin descomprimir**: el ZIP lee solo el índice (central directory); abrir
+  es rápido aunque el archivo sea de varios GB.
+- **Editar**: arrastrar/añadir ficheros y carpetas, borrar, renombrar en línea, mover
+  arrastrando sobre carpetas, crear carpetas (la vista despliega y revela la nueva).
+- **Extraer**: por nodo (botón / menú / arrastre al Finder) o **Extraer todo** el
+  archivo a una carpeta; con diálogo de conflictos (sobrescribir / guardar como / cancelar).
+- **Exportar**: escribe una **copia** con otro formato, cifrado, contraseña o
+  troceado en volúmenes, sin tocar el documento abierto.
+- **Quick Look** (barra espaciadora), columnas tipo Finder ordenables (Nombre, Fecha,
+  Tamaño, Clase, Comprimido) y **barra de estado** (nº de ficheros · tamaño · comprimido).
+- **Operaciones en segundo plano** con barra de progreso; el guardado va en **streaming
+  a disco** (no carga el archivo entero en memoria).
+- **ZIP64** (archivos > 4 GB o > 65.535 entradas) y **volúmenes** (división por bytes).
+- **Cifrado ZIP estándar**:
   - **Débil** — ZipCrypto / PKWARE clásico (universal, inseguro).
-  - **Fuerte** — AES-256 de WinZip (AE-2).
-  - Diálogo de guardado: formato + cifrado + contraseña opcional.
-  - **Abrir archivos con contraseña** (de cualquier app): pide la clave, la valida
-    y la recuerda. Re-guardar conserva el cifrado.
-  - Un archivo cifrado **bloqueado** es de solo lectura hasta dar la contraseña.
+  - **Fuerte** — AES‑256 de WinZip (AE‑2), interop verificada contra `pyzipper`.
+  - Abrir archivos con contraseña de otras apps (pide la clave, la valida y la
+    recuerda); re‑guardar conserva el cifrado; un cifrado bloqueado es de solo lectura.
+- **Aviso de cambios sin guardar** al cerrar/salir; **sin pestañas** (una ventana por
+  archivo); **Ajustes** en el menú de la app (⌘,): tema, idioma (EN/ES), formato y
+  cifrado por defecto, destino de extracción.
 
-Ver [`docs/encryption.md`](docs/encryption.md) y [`docs/architecture.md`](docs/architecture.md).
+Ver [`docs/architecture.md`](docs/architecture.md) y [`docs/encryption.md`](docs/encryption.md).
 
 ## Arquitectura
 
 ```
-FilePackr/                        (raíz del repo; remoto git: github.com/kiko-lin/packr)
-├── Package.swift                 paquete "FilePackrCore" (lógica, testeable por CLI)
+FilePackr/                            (raíz del repo; remoto: github.com/kiko-lin/packr)
+├── Package.swift                     paquete "FilePackrCore" (motor, sin UI, testeable por CLI)
 ├── Sources/
-│   ├── ArchiveBrowser/           motor ZIP (sin UI)
-│   │   ├── ZipReader.swift       lee el índice (central directory) + ZIP64
-│   │   ├── ZipExtractor.swift    extrae una entrada (deflate/almacenado, descifra)
-│   │   ├── ZipWriter.swift       escribe ZIP (streaming, ZIP64, cifrado)
-│   │   ├── ZipCrypto.swift       cifrado clásico "Débil"
-│   │   ├── ZipAES.swift          cifrado AES-256 de WinZip "Fuerte"
-│   │   ├── Deflate.swift         DEFLATE vía framework Compression
-│   │   └── CRC32.swift
-│   └── CryptoCore/               AES-256-GCM + PBKDF2 (formato propio .fpkz, legacy)
-├── Tests/                        26+ tests (swift test), con interop contra zip/unzip
-└── App/                          proyecto Xcode de la app
+│   ├── ArchiveBrowser/               motor de archivos (sin UI)
+│   │   ├── ArchiveFormat.swift        enum de formato: capacidades + detección (ext/firma)
+│   │   ├── ArchiveCodec.swift         registro formato→codec: leer/extraer por formato
+│   │   ├── ArchiveEntry.swift         entrada neutral (+ bloque ZIP opcional)
+│   │   ├── ZipReader / ZipExtractor / ZipWriter / ZipCrypto / ZipAES / Deflate / CRC32
+│   │   ├── Tar / Gzip / Xz / Bzip2    tar y compresores (Swift puro / Compression / libbz2)
+│   │   ├── LibArchive.swift           puente a la libarchive del sistema (7z/rar/iso/…)
+│   │   └── Volumes / VolumeStore      troceado por bytes (en memoria / en disco)
+│   ├── Cbz2/                          systemLibrary → libbz2 del sistema
+│   └── Carchive/                      systemLibrary → libarchive del sistema (shim.h propio)
+├── Tests/                            tests del motor (swift test); interop opcional (zip/unzip, pyzipper)
+└── App/                             proyecto Xcode de la app (SwiftUI/AppKit)
     ├── FilePackr.xcodeproj
-    └── FilePackr/                fuentes de la app (SwiftUI/AppKit)
-        ├── FilePackrApp.swift
-        ├── ContentView.swift     barra superior + barra de documento + diálogos
-        ├── ArchiveDocument.swift modelo (árbol editable, abrir/guardar/extraer)
-        └── ArchiveOutlineView.swift  navegador NSOutlineView (selección, drag, QL)
+    ├── FilePackr/                    fuentes de la app
+    │   ├── ArchiveDocument.swift      modelo (árbol editable, abrir/guardar/exportar/extraer)
+    │   ├── ArchiveSaver.swift         codifica el SavePayload a disco (streaming/saver)
+    │   ├── FileNode / ExportPlan      nodo del árbol / instantánea Sendable para extraer
+    │   ├── ArchiveOutlineView.swift   navegador NSOutlineView (selección, drag, Quick Look)
+    │   ├── ContentView.swift          cabecera + columna de acciones + barra de estado + diálogos
+    │   ├── WindowGuard.swift          aviso de cambios sin guardar (cierre de ventana)
+    │   ├── SettingsView / AppSettings / Localization
+    │   └── FilePackrApp.swift
+    └── FilePackrTests/               tests del modelo de la app (⌘U; no los ve `swift test`)
 ```
 
-La lógica del ZIP vive en un paquete Swift independiente de la UI, así la parte
+La lógica de archivos vive en un paquete Swift independiente de la UI, así la parte
 sensible (formato, cifrado) se prueba sin levantar la interfaz.
 
 ## Compilar y probar
@@ -65,21 +85,18 @@ Tests del motor (sin Xcode):
 
 ```bash
 swift test
+# Interop AES-256 opcional: pip3 install pyzipper && swift test
 ```
 
 La app (requiere Xcode, macOS):
 
 ```bash
-open App/FilePackr.xcodeproj   # luego ⌘R (esquema FilePackr)
+open App/FilePackr.xcodeproj   # luego ⌘R (esquema FilePackr); tests del modelo con ⌘U
 # o por línea de comandos:
 xcodebuild -project App/FilePackr.xcodeproj -scheme FilePackr \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
-> El icono de macOS 26 es *full-bleed* (cuadrado opaco): el sistema le aplica la
-> máscara redondeada.
-
 ## Estado y pendientes
 
-Ver [`AGENTS.md`](AGENTS.md) para el detalle de lo hecho y los objetivos
-pendientes (TODO).
+Ver [`AGENTS.md`](AGENTS.md) para el detalle de lo hecho y los objetivos pendientes (TODO).
