@@ -241,6 +241,8 @@ struct ContentView: View {
                     content
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                Divider()
+                statusBar            // recuento + peso del contenido
             }
         }
         .ignoresSafeArea(.container, edges: .top)   // el contenido sube a la zona del título
@@ -448,7 +450,7 @@ struct ContentView: View {
         }
         .padding(.top, 24)        // espacio arriba (bajo los semáforos)
         .padding(.bottom, 20)
-        .padding(.leading, 100)   // libre la columna de semáforos + margen
+        .padding(.leading, 90)    // libre la columna de semáforos + margen
         .padding(.trailing, 14)
         .background(.bar)
     }
@@ -496,6 +498,28 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .disabled(disabled)
         .help(loc(help))
+    }
+
+    /// Barra de estado inferior: nº de ficheros y peso total (estilo Finder).
+    private var statusBar: some View {
+        HStack {
+            Spacer()
+            Text(statusText)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .background(.bar)
+    }
+
+    private var statusText: String {
+        let count = doc.contentFileCount
+        let word = count == 1 ? loc("status.file") : loc("status.files")
+        let size = ByteCountFormatter.string(fromByteCount: Int64(doc.contentSize), countStyle: .file)
+        let packed = ByteCountFormatter.string(fromByteCount: Int64(doc.contentCompressedSize), countStyle: .file)
+        return "\(count) \(word) · \(size) · \(packed) \(loc("status.compressed"))"
     }
 
     private var dropPrompt: some View {

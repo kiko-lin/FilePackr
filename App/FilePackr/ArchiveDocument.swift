@@ -777,9 +777,40 @@ final class ArchiveDocument: ObservableObject {
         }
     }
 
+    /// Resumen del contenido para la barra de estado (recalculado al cambiar la
+    /// estructura, no en cada render): nº de ficheros y tamaño total descomprimido.
+    private(set) var contentFileCount = 0
+    private(set) var contentSize: UInt64 = 0
+    /// Tamaño comprimido total (solo lo conocen las entradas de un archivo abierto;
+    /// los ficheros añadidos aún sin comprimir cuentan 0).
+    private(set) var contentCompressedSize: UInt64 = 0
+
+    private func recomputeContentSummary() {
+        var files = 0
+        var bytes: UInt64 = 0
+        var compressed: UInt64 = 0
+        func walk(_ nodes: [FileNode]) {
+            for node in nodes {
+                if node.isDirectory { walk(node.children) }
+                else {
+                    files += 1
+                    bytes += node.fileSize ?? 0
+                    compressed += node.compressedSize ?? 0
+                }
+            }
+        }
+        walk(roots)
+        contentFileCount = files
+        contentSize = bytes
+        contentCompressedSize = compressed
+    }
+
     /// Las mutaciones tocan nodos (clases); subir `revision` (publicado) avisa a
     /// SwiftUI y le dice a la vista de lista que debe recargar.
-    private func changed() { revision &+= 1 }
+    private func changed() {
+        recomputeContentSummary()
+        revision &+= 1
+    }
 
     /// Como `changed()`, pero además marca el documento con cambios sin guardar.
     private func markChanged() {
