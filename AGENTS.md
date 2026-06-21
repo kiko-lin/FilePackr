@@ -309,7 +309,9 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 - [x] ~~bzip2/tar.bz2~~ (Tier 3, hecho — `libbz2` del sistema, ver "Hecho").
 - [x] ~~7z/rar~~ (Tier 4, hecho — `libarchive` del sistema SIN vendorizar, ver "Hecho").
 - [x] ~~iso/cpio/xar/lha/cab~~ (hecho — misma libarchive; lectura todos, escritura iso/xar).
-- [ ] **7z cifrado al escribir**: libarchive no lo soporta; haría falta otra librería.
+- [ ] **7z cifrado al escribir**: libarchive no lo soporta (escribe 7z en claro). Haría
+      falta el **LZMA SDK** de Igor Pavlov (cifra contenido y nombres; además comprime
+      multihilo, ver "valorar" abajo). Confirmado en revisión externa (2026-06-21).
 - [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
       `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
 - [x] ~~**Cambiar cifrado/contraseña al re-guardar**~~ (hecho — vía **Exportar…**): botón
@@ -329,7 +331,16 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       descomprime el tar entero en RAM (su `container`). Haría falta un **índice de tar
       incremental** (parsear descomprimiendo una vez, sin guardar los bytes, cubriendo
       PAX/GNU) y una extracción que **re-descomprima** saltando hasta el offset de la entrada.
-      Es el único caso que falta; mayor riesgo/menor valor (navegar un tar.gz enorme).
+      Es el único caso de streaming que falta; mayor riesgo/menor valor (navegar un tar.gz enorme).
+- [ ] **Lectura de DMG** (imagen de disco de Mac): libarchive no la maneja; sería vía
+      `hdiutil` (montar/adjuntar) o parseo propio. Único formato relevante de Mac que no
+      leemos. Señalado en revisión externa (2026-06-21).
+- [ ] **(VALORAR) Compresión multinúcleo**: hoy comprimimos **secuencialmente** (un escritor
+      en streaming por archivo). En Apple Silicon, comprimir entradas en paralelo y ensamblar
+      aceleraría ZIP/7z con muchos ficheros. **Trade-off**: choca con el modelo actual de
+      streaming a un único fichero secuencial (habría que comprimir a temporales en paralelo y
+      concatenar, o usar el LZMA SDK multihilo para 7z). Decidido priorizar memoria > velocidad;
+      reevaluar si el rendimiento se vuelve un problema real. (revisión externa 2026-06-21)
 - [x] ~~Localización~~ (hecho: EN/ES con selector de idioma — ver "Hecho"). Pendiente
       menor: más idiomas, y que "Clase" use el idioma de la app y no el del SO.
 - [ ] **Traducir el menú de la app** (barra de menús de macOS: menú con el nombre de la
