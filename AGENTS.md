@@ -109,6 +109,13 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 ## Hecho
 
+- **Sesión 2026-06-21 (e) — streaming en libarchive (7z/iso/xar)**: `LibArchive.WriteItem`
+  acepta origen `.file(url)` (se lee al vuelo con `writeBody`, sin cargar el fichero en RAM);
+  `LibArchive.extractEntry(...,sink:)` emite el contenido por trozos (`streamData`), y
+  `extractEntry(...) -> Data`/`readData` cuelgan de él. `LibArchiveCodec.extract(...,sink:)`
+  y `makeLibArchiveItems` pasan los ficheros como URL. 81 tests del motor verdes (incluye
+  7z escrito desde disco y extraído a sink). Único caso restante: apertura de tar comprimido.
+
 - **Sesión 2026-06-21 (d) — tar en streaming + descompresión en streaming**:
   - **Núcleo pull único por compresor**: `Gzip`/`Xz`/`Bzip2` exponen `compress(next:sink:)`
     (lee por trozos `next`, emite por trozos `sink`); las variantes en memoria, fichero→
@@ -316,10 +323,13 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       **tar/tar.gz/tar.xz/tar.bz2** se comprimen al vuelo, con memoria constante.
 - [x] ~~**Streaming de descompresión/extracción**~~ (hecho — ver "Hecho"): gz/xz/bz2 y las
       entradas ZIP (incl. ZipCrypto/AES) se extraen a disco sin materializar la salida en RAM.
-- [ ] **Streaming en libarchive (7z/iso/xar) y en la apertura de tar**: la escritura/lectura
-      de 7z aún pasa por `[Data]` en RAM, y abrir un `.tar.gz` descomprime el tar entero en
-      RAM (su `container`). Pendiente (otra sesión): escritura/extracción de libarchive a
-      fichero y un índice de tar que no exija el tar completo en memoria.
+- [x] ~~**Streaming en libarchive (7z/iso/xar)**~~ (hecho — ver "Hecho"): escritura desde
+      ficheros de disco al vuelo y extracción a `sink`, sin acumular el contenido en RAM.
+- [ ] **Streaming en la apertura de tar comprimido**: abrir un `.tar.gz`/`.xz`/`.bz2` aún
+      descomprime el tar entero en RAM (su `container`). Haría falta un **índice de tar
+      incremental** (parsear descomprimiendo una vez, sin guardar los bytes, cubriendo
+      PAX/GNU) y una extracción que **re-descomprima** saltando hasta el offset de la entrada.
+      Es el único caso que falta; mayor riesgo/menor valor (navegar un tar.gz enorme).
 - [x] ~~Localización~~ (hecho: EN/ES con selector de idioma — ver "Hecho"). Pendiente
       menor: más idiomas, y que "Clase" use el idioma de la app y no el del SO.
 - [ ] **Traducir el menú de la app** (barra de menús de macOS: menú con el nombre de la

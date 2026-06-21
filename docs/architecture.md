@@ -43,8 +43,9 @@ Lectores/escritores por formato:
   - ZIP (escritura): `ZipWriter` comprime cada entrada `.file` al vuelo con **descriptor de
     datos** (bit 3) + ZIP64; el cifrado ZipCrypto/AES (`ZipAES.Encryptor`) se aplica por trozos.
   - Descomprimir/extraer: `Gzip`/`Xz`/`Bzip2` con `decompress(_:sink:)`; `ZipExtractor.extract`
-    infla y descifra al vuelo (`ZipAES.Decryptor`, MAC al final). `ArchiveCodec.extract(...,sink:)`
-    expone esto por formato (fallback a `entryData` para tar ya en RAM y libarchive).
+    infla y descifra al vuelo (`ZipAES.Decryptor`, MAC al final); `LibArchive.extractEntry(...,sink:)`
+    (7z/iso/xar) y su escritura desde ficheros de disco al vuelo. `ArchiveCodec.extract(...,sink:)`
+    expone esto por formato (el `fallback` a `entryData` solo lo usa el tar ya descomprimido en RAM).
 - **tar y compresores** (Swift puro): `Tar` (ustar + PAX + GNU L), `Gzip` (RFC 1952),
   `Xz` (`COMPRESSION_LZMA`), `Bzip2` (`libbz2` del sistema vía target `Cbz2`).
 - **libarchive** (`LibArchive.swift`): puente a la **libarchive del sistema** (target

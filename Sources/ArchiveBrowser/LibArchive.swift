@@ -54,7 +54,16 @@ public enum LibArchive {
 
     /// Datos de la entrada cuyo `path` coincide (re-abre e itera hasta ella).
     public static func extractEntry(path: String, in data: Data, passphrase: String? = nil) throws -> Data {
-        try data.withUnsafeBytes { raw -> Data in
+        var out = Data()
+        try extractEntry(path: path, in: data, passphrase: passphrase, sink: { out.append($0) })
+        return out
+    }
+
+    /// Extrae la entrada `path` emitiendo el contenido por trozos (`sink`), **sin
+    /// materializar la salida en RAM**. Re-abre el archivo e itera hasta ella.
+    public static func extractEntry(path: String, in data: Data, passphrase: String? = nil,
+                                    sink: (Data) throws -> Void) throws {
+        try data.withUnsafeBytes { raw in
             let a = try open(raw, passphrase: passphrase)
             defer { archive_read_free(a) }
 
@@ -64,7 +73,8 @@ public enum LibArchive {
                 if r == EOFCODE { throw LibArchiveError.entryNotFound }
                 guard r == OK, let entry else { throw classifyHeaderFailure(a, passphrase: passphrase) }
                 if String(cString: archive_entry_pathname(entry)) == path {
-                    return try readData(a)
+                    try streamData(a, sink: sink)
+                    return
                 }
                 archive_read_data_skip(a)
             }
@@ -74,12 +84,28 @@ public enum LibArchive {
     // MARK: - Escritura (7z)
 
     public struct WriteItem: Sendable {
+        /// Origen del contenido: bytes ya en memoria, o un fichero de disco (streaming).
+        public enum Source: Sendable { case data(Data); case file(URL) }
         public let path: String
-        public let data: Data
+        public let source: Source
         public let modifiedAt: Date?
         public let isDirectory: Bool
+
         public init(path: String, data: Data, modifiedAt: Date?, isDirectory: Bool) {
-            self.path = path; self.data = data; self.modifiedAt = modifiedAt; self.isDirectory = isDirectory
+            self.path = path; self.source = .data(data); self.modifiedAt = modifiedAt; self.isDirectory = isDirectory
+        }
+        /// Entrada cuyo contenido se leerá del fichero al vuelo (sin cargarlo en RAM).
+        public init(path: String, fileURL: URL, modifiedAt: Date?) {
+            self.path = path; self.source = .file(fileURL); self.modifiedAt = modifiedAt; self.isDirectory = false
+        }
+
+        /// Tamaño del contenido (para la cabecera): bytes en memoria o tamaño en disco.
+        var size: Int64 {
+            if isDirectory { return 0 }
+            switch source {
+            case .data(let d): return Int64(d.count)
+            case .file(let url): return ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int).map(Int64.init) ?? 0
+            }
         }
     }
 
@@ -114,13 +140,10 @@ public enum LibArchive {
             path.withCString { archive_entry_set_pathname(entry, $0) }
             archive_entry_set_filetype(entry, item.isDirectory ? AE_IFDIR : AE_IFREG)
             archive_entry_set_perm(entry, item.isDirectory ? 0o755 : 0o644)
-            archive_entry_set_size(entry, item.isDirectory ? 0 : Int64(item.data.count))
+            archive_entry_set_size(entry, item.size)
             archive_entry_set_mtime(entry, Int64(item.modifiedAt?.timeIntervalSince1970 ?? 0), 0)
             guard archive_write_header(a, entry) == OK else { throw LibArchiveError.writeFailed }
-            if !item.isDirectory, !item.data.isEmpty {
-                let written = item.data.withUnsafeBytes { archive_write_data(a, $0.baseAddress, $0.count) }
-                guard written >= 0 else { throw LibArchiveError.writeFailed }
-            }
+            if !item.isDirectory { try writeBody(item.source, to: a) }
         }
         guard archive_write_close(a) == OK else { throw LibArchiveError.writeFailed }
     }
@@ -139,17 +162,33 @@ public enum LibArchive {
         return a
     }
 
-    private static func readData(_ a: OpaquePointer) throws -> Data {
-        var out = Data()
+    /// Lee los datos de la entrada actual y los emite por trozos (`sink`), sin acumularlos.
+    private static func streamData(_ a: OpaquePointer, sink: (Data) throws -> Void) throws {
         let bufSize = 64 * 1024
         var buf = [UInt8](repeating: 0, count: bufSize)
         while true {
             let n = buf.withUnsafeMutableBytes { archive_read_data(a, $0.baseAddress, bufSize) }
             if n == 0 { break }
             guard n > 0 else { throw LibArchiveError.wrongPassword }   // dato cifrado sin clave correcta
-            out.append(contentsOf: buf.prefix(Int(n)))
+            try sink(Data(buf.prefix(Int(n))))
         }
-        return out
+    }
+
+    /// Escribe el cuerpo de una entrada: bytes en memoria o leídos del fichero por trozos.
+    private static func writeBody(_ source: WriteItem.Source, to a: OpaquePointer) throws {
+        switch source {
+        case .data(let d):
+            guard !d.isEmpty else { return }
+            let n = d.withUnsafeBytes { archive_write_data(a, $0.baseAddress, $0.count) }
+            guard n >= 0 else { throw LibArchiveError.writeFailed }
+        case .file(let url):
+            let h = try FileHandle(forReadingFrom: url)
+            defer { try? h.close() }
+            while let chunk = try h.read(upToCount: 64 * 1024), !chunk.isEmpty {
+                let n = chunk.withUnsafeBytes { archive_write_data(a, $0.baseAddress, $0.count) }
+                guard n >= 0 else { throw LibArchiveError.writeFailed }
+            }
+        }
     }
 
     /// Distingue "necesita contraseña" de un fallo genérico, mirando el mensaje de error.

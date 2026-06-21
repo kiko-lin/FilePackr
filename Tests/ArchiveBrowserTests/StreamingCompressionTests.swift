@@ -318,4 +318,30 @@ final class StreamingCompressionTests: XCTestCase {
         XCTAssertEqual(p.terminationStatus, 0, "unzip debe terminar sin error")
         XCTAssertEqual(extracted, payload)
     }
+
+    // MARK: - libarchive 7z en streaming (Hueco final)
+
+    func testSevenZipStreamingWriteAndExtract() throws {
+        let dir = try tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let payload = sampleData(300_000)
+        let file = dir.appendingPathComponent("big.bin")
+        try payload.write(to: file)
+        let url = dir.appendingPathComponent("out.7z")
+
+        // Escritura con el fichero grande como **origen de disco** (leído al vuelo).
+        try LibArchive.write([
+            .init(path: "dir", data: Data(), modifiedAt: nil, isDirectory: true),
+            .init(path: "dir/big.bin", fileURL: file, modifiedAt: nil),
+            .init(path: "mem.txt", data: Data("en memoria".utf8), modifiedAt: nil, isDirectory: false),
+        ], to: url, format: .sevenZip)
+
+        let data = try Data(contentsOf: url)
+        let (entries, _) = try LibArchive.listEntries(in: data)
+        XCTAssertTrue(Set(entries.map(\.path)).isSuperset(of: ["dir/big.bin", "mem.txt"]))
+        // Extracción en streaming (sink) y por el wrapper en memoria: mismos bytes.
+        XCTAssertEqual(try collect { try LibArchive.extractEntry(path: "dir/big.bin", in: data, sink: $0) }, payload)
+        XCTAssertEqual(try LibArchive.extractEntry(path: "dir/big.bin", in: data), payload)
+        XCTAssertEqual(String(decoding: try LibArchive.extractEntry(path: "mem.txt", in: data), as: UTF8.self),
+                       "en memoria")
+    }
 }

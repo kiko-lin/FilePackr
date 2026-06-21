@@ -164,4 +164,9 @@ struct LibArchiveCodec: ArchiveCodec {
     func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {
         try LibArchive.extractEntry(path: entry.path, in: container, passphrase: password)
     }
+
+    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+                 sink: (Data) throws -> Void) throws {
+        try LibArchive.extractEntry(path: entry.path, in: container, passphrase: password, sink: sink)
+    }
 }

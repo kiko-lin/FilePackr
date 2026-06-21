@@ -665,7 +665,8 @@ final class ArchiveDocument: ObservableObject {
         return items
     }
 
-    /// Como `makeTarItems`, pero para el escritor de 7z de libarchive.
+    /// Como `makeTarItems`, pero para el escritor de 7z/iso/xar de libarchive: los ficheros
+    /// de disco van como URL (se leen al vuelo); las entradas de un archivo abierto, en memoria.
     private func makeLibArchiveItems() -> [LibArchive.WriteItem] {
         var items: [LibArchive.WriteItem] = []
         func walk(_ nodes: [FileNode], prefix: String) {
@@ -675,6 +676,8 @@ final class ArchiveDocument: ObservableObject {
                     items.append(LibArchive.WriteItem(path: path, data: Data(),
                                                       modifiedAt: node.modificationDate, isDirectory: true))
                     walk(node.children, prefix: path + "/")
+                } else if case .diskFile(let url) = node.source {
+                    items.append(LibArchive.WriteItem(path: path, fileURL: url, modifiedAt: node.modificationDate))
                 } else if let data = nodeData(node) {
                     items.append(LibArchive.WriteItem(path: path, data: data,
                                                       modifiedAt: node.modificationDate, isDirectory: false))
