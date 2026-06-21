@@ -477,18 +477,6 @@ final class ArchiveDocument: ObservableObject {
         ExportPlan(name: name, payload: .folder(roots.map { exportPlan(for: $0) }))
     }
 
-    /// Datos sin comprimir de un nodo, leídos según el formato del archivo de origen.
-    /// Sirve para reconstruir el contenido al guardar en otro formato o al extraer.
-    private func nodeData(_ node: FileNode) -> Data? {
-        switch node.source {
-        case .folder: return nil
-        case .diskFile(let url): return try? Data(contentsOf: url)
-        case .zipEntry(let entry):
-            guard let archive = sourceArchiveData else { return nil }
-            return try? format.codec.entryData(for: entry, in: archive, password: entryPassword)
-        }
-    }
-
     /// Escribe el documento en `url` con el formato/cifrado/volúmenes dados, en streaming
     /// a disco y en segundo plano con progreso. **No toca el estado del documento** — es
     /// la pieza común de `save` (que además adopta el fichero) y `export` (que no).
@@ -502,8 +490,12 @@ final class ArchiveDocument: ObservableObject {
         defer { progress = nil }
 
         // 1) Producir el archivo completo en un fichero temporal. El documento decide
-        // *qué* escribir (lee el árbol); el ArchiveSaver decide *cómo* (codifica a disco).
-        let payload = try makeSavePayload(for: outputFormat, encryption: cipher, password: pwd)
+        // *qué* escribir (ensambla el payload leyendo el árbol vía SavePayloadBuilder); el
+        // ArchiveSaver decide *cómo* (codifica a disco).
+        let builder = SavePayloadBuilder(roots: roots, documentName: documentName,
+                                         sourceFormat: format, sourceArchiveData: sourceArchiveData,
+                                         entryPassword: entryPassword)
+        let payload = try builder.payload(for: outputFormat, encryption: cipher, password: pwd)
         let work = url.deletingLastPathComponent()
             .appendingPathComponent(".\(UUID().uuidString).filepackr.work")
         do {
@@ -555,162 +547,6 @@ final class ArchiveDocument: ObservableObject {
                 encryption: ZipEncryption, password: String?, volumeSize: Int? = nil) async throws {
         try await writeArchive(to: url, format: outputFormat, encryption: encryption,
                                password: password, volumeSize: volumeSize)
-    }
-
-    /// Ensambla, leyendo el árbol, el `SavePayload` (`Sendable`) para el formato de
-    /// salida. Lanza para formatos de solo lectura o si un formato de un solo fichero
-    /// no tiene contenido. El ArchiveSaver lo escribe luego a disco.
-    private func makeSavePayload(for outputFormat: ArchiveFormat,
-                                 encryption: ZipEncryption, password: String?) throws -> SavePayload {
-        switch outputFormat {
-        case .zip:
-            return .zip(inputs: makeSaveInputs(), encryption: encryption, password: password)
-        case .tar:
-            let items = makeTarItems()
-            return .stream { handle in
-                let next = Tar.reader(items)
-                while let chunk = try next() { try handle.write(contentsOf: chunk) }
-            }
-        case .tarGzip:
-            let items = makeTarItems()
-            let name = documentName.isEmpty ? nil : documentName
-            return .stream { handle in
-                try Gzip.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) }, filename: name)
-            }
-        case .tarXz:
-            let items = makeTarItems()
-            return .stream { handle in
-                try Xz.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) })
-            }
-        case .tarBzip2:
-            let items = makeTarItems()
-            return .stream { handle in
-                try Bzip2.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) })
-            }
-        case .gzip:
-            guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
-            let name = node.name
-            return try singleFilePayload(node,
-                stream: { try Gzip.compress(from: $0, to: $1, filename: name) },
-                memory: { Gzip.compress($0, filename: name) })
-        case .xz:
-            guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
-            return try singleFilePayload(node, stream: { try Xz.compress(from: $0, to: $1) },
-                                         memory: { Xz.compress($0) })
-        case .bzip2:
-            guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
-            return try singleFilePayload(node, stream: { try Bzip2.compress(from: $0, to: $1) },
-                                         memory: { Bzip2.compress($0) })
-        case .sevenZip, .iso, .xar:
-            guard let writeFormat = outputFormat.libArchiveWriteFormat else {
-                throw CocoaError(.fileWriteUnsupportedScheme)
-            }
-            return .libArchive(items: makeLibArchiveItems(), format: writeFormat)
-        case .rar, .cpio, .lha, .cab:
-            throw CocoaError(.fileWriteUnsupportedScheme)   // formatos de solo lectura
-        }
-    }
-
-    /// Payload para formatos de un solo fichero (gz/xz/bz2). Si el contenido es un
-    /// fichero de disco, comprime en **streaming** (memoria constante); si ya está en
-    /// RAM (entrada de un archivo abierto), usa la ruta en memoria.
-    private func singleFilePayload(_ node: FileNode,
-                                   stream: @escaping @Sendable (FileHandle, FileHandle) throws -> Void,
-                                   memory: @escaping @Sendable (Data) -> Data) throws -> SavePayload {
-        if case .diskFile(let url) = node.source {
-            return .stream { out in
-                let input = try FileHandle(forReadingFrom: url)
-                defer { try? input.close() }
-                try stream(input, out)
-            }
-        }
-        guard let data = nodeData(node) else { throw CocoaError(.fileWriteUnknown) }
-        return .data { memory(data) }
-    }
-
-    /// Construye las entradas para escribir un TAR. Los ficheros de disco van como **URL**
-    /// (se leen al vuelo al escribir, sin cargarlos en RAM); las entradas de un archivo ya
-    /// abierto van como bytes (reconstruidos en memoria, que es donde están).
-    private func makeTarItems() -> [Tar.WriteItem] {
-        var items: [Tar.WriteItem] = []
-        func walk(_ nodes: [FileNode], prefix: String) {
-            for node in nodes {
-                let path = prefix + node.name
-                if node.isDirectory {
-                    items.append(Tar.WriteItem(path: path + "/", data: Data(),
-                                               modifiedAt: node.modificationDate, isDirectory: true))
-                    walk(node.children, prefix: path + "/")
-                } else if case .diskFile(let url) = node.source {
-                    items.append(Tar.WriteItem(path: path, fileURL: url, modifiedAt: node.modificationDate))
-                } else if let data = nodeData(node) {
-                    items.append(Tar.WriteItem(path: path, data: data,
-                                               modifiedAt: node.modificationDate, isDirectory: false))
-                }
-            }
-        }
-        walk(roots, prefix: "")
-        return items
-    }
-
-    /// Como `makeTarItems`, pero para el escritor de 7z/iso/xar de libarchive: los ficheros
-    /// de disco van como URL (se leen al vuelo); las entradas de un archivo abierto, en memoria.
-    private func makeLibArchiveItems() -> [LibArchive.WriteItem] {
-        var items: [LibArchive.WriteItem] = []
-        func walk(_ nodes: [FileNode], prefix: String) {
-            for node in nodes {
-                let path = prefix + node.name
-                if node.isDirectory {
-                    items.append(LibArchive.WriteItem(path: path, data: Data(),
-                                                      modifiedAt: node.modificationDate, isDirectory: true))
-                    walk(node.children, prefix: path + "/")
-                } else if case .diskFile(let url) = node.source {
-                    items.append(LibArchive.WriteItem(path: path, fileURL: url, modifiedAt: node.modificationDate))
-                } else if let data = nodeData(node) {
-                    items.append(LibArchive.WriteItem(path: path, data: data,
-                                                      modifiedAt: node.modificationDate, isDirectory: false))
-                }
-            }
-        }
-        walk(roots, prefix: "")
-        return items
-    }
-
-    /// Construye las entradas a escribir. Es ligero: los ficheros nuevos van como
-    /// `.file(url)` (se leen al vuelo) y las entradas de un zip abierto como bytes
-    /// comprimidos en crudo (rebanada barata del archivo origen ya mapeado).
-    private func makeSaveInputs() -> [ZipEntryInput] {
-        let extractor = ZipExtractor()
-        var items: [ZipEntryInput] = []
-        func walk(_ nodes: [FileNode], prefix: String) {
-            for node in nodes {
-                let path = prefix + node.name
-                if node.isDirectory {
-                    items.append(ZipEntryInput(path: path + "/", modifiedAt: node.modificationDate, source: .directory))
-                    walk(node.children, prefix: path + "/")
-                } else if case .diskFile(let url) = node.source {
-                    items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .file(url)))
-                } else if case .zipEntry(let entry) = node.source, let archive = sourceArchiveData {
-                    if format != .zip {
-                        // Origen tar/gz: reconstruir el texto claro y dejar que el escritor comprima.
-                        if let data = nodeData(node) {
-                            items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .data(data)))
-                        }
-                    } else if entry.isEncrypted {
-                        // Cifrada: descifrar a texto claro; el escritor la re-cifra (o no) limpiamente.
-                        if let data = try? extractor.extractedData(for: entry, in: archive, password: entryPassword) {
-                            items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate, source: .data(data)))
-                        }
-                    } else if let zip = entry.zip, let raw = try? extractor.rawCompressedData(for: entry, in: archive) {
-                        // Sin cifrar: copiar los bytes comprimidos en crudo (más rápido).
-                        items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate,
-                            source: .rawEntry(method: zip.compressionMethod, crc32: zip.crc32,
-                                              compressed: raw, uncompressedSize: entry.uncompressedSize)))
-                    }
-                }
-            }
-        }
-        walk(roots, prefix: "")
-        return items
     }
 
     // MARK: - Navegación del árbol
