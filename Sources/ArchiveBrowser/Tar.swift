@@ -82,32 +82,88 @@ public enum Tar {
     // MARK: - Escritura
 
     public struct WriteItem: Sendable {
+        /// Origen del contenido: bytes ya en memoria, o un fichero de disco (streaming).
+        public enum Source: Sendable { case data(Data); case file(URL) }
         public let path: String
-        public let data: Data
+        public let source: Source
         public let modifiedAt: Date?
         public let isDirectory: Bool
+
         public init(path: String, data: Data, modifiedAt: Date?, isDirectory: Bool) {
-            self.path = path; self.data = data; self.modifiedAt = modifiedAt; self.isDirectory = isDirectory
+            self.path = path; self.source = .data(data); self.modifiedAt = modifiedAt; self.isDirectory = isDirectory
+        }
+        /// Entrada cuyo contenido se leerá del fichero al vuelo (sin cargarlo en RAM).
+        public init(path: String, fileURL: URL, modifiedAt: Date?) {
+            self.path = path; self.source = .file(fileURL); self.modifiedAt = modifiedAt; self.isDirectory = false
         }
     }
 
+    /// Escribe el TAR completo en memoria. Adaptador del generador `reader` (los ítems en
+    /// memoria no cargan nada extra; los de fichero se leerían al vuelo).
     public static func write(_ items: [WriteItem]) -> Data {
         var out = Data()
-        for item in items {
+        let next = reader(items)
+        do { while let chunk = try next() { out.append(chunk) } } catch { return out }
+        return out
+    }
+
+    /// Generador **pull** del flujo TAR: cada llamada devuelve el siguiente trozo (o `nil`
+    /// al acabar), leyendo los ficheros de disco por trozos (memoria constante). Encadenable
+    /// con el `next` de un compresor para producir `.tar.gz`/`.tar.xz`/`.tar.bz2` sin
+    /// montar el TAR entero en RAM.
+    public static func reader(_ items: [WriteItem]) -> () throws -> Data? {
+        var index = 0
+        var pending: [Data] = []          // bloques pequeños en cola (cabeceras, padding, ceros finales)
+        var handle: FileHandle?
+        var bodyRemaining = 0             // bytes de cuerpo de fichero por emitir
+        var bodyPadding = 0              // padding a 512 tras el cuerpo del fichero actual
+        var emittedEnd = false
+
+        func enqueue(_ item: WriteItem) throws {
             let path = item.isDirectory && !item.path.hasSuffix("/") ? item.path + "/" : item.path
-            // Nombre que no cabe en ustar (100 + 155 con split) → cabecera PAX previa.
-            if Array(path.utf8).count > 100 {
-                out.append(paxHeader(path: path))
-            }
-            out.append(header(path: path, size: item.isDirectory ? 0 : item.data.count,
-                              mtime: item.modifiedAt, isDirectory: item.isDirectory))
-            if !item.isDirectory {
-                out.append(item.data)
-                out.append(padding(item.data.count))
+            if Array(path.utf8).count > 100 { pending.append(paxHeader(path: path)) }   // nombre largo → PAX
+            let size = item.isDirectory ? 0 : itemSize(item)
+            pending.append(header(path: path, size: size, mtime: item.modifiedAt, isDirectory: item.isDirectory))
+            guard !item.isDirectory else { return }
+            switch item.source {
+            case .data(let d):
+                if !d.isEmpty { pending.append(d) }
+                let pad = padding(d.count); if !pad.isEmpty { pending.append(pad) }
+            case .file(let url):
+                if size > 0 {
+                    handle = try FileHandle(forReadingFrom: url)
+                    bodyRemaining = size
+                    bodyPadding = (blockSize - size % blockSize) % blockSize
+                }
             }
         }
-        out.append(Data(count: blockSize * 2))   // dos bloques cero
-        return out
+
+        return {
+            while true {
+                if !pending.isEmpty { return pending.removeFirst() }
+                if let h = handle {
+                    if bodyRemaining > 0, let chunk = try h.read(upToCount: min(64 * 1024, bodyRemaining)),
+                       !chunk.isEmpty {
+                        bodyRemaining -= chunk.count
+                        return chunk
+                    }
+                    try? h.close(); handle = nil
+                    if bodyPadding > 0 { let p = Data(count: bodyPadding); bodyPadding = 0; return p }
+                    continue
+                }
+                if index < items.count { try enqueue(items[index]); index += 1; continue }
+                if !emittedEnd { emittedEnd = true; return Data(count: blockSize * 2) }   // dos bloques cero
+                return nil
+            }
+        }
+    }
+
+    /// Tamaño del contenido de un ítem (para la cabecera): bytes en memoria o tamaño en disco.
+    private static func itemSize(_ item: WriteItem) -> Int {
+        switch item.source {
+        case .data(let d): return d.count
+        case .file(let url): return (try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int ?? 0
+        }
     }
 
     // MARK: - Helpers de escritura

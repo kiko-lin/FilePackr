@@ -29,12 +29,24 @@ public protocol ArchiveCodec: Sendable {
 
     /// Datos en claro de una entrada, leídos del `container` que devolvió `open`.
     func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data
+
+    /// Extrae una entrada emitiendo el contenido en claro por trozos (`sink`), **sin
+    /// materializar la salida en RAM** cuando el formato lo permite (ZIP, gz/xz/bz2).
+    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+                 sink: (Data) throws -> Void) throws
 }
 
 public extension ArchiveCodec {
     /// Sobrecarga cómoda para abrir sin progreso.
     func open(_ data: Data, fallbackName: String, passphrase: String? = nil) throws -> ArchiveReadResult {
         try open(data, fallbackName: fallbackName, passphrase: passphrase, progress: nil)
+    }
+
+    /// Por defecto cae a `entryData` + una sola escritura (formatos donde aún no hay
+    /// streaming de extracción, p. ej. tar ya descomprimido en RAM y libarchive).
+    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+                 sink: (Data) throws -> Void) throws {
+        try sink(entryData(for: entry, in: container, password: password))
     }
 }
 
@@ -55,14 +67,17 @@ public extension ArchiveFormat {
         case .gzip:
             return SingleFileCodec(format: .gzip, tarFormat: .tarGzip,
                                    decompress: { try Gzip.decompress($0) },
+                                   streamDecompress: { try Gzip.decompress($0, sink: $1) },
                                    entries: { Gzip.entries(in: $0, fallbackName: $1) })
         case .xz:
             return SingleFileCodec(format: .xz, tarFormat: .tarXz,
                                    decompress: { try Xz.decompress($0) },
+                                   streamDecompress: { try Xz.decompress($0, sink: $1) },
                                    entries: { Xz.entries(in: $0, fallbackName: $1) })
         case .bzip2:
             return SingleFileCodec(format: .bzip2, tarFormat: .tarBzip2,
                                    decompress: { try Bzip2.decompress($0) },
+                                   streamDecompress: { try Bzip2.decompress($0, sink: $1) },
                                    entries: { Bzip2.entries(in: $0, fallbackName: $1) })
         case .sevenZip, .rar, .iso, .cpio, .xar, .lha, .cab:
             return LibArchiveCodec(format: self)
@@ -82,6 +97,11 @@ struct ZipCodec: ArchiveCodec {
 
     func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {
         try ZipExtractor().extractedData(for: entry, in: container, password: password)
+    }
+
+    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+                 sink: (Data) throws -> Void) throws {
+        try ZipExtractor().extract(entry, in: container, password: password, sink: sink)
     }
 }
 
@@ -109,6 +129,7 @@ struct SingleFileCodec: ArchiveCodec {
     let format: ArchiveFormat
     let tarFormat: ArchiveFormat
     let decompress: @Sendable (Data) throws -> Data
+    let streamDecompress: @Sendable (Data, (Data) throws -> Void) throws -> Void
     let entries: @Sendable (Data, String) -> [ArchiveEntry]
 
     func open(_ data: Data, fallbackName: String, passphrase: String?,
@@ -122,6 +143,11 @@ struct SingleFileCodec: ArchiveCodec {
 
     func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {
         try decompress(container)
+    }
+
+    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+                 sink: (Data) throws -> Void) throws {
+        try streamDecompress(container, sink)   // descomprime al vuelo, sin materializar la salida
     }
 }
 
@@ -137,5 +163,10 @@ struct LibArchiveCodec: ArchiveCodec {
 
     func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {
         try LibArchive.extractEntry(path: entry.path, in: container, passphrase: password)
+    }
+
+    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+                 sink: (Data) throws -> Void) throws {
+        try LibArchive.extractEntry(path: entry.path, in: container, passphrase: password, sink: sink)
     }
 }

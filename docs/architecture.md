@@ -30,8 +30,22 @@ Lectores/escritores por formato:
 - **ZIP** (Swift puro): `ZipReader` (índice por *central directory*, **solo lee la cola
   + el central directory**, no copia el fichero; ZIP64), `ZipExtractor` (extracción
   perezosa, descifra), `ZipWriter` (`build` en memoria / `write` en **streaming** a un
-  `FileHandle`; ZIP64; cifrado), `ZipCrypto`, `ZipAES`, `Deflate` (framework
-  `Compression`), `CRC32`.
+  `FileHandle`; ZIP64; cifrado), `ZipCrypto`, `ZipAES` (incluye `ZipAES.Encryptor`,
+  cifrador de flujo AE-2), `Deflate` (framework `Compression`), `CRC32` (con
+  `CRC32.Accumulator` incremental).
+- **Streaming en memoria constante** (sin cargar el fichero entero):
+  - `CompressionStream` centraliza el bucle de `compression_stream` (lee `next` / escribe
+    `sink` por trozos); lo usan `Gzip`/`Xz`. Cada compresor tiene **un núcleo pull**
+    `compress(next:sink:)` del que cuelgan las variantes en memoria, fichero→fichero y pipe.
+  - Comprimir: `Gzip`/`Xz`/`Bzip2` con `compress(from:to:)` y `compress(_:)`; **tar** con
+    `Tar.reader(items)` (generador pull que lee los ficheros de disco por trozos), encadenado
+    a un compresor para `.tar.gz`/`.tar.xz`/`.tar.bz2` sin montar el tar en RAM.
+  - ZIP (escritura): `ZipWriter` comprime cada entrada `.file` al vuelo con **descriptor de
+    datos** (bit 3) + ZIP64; el cifrado ZipCrypto/AES (`ZipAES.Encryptor`) se aplica por trozos.
+  - Descomprimir/extraer: `Gzip`/`Xz`/`Bzip2` con `decompress(_:sink:)`; `ZipExtractor.extract`
+    infla y descifra al vuelo (`ZipAES.Decryptor`, MAC al final); `LibArchive.extractEntry(...,sink:)`
+    (7z/iso/xar) y su escritura desde ficheros de disco al vuelo. `ArchiveCodec.extract(...,sink:)`
+    expone esto por formato (el `fallback` a `entryData` solo lo usa el tar ya descomprimido en RAM).
 - **tar y compresores** (Swift puro): `Tar` (ustar + PAX + GNU L), `Gzip` (RFC 1952),
   `Xz` (`COMPRESSION_LZMA`), `Bzip2` (`libbz2` del sistema vía target `Cbz2`).
 - **libarchive** (`LibArchive.swift`): puente a la **libarchive del sistema** (target
@@ -56,9 +70,12 @@ ZipCrypto, `pyzipper` para AES‑256.
   adopta el fichero (`markSaved`), `export` no (copia aparte). Resumen para la barra de
   estado cacheado (`contentFileCount`/`contentSize`/`contentCompressedSize`).
 - **`ArchiveSaver`** (`enum`) — codifica un `SavePayload` (`Sendable`) a disco en
-  segundo plano: streaming ZIP, `Data` para tar/gz/xz/bz2, libarchive a fichero. El
-  documento decide *qué* escribir y dónde *colocar* (fichero único o volúmenes vía
-  `VolumeStore`); el saver decide *cómo* codificar.
+  segundo plano. Casos: `.zip` (streaming a `FileHandle`), `.stream` (gz/xz/bz2 y tar/
+  tar.gz/.xz/.bz2 comprimidos al vuelo a un `FileHandle` sin cargar nada en RAM), `.data`
+  (contenido ya en memoria) y `.libArchive` (7z/iso/xar a fichero). El documento decide
+  *qué* escribir y dónde *colocar* (fichero único o volúmenes vía `VolumeStore`) —
+  `singleFilePayload` elige `.stream` si el origen es `diskFile`, si no `.data`; el saver
+  decide *cómo* codificar.
 - **`FileNode`** — nodo del árbol (dato puro). **`ExportPlan`** — instantánea `Sendable`
   de un nodo para materializarlo a disco en segundo plano (extraer, arrastrar, Quick Look).
 - **`ArchiveOutlineView`** (`NSViewRepresentable` + `Coordinator`) — el navegador

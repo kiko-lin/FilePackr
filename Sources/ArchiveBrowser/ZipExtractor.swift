@@ -1,4 +1,5 @@
 import Foundation
+import Compression
 
 public enum ExtractError: Error, Equatable {
     case corruptLocalHeader
@@ -58,6 +59,77 @@ public struct ZipExtractor: Sendable {
             return out
         default:
             throw ExtractError.unsupportedMethod(method)
+        }
+    }
+
+    /// Extrae una entrada emitiendo el contenido en claro por trozos (`sink`), **sin
+    /// materializar la salida descomprimida en RAM**. Descifra (ZipCrypto/AES) e infla al
+    /// vuelo; en AES verifica el MAC al terminar (la contraseña ya se valida al empezar).
+    /// El archivo origen ya está en memoria/mapeado; lo grande es la salida.
+    public func extract(_ entry: ArchiveEntry, in archive: Data, password: String? = nil,
+                        sink: (Data) throws -> Void) throws {
+        guard let zip = entry.zip else { throw ExtractError.corruptLocalHeader }
+        let dataStart = try compressedDataStart(for: entry, in: archive)
+        let dataEnd = dataStart + Int(entry.compressedSize)
+        guard dataEnd <= archive.count else { throw ExtractError.corruptLocalHeader }
+
+        var method = zip.compressionMethod
+        var next: () throws -> Data?         // trozos ya descifrados (texto comprimido en claro)
+        var finalize: () throws -> Void = {} // verificación posterior (MAC de AES)
+
+        if entry.isEncrypted {
+            guard let password else { throw ExtractError.needsPassword }
+            if entry.isAESEncrypted {
+                guard let strength = zip.aesStrength else { throw ExtractError.unsupportedEncryption }
+                let saltLen = ZipAES.saltLength(strength)
+                guard dataEnd - dataStart >= saltLen + 2 + 10 else { throw ExtractError.wrongPassword }
+                let salt = [UInt8](archive.subdata(in: dataStart..<(dataStart + saltLen)))
+                let pv = [UInt8](archive.subdata(in: (dataStart + saltLen)..<(dataStart + saltLen + 2)))
+                let mac = [UInt8](archive.subdata(in: (dataEnd - 10)..<dataEnd))
+                var dec: ZipAES.Decryptor
+                do { dec = try ZipAES.Decryptor(password: password, strength: strength, salt: salt, pv: pv) }
+                catch { throw ExtractError.wrongPassword }
+                let chunks = rangeChunks(archive, (dataStart + saltLen + 2)..<(dataEnd - 10))
+                next = { chunks().map { Data(dec.update([UInt8]($0))) } }
+                finalize = { do { try dec.verify(mac) } catch { throw ExtractError.wrongPassword } }
+                method = zip.aesRealMethod ?? 8
+            } else {
+                // ZipCrypto: 12 bytes de cabecera de verificación, luego flujo cifrado.
+                guard dataEnd - dataStart >= 12 else { throw ExtractError.wrongPassword }
+                var cipher = ZipCrypto(password: password)
+                let header = cipher.decrypt([UInt8](archive.subdata(in: dataStart..<(dataStart + 12))))
+                let expected = zip.flags & 0x0008 != 0
+                    ? UInt8((zip.dosTime >> 8) & 0xFF) : UInt8((zip.crc32 >> 24) & 0xFF)
+                guard header[11] == expected else { throw ExtractError.wrongPassword }
+                let chunks = rangeChunks(archive, (dataStart + 12)..<dataEnd)
+                next = { chunks().map { Data(cipher.decrypt([UInt8]($0))) } }
+            }
+        } else {
+            next = rangeChunks(archive, dataStart..<dataEnd)
+        }
+
+        switch method {
+        case 0:   // almacenado sin comprimir
+            while let chunk = try next() { try sink(chunk) }
+        case 8:   // deflate
+            do {
+                try CompressionStream.run(operation: COMPRESSION_STREAM_DECODE, algorithm: COMPRESSION_ZLIB,
+                                          next: next, sink: sink)
+            } catch is CompressionStreamError { throw ExtractError.decompressionFailed }
+        default:
+            throw ExtractError.unsupportedMethod(method)
+        }
+        try finalize()
+    }
+
+    /// Iterador de trozos de `size` bytes sobre el rango `range` de `data` (sin cargar todo).
+    private func rangeChunks(_ data: Data, _ range: Range<Int>, size: Int = 64 * 1024) -> () -> Data? {
+        var offset = range.lowerBound
+        return {
+            guard offset < range.upperBound else { return nil }
+            let end = min(offset + size, range.upperBound)
+            defer { offset = end }
+            return data.subdata(in: offset..<end)
         }
     }
 

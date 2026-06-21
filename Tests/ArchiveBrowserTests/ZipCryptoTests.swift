@@ -135,6 +135,30 @@ final class ZipCryptoTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: outURL), payload, "pyzipper debe descifrar nuestro AES-256")
     }
 
+    /// El AES-256 escrito en **streaming** (entrada `.file`, sin cargar en memoria) debe
+    /// poder abrirse desde pyzipper igual que la ruta en memoria.
+    func testPyzipperReadsOurStreamedAES256() throws {
+        try skipUnlessPyzipper()
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let payload = Data(String(repeating: "AES-256 streaming interop ñ áé ", count: 5_000).utf8)
+        let src = dir.appendingPathComponent("secreto.txt"); try payload.write(to: src)
+        let zip = try writer.build([ZipEntryInput(path: "secreto.txt", modifiedAt: nil, source: .file(src))],
+                                   encryption: .aes256, password: "claveFuerte")
+        let zipURL = dir.appendingPathComponent("ours.zip"); try zip.write(to: zipURL)
+        let outURL = dir.appendingPathComponent("out.bin")
+
+        let script = """
+        import pyzipper, sys
+        with pyzipper.AESZipFile(sys.argv[1]) as zf:
+            zf.setpassword(b'claveFuerte')
+            data = zf.read('secreto.txt')
+        open(sys.argv[2], 'wb').write(data)
+        """
+        _ = try run(Self.python, ["-c", script, zipURL.path, outURL.path])
+        XCTAssertEqual(try Data(contentsOf: outURL), payload, "pyzipper debe descifrar nuestro AES-256 en streaming")
+    }
+
     /// Debemos poder leer un AES-256 de WinZip producido por otra implementación.
     func testReadsAES256FromPyzipper() throws {
         try skipUnlessPyzipper()
