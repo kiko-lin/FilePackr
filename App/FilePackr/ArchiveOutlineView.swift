@@ -24,9 +24,12 @@ struct ArchiveOutlineView: NSViewRepresentable {
     var onExtract: (FileNode) -> Void
     /// Pide la contraseña (cuando el archivo está cifrado y aún no la tenemos).
     var onNeedPassword: () -> Void
+    /// Añade ficheros arrastrados del Finder dentro de la carpeta destino. Pasa por la
+    /// vista para, si el archivo está bloqueado, pedir contraseña antes de añadir.
+    var onAddFiles: ([URL], FileNode?) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(doc: doc, onExtract: onExtract, onNeedPassword: onNeedPassword)
+        Coordinator(doc: doc, onExtract: onExtract, onNeedPassword: onNeedPassword, onAddFiles: onAddFiles)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -59,7 +62,7 @@ struct ArchiveOutlineView: NSViewRepresentable {
         coordinator.currentSort = (key: "name", ascending: true)
         outline.usesAlternatingRowBackgroundColors = true
         outline.style = .plain   // .inset añade un separador inicial en la cabecera
-        outline.allowsMultipleSelection = false
+        outline.allowsMultipleSelection = true
         outline.indentationPerLevel = 14
         outline.menu = coordinator.makeContextMenu()
         coordinator.lastLanguage = language   // columnas/menú ya creados con el idioma actual
@@ -84,6 +87,7 @@ struct ArchiveOutlineView: NSViewRepresentable {
         coordinator.doc = doc
         coordinator.onExtract = onExtract
         coordinator.onNeedPassword = onNeedPassword
+        coordinator.onAddFiles = onAddFiles
         guard let outline = nsView.documentView as? FileOutlineView else { return }
 
         if coordinator.lastLanguage != language {
@@ -132,6 +136,7 @@ extension ArchiveOutlineView {
         var doc: ArchiveDocument
         var onExtract: (FileNode) -> Void
         var onNeedPassword: () -> Void
+        var onAddFiles: ([URL], FileNode?) -> Void
         weak var outline: FileOutlineView?
 
         var lastRevision = -1
@@ -149,10 +154,12 @@ extension ArchiveOutlineView {
         private let promiseQueue = OperationQueue.main
 
         init(doc: ArchiveDocument, onExtract: @escaping (FileNode) -> Void,
-             onNeedPassword: @escaping () -> Void) {
+             onNeedPassword: @escaping () -> Void,
+             onAddFiles: @escaping ([URL], FileNode?) -> Void) {
             self.doc = doc
             self.onExtract = onExtract
             self.onNeedPassword = onNeedPassword
+            self.onAddFiles = onAddFiles
         }
 
         // MARK: - DataSource
@@ -325,26 +332,29 @@ extension ArchiveOutlineView {
 
         func outlineViewSelectionDidChange(_ notification: Notification) {
             guard !isSyncingSelection, let outline else { return }
-            if outline.selectedRow >= 0, let node = outline.item(atRow: outline.selectedRow) as? FileNode {
-                doc.selection = node.id
-            } else {
-                doc.selection = nil
-            }
+            let ids = outline.selectedRowIndexes.compactMap { (outline.item(atRow: $0) as? FileNode)?.id }
+            doc.selectedIDs = Set(ids)
         }
 
         func syncSelection(_ outline: NSOutlineView) {
             isSyncingSelection = true
             defer { isSyncingSelection = false }
-            if let id = doc.selection, let node = doc.node(with: id) {
-                expandAncestors(of: node, in: outline)   // revelar (p. ej. carpeta recién creada)
-                let row = outline.row(forItem: node)
-                if row >= 0, outline.selectedRow != row {
-                    outline.selectRowIndexes([row], byExtendingSelection: false)
-                    outline.scrollRowToVisible(row)
-                }
-            } else if outline.selectedRow >= 0 {
-                outline.deselectAll(nil)
+            let nodes = doc.selectedNodes()
+            guard !nodes.isEmpty else {
+                if outline.selectedRow >= 0 { outline.deselectAll(nil) }
+                return
             }
+            // Revelar (desplegar carpetas ancestro) antes de calcular las filas, p. ej.
+            // la carpeta recién creada o los elementos recién añadidos/arrastrados.
+            for node in nodes { expandAncestors(of: node, in: outline) }
+            var rows = IndexSet()
+            for node in nodes {
+                let row = outline.row(forItem: node)
+                if row >= 0 { rows.insert(row) }
+            }
+            guard !rows.isEmpty, outline.selectedRowIndexes != rows else { return }
+            outline.selectRowIndexes(rows, byExtendingSelection: false)
+            if let first = rows.first { outline.scrollRowToVisible(first) }
         }
 
         /// Despliega las carpetas ancestro de `node` (de la raíz hacia abajo) para que sea
@@ -406,10 +416,10 @@ extension ArchiveOutlineView {
         }
 
         func deleteSelected() {
-            guard let outline, outline.selectedRow >= 0,
-                  let node = outline.item(atRow: outline.selectedRow) as? FileNode else { return }
+            guard let outline, !outline.selectedRowIndexes.isEmpty else { return }
             if doc.isLocked { onNeedPassword(); return }
-            doc.delete(node)
+            let nodes = outline.selectedRowIndexes.compactMap { outline.item(atRow: $0) as? FileNode }
+            for node in nodes { doc.delete(node) }
         }
 
         // MARK: - Menú contextual
@@ -506,7 +516,9 @@ extension ArchiveOutlineView {
             let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self],
                                                            options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
             guard !urls.isEmpty else { return false }
-            doc.addFiles(urls, into: folder)
+            // Pasa por la vista: si el archivo está bloqueado, pide la contraseña y añade
+            // tras desbloquear; en cualquier caso revela y enfoca lo añadido.
+            onAddFiles(urls, folder)
             return true
         }
 

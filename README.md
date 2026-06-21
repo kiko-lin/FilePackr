@@ -23,10 +23,13 @@ Abrir un archivo en un formato y **guardarlo en otro** reconstruye el contenido.
 
 - **Navegar sin descomprimir**: el ZIP lee solo el índice (central directory); abrir
   es rápido aunque el archivo sea de varios GB.
-- **Editar**: arrastrar/añadir ficheros y carpetas, borrar, renombrar en línea, mover
-  arrastrando sobre carpetas, crear carpetas (la vista despliega y revela la nueva).
-- **Extraer**: por nodo (botón / menú / arrastre al Finder) o **Extraer todo** el
-  archivo a una carpeta; con diálogo de conflictos (sobrescribir / guardar como / cancelar).
+- **Editar**: arrastrar/añadir ficheros y carpetas (varios a la vez), borrar, renombrar
+  en línea, mover arrastrando sobre carpetas, crear carpetas. La vista despliega y revela
+  lo recién añadido/creado y le da el foco; **selección múltiple** para arrastrar o borrar
+  en lote. Añadir un nombre que ya existe pregunta **sobrescribir / conservar ambos / cancelar**.
+- **Extraer**: por nodo o **varios seleccionados a la vez** (botón / menú / arrastre al
+  Finder), o **Extraer todo** el archivo a una carpeta; con diálogo de conflictos
+  (sobrescribir / guardar como / cancelar) por cada elemento.
 - **Exportar**: escribe una **copia** con otro formato, cifrado, contraseña o
   troceado en volúmenes, sin tocar el documento abierto.
 - **Quick Look** (barra espaciadora), columnas tipo Finder ordenables (Nombre, Fecha,
@@ -39,9 +42,10 @@ Abrir un archivo en un formato y **guardarlo en otro** reconstruye el contenido.
   - **Fuerte** — AES‑256 de WinZip (AE‑2), interop verificada contra `pyzipper`.
   - Abrir archivos con contraseña de otras apps (pide la clave, la valida y la
     recuerda); re‑guardar conserva el cifrado; un cifrado bloqueado es de solo lectura.
-- **Aviso de cambios sin guardar** al cerrar/salir; **sin pestañas** (una ventana por
-  archivo); **Ajustes** en el menú de la app (⌘,): tema, idioma (EN/ES), formato y
-  cifrado por defecto, destino de extracción.
+- **Aviso de cambios sin guardar** al cerrar/salir, con tres opciones **Guardar /
+  Cerrar sin guardar / Cancelar** (Guardar ejecuta el guardado y luego cierra);
+  **sin pestañas** (una ventana por archivo); **Ajustes** en el menú de la app (⌘,):
+  tema, idioma (EN/ES), formato y cifrado por defecto, destino de extracción.
 
 Ver [`docs/architecture.md`](docs/architecture.md) y [`docs/encryption.md`](docs/encryption.md).
 

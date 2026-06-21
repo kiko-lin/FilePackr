@@ -10,7 +10,8 @@ import ArchiveBrowser
 final class ArchiveDocument: ObservableObject {
 
     @Published var roots: [FileNode] = []
-    @Published var selection: FileNode.ID?
+    /// Selección actual (varios elementos): para arrastrar, extraer o eliminar en lote.
+    @Published var selectedIDs: Set<FileNode.ID> = []
 
     /// Nombre mostrado en la barra de documento (fichero abierto o "Sin título").
     @Published private(set) var documentName: String = ""
@@ -53,6 +54,57 @@ final class ArchiveDocument: ObservableObject {
     var isEmpty: Bool { roots.isEmpty }
 
     // MARK: - Entrada de elementos (arrastre o botón Añadir)
+
+    /// Si lo que llega es un único archivo abrible con el documento vacío, devuelve su URL
+    /// (para abrirlo como base); si no, `nil` (hay que añadirlo al documento actual). La vista
+    /// usa esto para decidir y, en el caso de añadir, resolver conflictos de nombre.
+    func archiveToOpen(from urls: [URL]) -> URL? {
+        let cleaned = urls.filter { $0.isFileURL }
+        guard isEmpty, cleaned.count == 1,
+              !isDirectory(cleaned[0]), isOpenableArchive(cleaned[0]) else { return nil }
+        return cleaned[0]
+    }
+
+    /// Carpeta destino para Añadir (según la selección), expuesta para que la vista detecte
+    /// conflictos de nombre antes de insertar.
+    func addTargetFolder() -> FileNode? { destinationFolderForAdding() }
+
+    /// Hijo existente con ese nombre dentro de `target` (o en la raíz), si lo hay.
+    func child(named name: String, in target: FileNode?) -> FileNode? {
+        (target?.children ?? roots).first { $0.name == name }
+    }
+
+    /// Nombre de fichero libre dentro de `target` («nombre 2.ext», «nombre 3.ext»…),
+    /// conservando la extensión.
+    func uniqueChildName(_ name: String, in target: FileNode?) -> String {
+        let taken = Set((target?.children ?? roots).map(\.name))
+        guard taken.contains(name) else { return name }
+        let ns = name as NSString
+        let ext = ns.pathExtension
+        let base = ns.deletingPathExtension
+        var n = 2
+        while true {
+            let candidate = ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)"
+            if !taken.contains(candidate) { return candidate }
+            n += 1
+        }
+    }
+
+    /// Añade un único fichero/carpeta del disco dentro de `target` y devuelve el nodo creado.
+    /// `replacing` elimina antes el elemento existente (sobrescribir); `renameTo` fuerza un
+    /// nombre libre (conservar ambos). No toca la selección: la fija la vista al acabar el lote.
+    @discardableResult
+    func addFile(_ url: URL, into target: FileNode?, replacing existing: FileNode? = nil,
+                 renameTo newName: String? = nil) -> FileNode? {
+        guard !isLocked else { return nil }
+        if !hasActiveDocument { beginNewDocument() }
+        if let existing { remove(existing) }
+        let node = importFromDisk(url)
+        if let newName { node.name = newName }
+        insert(node, into: target)
+        markChanged()
+        return node
+    }
 
     /// Decide qué hacer con lo que llega: abrir un ZIP como base o añadir ficheros.
     func handleIncoming(_ urls: [URL]) async throws {
@@ -125,7 +177,7 @@ final class ArchiveDocument: ObservableObject {
         format = result.format
         sourceArchiveData = result.container
         roots = buildTree(from: result.entries)
-        selection = nil
+        selectedIDs = []
         sourceURL = baseURL
         documentName = baseURL.lastPathComponent
         hasActiveDocument = true
@@ -226,14 +278,21 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Añade ficheros/carpetas del disco dentro de `target` (o la raíz si es `nil`).
-    func addFiles(_ urls: [URL], into target: FileNode?) {
-        guard !isLocked else { return }
+    /// Deja seleccionados los elementos añadidos para que la vista los revele
+    /// (desplegando la carpeta destino) y les dé el foco, como al crear una carpeta.
+    @discardableResult
+    func addFiles(_ urls: [URL], into target: FileNode?) -> [FileNode] {
+        guard !isLocked else { return [] }
         if !hasActiveDocument { beginNewDocument() }
+        var added: [FileNode] = []
         for url in urls {
             let node = importFromDisk(url)
             insert(node, into: target)
+            added.append(node)
         }
+        if !added.isEmpty { selectedIDs = Set(added.map(\.id)) }
         markChanged()
+        return added
     }
 
     // MARK: - Acciones de la barra superior
@@ -251,20 +310,25 @@ final class ArchiveDocument: ObservableObject {
         let name = uniqueName(defaultName, among: siblings)
         let node = FileNode(name: name, isDirectory: true, source: .folder)
         insert(node, into: parent)
-        selection = node.id
+        selectedIDs = [node.id]
         markChanged()
     }
 
+    /// Elimina todos los elementos seleccionados (borrado en lote).
     func removeSelected() {
-        guard let node = selectedNode() else { return }
-        delete(node)
+        guard !isLocked else { return }
+        let nodes = selectedNodes()
+        guard !nodes.isEmpty else { return }
+        for node in nodes { remove(node) }
+        selectedIDs = []
+        markChanged()
     }
 
     /// Elimina un nodo concreto (el del menú contextual, por ejemplo).
     func delete(_ node: FileNode) {
         guard !isLocked else { return }
         remove(node)
-        if selection == node.id { selection = nil }
+        selectedIDs.remove(node.id)
         markChanged()
     }
 
@@ -338,7 +402,7 @@ final class ArchiveDocument: ObservableObject {
     func close() {
         discardJoinedVolumesTemp()
         roots = []
-        selection = nil
+        selectedIDs = []
         sourceArchiveData = nil
         sourceURL = nil
         documentName = ""
@@ -633,7 +697,12 @@ final class ArchiveDocument: ObservableObject {
 
     // MARK: - Navegación del árbol
 
-    func selectedNode() -> FileNode? { node(with: selection) }
+    /// Nodo "principal" de la selección (el primero), para decidir destino de Añadir
+    /// o Nueva carpeta. Con selección única equivale al elemento seleccionado.
+    func selectedNode() -> FileNode? { node(with: selectedIDs.first) }
+
+    /// Todos los nodos seleccionados (para borrado/extracción en lote).
+    func selectedNodes() -> [FileNode] { selectedIDs.compactMap { node(with: $0) } }
 
     /// Ficheros (no carpetas) hermanos de `node`, en orden, para navegar en Quick Look.
     func siblingFiles(of node: FileNode) -> [FileNode] {

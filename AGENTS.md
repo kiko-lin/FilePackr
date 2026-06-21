@@ -109,6 +109,37 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 ## Hecho
 
+- **Sesión 2026-06-21 (b) — selección múltiple, multi-extraer, conflicto al añadir,
+  aviso de cierre con 3 botones**:
+  - `ArchiveDocument.selection` (un `FileNode.ID?`) pasó a **`selectedIDs: Set<FileNode.ID>`**.
+    `NSOutlineView.allowsMultipleSelection = true`; el coordinator sincroniza el `Set`
+    en ambos sentidos (`syncSelection` revela ancestros y enfoca todas las filas).
+    **Borrado en lote** (`removeSelected` + tecla Supr) y **arrastre múltiple** (ya iba
+    por `draggedNodes`). Botones Eliminar/Extraer activos con `!selectedIDs.isEmpty`.
+  - **Multi-extraer**: `ExtractRequest.makePlans: () -> [ExportPlan]`; el botón Extraer con
+    varios seleccionados encola un plan por nodo y `processNextExtraction()` los procesa
+    uno a uno encadenando el diálogo de conflicto (Sobrescribir/Guardar como/Cancelar→aborta
+    el lote). Clave i18n `extract.items` ("%@ elementos").
+  - **Añadir/arrastrar revela y enfoca** lo añadido (selección = nodos nuevos), igual que
+    crear carpeta; arrastrar sobre un **archivo bloqueado pide la clave** antes de añadir
+    (el drop pasa por `editGuarded` vía la closure `onAddFiles` del outline view).
+  - **Conflicto de nombre al añadir**: si el nombre ya existe en el destino, diálogo
+    **Sobrescribir / Conservar ambos / Cancelar** (`add.conflict.*`). Cola `startAdd →
+    processNextAdd → finishAdd` en la vista; modelo: `child(named:in:)`,
+    `uniqueChildName` (conserva extensión, "nombre 2.ext"), `addFile(_:into:replacing:renameTo:)`,
+    `archiveToOpen(from:)`/`addTargetFolder()` para que la vista decida abrir-vs-añadir y
+    resuelva conflictos. (El `addFiles` en lote se conserva para el test de round-trip.)
+  - **Aviso de cambios sin guardar → 3 botones**: `UnsavedChangesAlert` devuelve un
+    `Choice` (`.save`/`.discard`/`.cancel`) en vez de un `Bool`. Botones **Guardar**
+    (por defecto), **Cancelar** (Escape) y **Cerrar sin guardar** (destructivo, a la
+    izquierda). "Guardar" ejecuta el flujo real (`saveDocument(then:)`, incluido el panel
+    para documento nuevo, con `pendingAfterSave`) y **luego** cierra. Funciona en los tres
+    caminos: botón Cerrar, cierre de ventana (`WindowGuard` con closure `onSave`) y salir
+    ⌘Q (`AppDelegate` busca el guardado de la ventana editada en `WindowSaveHandlers`).
+    Claves i18n: `unsaved.dontSave` (antes `unsaved.continue`), título/mensaje reescritos.
+  - Estado: **compila** (`BUILD SUCCEEDED`). Sin verificación en GUI esta sesión (computer-use
+    sin permisos de Accesibilidad/Grabación); el usuario revisa en Xcode. Limitación conocida
+    (igual que antes): al salir con varias ventanas editadas, el aviso atiende la primera.
 - Navegar ZIP sin descomprimir; apertura rápida (no copia el fichero).
 - ZIP64 lectura y escritura (+test de 70.000 entradas).
 - Editar: añadir/borrar/renombrar/mover (drag a carpetas)/crear carpeta.

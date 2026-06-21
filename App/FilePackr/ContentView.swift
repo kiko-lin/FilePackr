@@ -11,12 +11,21 @@ private struct ExtractionConflict: Identifiable {
     let alternative: URL    // nombre libre propuesto (p.ej. "3d_2.svg")
 }
 
-/// Lo que se va a extraer: un nodo concreto o **todo** el archivo. El plan se construye
-/// al confirmar (cuando ya tenemos la contraseña, si hacía falta).
+/// Conflicto al añadir: ya existe un elemento con ese nombre en la carpeta destino.
+private struct AddConflict: Identifiable {
+    let id = UUID()
+    let url: URL
+    let name: String
+    let target: FileNode?
+}
+
+/// Lo que se va a extraer: uno o varios nodos, o **todo** el archivo. Los planes se
+/// construyen al confirmar (cuando ya tenemos la contraseña, si hacía falta). Con varios
+/// elementos, cada uno se extrae al destino y resuelve sus conflictos por separado.
 private struct ExtractRequest: Identifiable {
     let id = UUID()
     let name: String
-    let makePlan: () -> ExportPlan
+    let makePlans: () -> [ExportPlan]
 }
 
 /// Unidad de tamaño de volumen.
@@ -205,9 +214,17 @@ struct ContentView: View {
     @StateObject private var doc = ArchiveDocument()
     @State private var errorMessage: String?
     @State private var conflict: ExtractionConflict?
+    /// Conflicto de nombre al añadir, y la cola de URLs pendientes con su carpeta destino.
+    @State private var addConflict: AddConflict?
+    @State private var addQueue: [URL] = []
+    @State private var addTarget: FileNode?
+    @State private var addedIDs: [FileNode.ID] = []
     @State private var showingSaveOptions = false
     /// La hoja de opciones está abierta para **Exportar** (copia aparte) en vez de Guardar.
     @State private var optionsSheetIsExport = false
+    /// Acción a ejecutar tras un guardado con éxito (p. ej. cerrar al elegir "Guardar"
+    /// en el aviso de cambios sin guardar). Se descarta si se cancela el guardado.
+    @State private var pendingAfterSave: (() -> Void)?
     @State private var saveFormatChoice: ArchiveFormat = .zip
     @State private var saveEncryptionChoice: ZipEncryption = .none
     @State private var saveOptionsPassword = ""
@@ -226,6 +243,10 @@ struct ContentView: View {
     @State private var extractDestination = FileManager.default.homeDirectoryForCurrentUser
     @State private var extractPassword = ""
     @State private var extractPasswordWrong = false
+    /// Cola de planes pendientes de extraer (extracción en lote) y la carpeta destino
+    /// común, capturada al confirmar. Se procesan uno a uno encadenando los conflictos.
+    @State private var extractQueue: [ExportPlan] = []
+    @State private var extractDestinationFolder = FileManager.default.homeDirectoryForCurrentUser
 
     var body: some View {
         VStack(spacing: 0) {
@@ -247,7 +268,8 @@ struct ContentView: View {
         }
         .ignoresSafeArea(.container, edges: .top)   // el contenido sube a la zona del título
         .preferredColorScheme(settings.theme.colorScheme)
-        .background(WindowGuard(edited: doc.hasUnsavedChanges))
+        .background(WindowGuard(edited: doc.hasUnsavedChanges,
+                                onSave: { proceed in saveDocument(then: proceed) }))
         .alert(loc("error.title"),
                isPresented: Binding(get: { errorMessage != nil },
                                     set: { if !$0 { errorMessage = nil } }),
@@ -263,14 +285,50 @@ struct ContentView: View {
             Button(loc("conflict.overwrite"), role: .destructive) {
                 let plan = item.plan, destination = item.destination
                 conflict = nil
-                Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: true) } }
+                Task {
+                    await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: true) }
+                    processNextExtraction()
+                }
             }
             Button(loc("conflict.saveAs", item.alternative.lastPathComponent)) {
                 let plan = item.plan, destination = item.alternative
                 conflict = nil
-                Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) } }
+                Task {
+                    await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) }
+                    processNextExtraction()
+                }
             }
-            Button(loc("button.cancel"), role: .cancel) { conflict = nil }
+            Button(loc("button.cancel"), role: .cancel) { conflict = nil; extractQueue = [] }
+        }
+        .confirmationDialog(
+            addConflict.map { loc("add.conflict.title", $0.name) } ?? "",
+            isPresented: Binding(get: { addConflict != nil },
+                                 set: { if !$0 { addConflict = nil } }),
+            presenting: addConflict
+        ) { item in
+            Button(loc("add.conflict.overwrite"), role: .destructive) {
+                addConflict = nil
+                let existing = doc.child(named: item.name, in: item.target)
+                if let node = doc.addFile(item.url, into: item.target, replacing: existing) {
+                    addedIDs.append(node.id)
+                }
+                processNextAdd()
+            }
+            Button(loc("add.conflict.keepBoth")) {
+                addConflict = nil
+                let unique = doc.uniqueChildName(item.name, in: item.target)
+                if let node = doc.addFile(item.url, into: item.target, renameTo: unique) {
+                    addedIDs.append(node.id)
+                }
+                processNextAdd()
+            }
+            Button(loc("button.cancel"), role: .cancel) {
+                addConflict = nil
+                addQueue = []
+                finishAdd()
+            }
+        } message: { item in
+            Text(loc("add.conflict.message", item.name))
         }
         .overlay { progressOverlay }
         .sheet(isPresented: $showingSaveOptions) {
@@ -284,7 +342,7 @@ struct ContentView: View {
                              title: optionsSheetIsExport ? loc("export.title") : loc("save.title"),
                              confirmLabel: optionsSheetIsExport ? loc("button.export") : loc("button.saveEllipsis"),
                              onSave: { confirmSaveOptions() },
-                             onCancel: { showingSaveOptions = false })
+                             onCancel: { showingSaveOptions = false; pendingAfterSave = nil })
         }
         .sheet(isPresented: $showingEntryPassword) {
             PasswordSheet(title: loc("password.entryTitle"),
@@ -411,7 +469,8 @@ struct ContentView: View {
             ArchiveOutlineView(doc: doc,
                                language: loc.language,
                                onExtract: { extract($0) },
-                               onNeedPassword: { promptEntryPassword() })
+                               onNeedPassword: { promptEntryPassword() },
+                               onAddFiles: { urls, folder in addDropped(urls, into: folder) })
         }
     }
 
@@ -466,11 +525,11 @@ struct ContentView: View {
                 editGuarded { doc.createFolder(defaultName: loc("doc.newFolder")) }
             }
             interiorButton("toolbar.delete", help: "toolbar.delete.help",
-                           icon: "trash", disabled: doc.selection == nil) {
+                           icon: "trash", disabled: doc.selectedIDs.isEmpty) {
                 editGuarded { doc.removeSelected() }
             }
             interiorButton("toolbar.extract", help: "toolbar.extract.help",
-                           icon: "square.and.arrow.up", disabled: doc.selection == nil,
+                           icon: "square.and.arrow.up", disabled: doc.selectedIDs.isEmpty,
                            action: extractAction)
             Spacer()
         }
@@ -581,27 +640,80 @@ struct ContentView: View {
         }
     }
 
-    /// Abre/añade lo seleccionado.
+    /// Abre/añade lo seleccionado: un único archivo abrible (con el documento vacío) se abre
+    /// como base; el resto se añade a la carpeta destino resolviendo conflictos de nombre.
     private func handleOpen(_ urls: [URL]) {
-        Task { await runAsync { try await doc.handleIncoming(urls) } }
+        if let archive = doc.archiveToOpen(from: urls) {
+            Task { await runAsync { try await doc.openArchive(archive) } }
+        } else {
+            startAdd(urls, into: doc.addTargetFolder())
+        }
+    }
+
+    /// Añade ficheros arrastrados del Finder a una carpeta concreta. Si el archivo está
+    /// cifrado y bloqueado, pide la contraseña y los añade tras desbloquear.
+    private func addDropped(_ urls: [URL], into folder: FileNode?) {
+        editGuarded { startAdd(urls, into: folder) }
+    }
+
+    /// Añade una lista de URLs a `target`, pidiendo confirmación por cada nombre que ya
+    /// exista (sobrescribir / conservar ambos / cancelar). Al acabar, selecciona y revela
+    /// lo añadido (despliega la carpeta y le da el foco).
+    private func startAdd(_ urls: [URL], into target: FileNode?) {
+        let cleaned = urls.filter { $0.isFileURL }
+        guard !cleaned.isEmpty else { return }
+        addTarget = target
+        addQueue = cleaned
+        addedIDs = []
+        processNextAdd()
+    }
+
+    /// Procesa la siguiente URL pendiente: si su nombre ya existe en el destino, abre el
+    /// diálogo de conflicto (que reanuda la cola al resolverlo); si no, la añade y sigue.
+    private func processNextAdd() {
+        guard !addQueue.isEmpty else { finishAdd(); return }
+        let url = addQueue.removeFirst()
+        let name = url.lastPathComponent
+        if doc.child(named: name, in: addTarget) != nil {
+            addConflict = AddConflict(url: url, name: name, target: addTarget)
+        } else {
+            if let node = doc.addFile(url, into: addTarget) { addedIDs.append(node.id) }
+            processNextAdd()
+        }
+    }
+
+    /// Cierra el lote de añadir: fija la selección sobre lo añadido.
+    private func finishAdd() {
+        if !addedIDs.isEmpty { doc.selectedIDs = Set(addedIDs) }
+        addedIDs = []
+        addTarget = nil
     }
 
     private func extractAction() {
-        guard let node = doc.selectedNode() else { return }
-        extract(node)
+        let nodes = doc.selectedNodes()
+        guard !nodes.isEmpty else { return }
+        if nodes.count == 1 { extract(nodes[0]) } else { extractNodes(nodes) }
     }
 
     /// Extrae un nodo concreto: abre el diálogo compacto de extracción.
     private func extract(_ node: FileNode) {
         prepareExtractDestination()
-        extractRequest = ExtractRequest(name: node.name) { doc.exportPlan(for: node) }
+        extractRequest = ExtractRequest(name: node.name) { [doc.exportPlan(for: node)] }
+    }
+
+    /// Extrae varios nodos seleccionados: cada uno se coloca en la carpeta destino.
+    private func extractNodes(_ nodes: [FileNode]) {
+        prepareExtractDestination()
+        extractRequest = ExtractRequest(name: loc("extract.items", String(nodes.count))) {
+            nodes.map { doc.exportPlan(for: $0) }
+        }
     }
 
     /// Extrae **todo** el archivo a una carpeta con el nombre del archivo (como Finder).
     private func extractAll() {
         prepareExtractDestination()
         let name = strippedBaseName(documentDisplayName)
-        extractRequest = ExtractRequest(name: name) { doc.exportPlanForAll(named: name) }
+        extractRequest = ExtractRequest(name: name) { [doc.exportPlanForAll(named: name)] }
     }
 
     /// Fija el destino por defecto (carpeta del archivo o fija) y resetea la contraseña.
@@ -631,7 +743,8 @@ struct ContentView: View {
         }
     }
 
-    /// Confirma la extracción (nodo o todo) al destino elegido.
+    /// Confirma la extracción (uno, varios o todo) al destino elegido: encola los planes
+    /// y arranca el procesado en lote.
     private func performExtract() {
         guard let req = extractRequest else { return }
         if doc.requiresEntryPassword {
@@ -641,28 +754,43 @@ struct ContentView: View {
                 return
             }
         }
-        let destinationFolder = extractDestination
+        extractDestinationFolder = extractDestination
         extractRequest = nil
+        extractQueue = req.makePlans()
+        processNextExtraction()
+    }
 
-        let plan = req.makePlan()
-        let destination = destinationFolder.appendingPathComponent(plan.name)
+    /// Extrae el siguiente plan de la cola en la carpeta destino. Si hay conflicto, abre
+    /// el diálogo (que reanuda la cola al resolverlo); si no, extrae y sigue con el resto.
+    private func processNextExtraction() {
+        guard !extractQueue.isEmpty else { return }
+        let plan = extractQueue.removeFirst()
+        let destination = extractDestinationFolder.appendingPathComponent(plan.name)
         if FileManager.default.fileExists(atPath: destination.path) {
             conflict = ExtractionConflict(plan: plan,
                                           destination: destination,
                                           alternative: doc.conflictFreeURL(for: destination))
         } else {
-            Task { await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) } }
+            Task {
+                await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) }
+                processNextExtraction()
+            }
         }
     }
 
     /// Guarda: si ya tiene fichero, re-guarda con los ajustes; si es nuevo, abre el
-    /// diálogo de opciones (formato + cifrado + contraseña).
-    private func saveDocument() {
+    /// diálogo de opciones (formato + cifrado + contraseña). `completion` se ejecuta solo
+    /// tras un guardado con éxito (lo usa "Guardar" del aviso de cambios sin guardar).
+    private func saveDocument(then completion: (() -> Void)? = nil) {
         if doc.requiresEntryPassword { promptEntryPassword(); return }
         // Re-guardar en el sitio solo si el formato es escribible (rar no lo es).
         if let url = doc.sourceURL, doc.saveFormat.isWritable {
-            Task { await runAsync { try await doc.save(to: url) } }
+            Task {
+                await runAsync { try await doc.save(to: url) }
+                if !doc.hasUnsavedChanges { completion?() }
+            }
         } else {
+            pendingAfterSave = completion
             optionsSheetIsExport = false
             prefillOptionsSheet()
             showingSaveOptions = true
@@ -713,15 +841,25 @@ struct ContentView: View {
         panel.nameFieldStringValue = "\(strippedBaseName(documentDisplayName)).\(format.fileExtension)"
         panel.prompt = isExport ? loc("panel.export") : loc("panel.save")
         if panel.runModal() == .OK, let url = panel.url {
-            Task { await runAsync {
-                if isExport {
-                    try await doc.export(to: url, format: format, encryption: encryption,
-                                         password: password, volumeSize: volumeSize)
-                } else {
-                    try await doc.save(to: url, format: format, encryption: encryption,
-                                       password: password, volumeSize: volumeSize)
+            Task {
+                await runAsync {
+                    if isExport {
+                        try await doc.export(to: url, format: format, encryption: encryption,
+                                             password: password, volumeSize: volumeSize)
+                    } else {
+                        try await doc.save(to: url, format: format, encryption: encryption,
+                                           password: password, volumeSize: volumeSize)
+                    }
                 }
-            } }
+                // Tras guardar (no exportar) con éxito, ejecutar lo pendiente (p. ej. cerrar).
+                if !isExport, !doc.hasUnsavedChanges {
+                    let after = pendingAfterSave
+                    pendingAfterSave = nil
+                    after?()
+                }
+            }
+        } else {
+            pendingAfterSave = nil   // se canceló la ubicación: no continuar
         }
     }
 
@@ -739,8 +877,12 @@ struct ContentView: View {
     /// aviso unificado que el cierre de ventana y el salir.
     private func attemptClose() {
         guard doc.hasUnsavedChanges else { doc.close(); return }
-        UnsavedChangesAlert.present(on: NSApp.keyWindow) { discard in
-            if discard { doc.close() }
+        UnsavedChangesAlert.present(on: NSApp.keyWindow) { choice in
+            switch choice {
+            case .cancel: break
+            case .discard: doc.close()
+            case .save: saveDocument(then: { doc.close() })
+            }
         }
     }
 

@@ -134,6 +134,7 @@ private extension Localizer {
 
         // Extract sheet
         "extract.title": "Extract “%@”",
+        "extract.items": "%@ items",
         "extract.in": "In:",
         "extract.choose": "Choose…",
         "extract.password": "Archive password",
@@ -148,9 +149,9 @@ private extension Localizer {
         "password.wrong": "Wrong password.",
 
         // Close confirmation
-        "unsaved.title": "Discard unsaved changes?",
-        "unsaved.message": "If you continue you'll lose the changes you haven't saved.",
-        "unsaved.discard": "Close and discard",
+        "unsaved.title": "Do you want to save your changes?",
+        "unsaved.message": "If you don't save them, your changes will be lost.",
+        "unsaved.dontSave": "Close Without Saving",
 
         // Errors
         "error.title": "The operation could not be completed",
@@ -162,6 +163,12 @@ private extension Localizer {
         "conflict.title": "“%@” already exists in the destination",
         "conflict.overwrite": "Overwrite",
         "conflict.saveAs": "Save as %@",
+
+        // Add conflict (same name already in the archive)
+        "add.conflict.title": "“%@” already exists",
+        "add.conflict.message": "An item named “%@” already exists in this location. Do you want to overwrite it or keep both?",
+        "add.conflict.overwrite": "Overwrite",
+        "add.conflict.keepBoth": "Keep both",
 
         // System panels
         "panel.add": "Add",
@@ -272,6 +279,7 @@ private extension Localizer {
 
         // Extract sheet
         "extract.title": "Extraer «%@»",
+        "extract.items": "%@ elementos",
         "extract.in": "En:",
         "extract.choose": "Elegir…",
         "extract.password": "Contraseña del archivo",
@@ -286,9 +294,9 @@ private extension Localizer {
         "password.wrong": "Contraseña incorrecta.",
 
         // Close confirmation
-        "unsaved.title": "¿Descartar los cambios sin guardar?",
-        "unsaved.message": "Si continúas perderás los cambios que no hayas guardado.",
-        "unsaved.discard": "Cerrar y descartar",
+        "unsaved.title": "¿Quieres guardar los cambios?",
+        "unsaved.message": "Si no los guardas, se perderán.",
+        "unsaved.dontSave": "Cerrar sin guardar",
 
         // Errors
         "error.title": "No se pudo completar la operación",
@@ -300,6 +308,12 @@ private extension Localizer {
         "conflict.title": "Ya existe «%@» en el destino",
         "conflict.overwrite": "Sobrescribir",
         "conflict.saveAs": "Guardar como %@",
+
+        // Add conflict (mismo nombre ya en el archivo)
+        "add.conflict.title": "Ya existe «%@»",
+        "add.conflict.message": "Ya hay un elemento llamado «%@» en esta ubicación. ¿Quieres sobrescribirlo o conservar ambos?",
+        "add.conflict.overwrite": "Sobrescribir",
+        "add.conflict.keepBoth": "Conservar ambos",
 
         // System panels
         "panel.add": "Añadir",
