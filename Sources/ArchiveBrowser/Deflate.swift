@@ -26,9 +26,20 @@ enum Deflate {
         return dst.prefix(written)
     }
 
+    /// Ratio de compresión máximo de DEFLATE (~1032:1). Un tamaño declarado mayor que
+    /// `comprimido × este factor` es físicamente imposible.
+    static let maxDeflateRatio = 1032
+
     /// Descomprime `input` (DEFLATE) sabiendo el tamaño original `uncompressedSize`.
     static func decompress(_ input: Data, uncompressedSize: Int) -> Data? {
         guard uncompressedSize > 0 else { return Data() }
+        // Cota anti "zip-bomb por declaración": `uncompressedSize` viene del central
+        // directory (controlado por el fichero). Si supera el máximo que DEFLATE puede
+        // expandir desde estos bytes comprimidos, es una cifra mentirosa: rechazar antes
+        // de asignar (evita reservar gigabytes por un archivo malicioso). Para entradas
+        // realmente grandes y no confiables, la ruta de streaming (`extract(...,sink:)`)
+        // infla al vuelo sin esta asignación.
+        guard uncompressedSize <= input.count * maxDeflateRatio + 64 else { return nil }
         var dst = Data(count: uncompressedSize)
 
         let written = dst.withUnsafeMutableBytes { dstRaw -> Int in

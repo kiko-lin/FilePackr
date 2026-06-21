@@ -11,36 +11,38 @@ public enum Tar {
 
     // MARK: - Lectura
 
-    /// Lista las entradas del TAR. `localHeaderOffset` apunta a los datos (para extraer).
+    /// Lista las entradas del TAR. `dataOffset` apunta a los datos (para extraer). Lee las
+    /// cabeceras (512 B dispersas) directamente sobre `data` con índices, sin copiar el
+    /// contenedor entero a un `[UInt8]` (importa para un tar.gz de varios GB ya en RAM).
     public static func listEntries(in data: Data) throws -> [ArchiveEntry] {
-        let bytes = [UInt8](data)
         var entries: [ArchiveEntry] = []
-        var p = 0
+        let base = data.startIndex
+        var p = base                       // índice absoluto del bloque de cabecera actual
         var pendingPath: String?
         var pendingSize: UInt64?
         var pendingDate: Date?
 
-        while p + blockSize <= bytes.count {
-            if isZeroBlock(bytes, at: p) { break }   // dos bloques cero = fin
+        while p + blockSize <= data.endIndex {
+            if isZeroBlock(data, at: p) { break }   // dos bloques cero = fin
 
-            let rawName = string(bytes, p, 100)
-            let prefix = string(bytes, p + 345, 155)
-            let size = pendingSize ?? octal(bytes, p + 124, 12)
-            let mtime = pendingDate ?? dateFrom(octal(bytes, p + 136, 12))
-            let type = bytes[p + 156]
+            let rawName = string(data, p, 100)
+            let prefix = string(data, p + 345, 155)
+            let size = pendingSize ?? octal(data, p + 124, 12)
+            let mtime = pendingDate ?? dateFrom(octal(data, p + 136, 12))
+            let type = data[p + 156]
             let dataStart = p + blockSize
             let dataBlocks = (Int(size) + blockSize - 1) / blockSize
 
             switch type {
             case 0x78, 0x67:   // 'x' / 'g' — cabecera extendida PAX
-                let header = parsePax(bytes, start: dataStart, size: Int(size))
+                let header = parsePax(data, start: dataStart, size: Int(size))
                 pendingPath = header.path
                 pendingSize = header.size
                 pendingDate = header.mtime
                 p = dataStart + dataBlocks * blockSize
                 continue
             case 0x4C:         // 'L' — nombre largo GNU
-                pendingPath = string(bytes, dataStart, Int(size)).trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
+                pendingPath = string(data, dataStart, Int(size)).trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
                 p = dataStart + dataBlocks * blockSize
                 continue
             default:
@@ -52,11 +54,11 @@ public enum Tar {
 
             let isDir = type == 0x35 || name.hasSuffix("/")   // '5'
             if type == 0x30 || type == 0x00 || type == 0x35 || isDir {   // ficheros y carpetas
-                guard dataStart + Int(size) <= bytes.count else { throw TarError.corrupt }
+                guard dataStart + Int(size) <= data.endIndex else { throw TarError.corrupt }
                 entries.append(ArchiveEntry(
                     path: name, compressedSize: size, uncompressedSize: size,
                     isDirectory: isDir, modificationDate: mtime,
-                    isEncrypted: false, dataOffset: UInt64(dataStart)))
+                    isEncrypted: false, dataOffset: UInt64(dataStart - base)))   // offset 0-based para entryData
             }
             p = dataStart + dataBlocks * blockSize
         }
@@ -221,26 +223,30 @@ public enum Tar {
 
     // MARK: - Helpers de lectura
 
-    private static func isZeroBlock(_ b: [UInt8], at p: Int) -> Bool {
-        for i in p..<min(p + blockSize, b.count) where b[i] != 0 { return false }
+    // Estos helpers indexan `Data` con índices **absolutos** (no rebasados a 0): el llamador
+    // pasa offsets ya sumados a `data.startIndex`, así no hace falta copiar el contenedor.
+    private static func isZeroBlock(_ d: Data, at p: Int) -> Bool {
+        for i in p..<min(p + blockSize, d.endIndex) where d[i] != 0 { return false }
         return true
     }
-    private static func string(_ b: [UInt8], _ off: Int, _ len: Int) -> String {
-        let end = min(off + len, b.count)
-        var slice = Array(b[off..<end])
-        if let nul = slice.firstIndex(of: 0) { slice = Array(slice[0..<nul]) }
+    private static func string(_ d: Data, _ off: Int, _ len: Int) -> String {
+        let end = min(off + len, d.endIndex)
+        guard off < end else { return "" }
+        var slice = d[off..<end]
+        if let nul = slice.firstIndex(of: 0) { slice = slice[slice.startIndex..<nul] }
         return String(decoding: slice, as: UTF8.self)
     }
-    private static func octal(_ b: [UInt8], _ off: Int, _ len: Int) -> UInt64 {
-        let s = string(b, off, len).trimmingCharacters(in: .whitespaces)
+    private static func octal(_ d: Data, _ off: Int, _ len: Int) -> UInt64 {
+        let s = string(d, off, len).trimmingCharacters(in: .whitespaces)
         return UInt64(s, radix: 8) ?? 0
     }
     private static func dateFrom(_ epoch: UInt64) -> Date? {
         epoch == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(epoch))
     }
-    private static func parsePax(_ b: [UInt8], start: Int, size: Int) -> (path: String?, size: UInt64?, mtime: Date?) {
-        let end = min(start + size, b.count)
-        let text = String(decoding: b[start..<end], as: UTF8.self)
+    private static func parsePax(_ d: Data, start: Int, size: Int) -> (path: String?, size: UInt64?, mtime: Date?) {
+        let end = min(start + size, d.endIndex)
+        guard start < end else { return (nil, nil, nil) }
+        let text = String(decoding: d[start..<end], as: UTF8.self)
         var path: String?; var sz: UInt64?; var mtime: Date?
         for line in text.split(separator: "\n") {
             guard let space = line.firstIndex(of: " ") else { continue }
