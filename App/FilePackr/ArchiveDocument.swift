@@ -214,17 +214,16 @@ final class ArchiveDocument: ObservableObject {
     /// Da la contraseña para las entradas cifradas del archivo abierto. La valida
     /// extrayendo la primera entrada cifrada; devuelve `false` si es incorrecta.
     func provideEntryPassword(_ password: String) -> Bool {
-        guard let archive = sourceArchiveData,
-              let node = firstEncryptedFile(in: roots),
-              case .entry(let entry) = node.source else {
-            entryPassword = password
-            lockState = .unlocked
-            return true
-        }
-        do {
-            _ = try format.codec.entryData(for: entry, in: archive, password: password)
-        } catch {
-            return false
+        // Si hay una entrada cifrada, validar la contraseña extrayéndola; si no la hay,
+        // aceptarla sin más. En ambos casos se aplican los mismos efectos (una sola vez).
+        if let archive = sourceArchiveData,
+           let node = firstEncryptedFile(in: roots),
+           case .entry(let entry) = node.source {
+            do {
+                _ = try format.codec.entryData(for: entry, in: archive, password: password)
+            } catch {
+                return false
+            }
         }
         entryPassword = password
         savePassword = password   // misma contraseña para re-guardar cifrado

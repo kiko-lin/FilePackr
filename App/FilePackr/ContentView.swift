@@ -525,11 +525,13 @@ struct ContentView: View {
                                            password: password, volumeSize: volumeSize)
                     }
                 }
-                // Tras guardar (no exportar) con éxito, ejecutar lo pendiente (p. ej. cerrar).
-                if !isExport, !doc.hasUnsavedChanges {
+                // Tras guardar (no exportar): ejecutar lo pendiente (p. ej. cerrar) solo si
+                // tuvo éxito, pero limpiarlo siempre — un guardado fallido no debe dejarlo
+                // colgado y dispararse en un guardado posterior.
+                if !isExport {
                     let after = pendingAfterSave
                     pendingAfterSave = nil
-                    after?()
+                    if !doc.hasUnsavedChanges { after?() }
                 }
             }
         } else {
@@ -593,6 +595,8 @@ struct ContentView: View {
             case .unsupportedStrength: return loc("error.unsupportedEncryption")
             case .corrupt: return loc("error.corrupt")
             }
+        case is ZipWriteError:
+            return loc("error.writeFailed")
         case is ArchiveError, is TarError, is GzipError, is XzError, is Bzip2Error:
             return loc("error.corrupt")
         default:
