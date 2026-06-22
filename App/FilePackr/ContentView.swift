@@ -476,7 +476,7 @@ struct ContentView: View {
         panel.allowedContentTypes = format == .zip ? [.zip] : []
         panel.nameFieldStringValue = "\(strippedBaseName(documentDisplayName)).\(format.fileExtension)"
         panel.prompt = isExport ? loc("panel.export") : loc("panel.save")
-        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        guard let url = await present(panel) else { return false }
         await runAsync {
             if isExport {
                 try await doc.export(to: url, format: format, encryption: encryption,
@@ -487,6 +487,23 @@ struct ContentView: View {
             }
         }
         return !doc.hasUnsavedChanges
+    }
+
+    /// Presenta el panel como **hoja de la ventana del documento** y devuelve la URL elegida
+    /// (o `nil` si se cancela). Frente a `runModal()` (panel flotante app-modal, que tras la
+    /// hoja de opciones de SwiftUI queda en un modal anidado y rompe el expandir/contraer del
+    /// navegador), `beginSheetModal` se serializa con la hoja y enruta los eventos bien. Cae a
+    /// `runModal()` solo si no hay ventana (caso degenerado). `mainWindow` es la del documento
+    /// (las hojas son `key` pero no `main`), así no la adjuntamos a la hoja que se está cerrando.
+    private func present(_ panel: NSSavePanel) async -> URL? {
+        guard let window = NSApp.mainWindow ?? NSApp.keyWindow else {
+            return panel.runModal() == .OK ? panel.url : nil
+        }
+        return await withCheckedContinuation { (cont: CheckedContinuation<URL?, Never>) in
+            panel.beginSheetModal(for: window) { response in
+                cont.resume(returning: response == .OK ? panel.url : nil)
+            }
+        }
     }
 
     /// Nombre base sin la extensión de archivo conocida (zip/tar/tar.gz/tgz/gz).
