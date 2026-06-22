@@ -98,17 +98,23 @@ enum ZipAES {
         init(key: [UInt8]) { self.key = key }
 
         mutating func xor(_ data: [UInt8]) -> [UInt8] {
-            var out = [UInt8](); out.reserveCapacity(data.count)
-            for byte in data {
-                if used == buffer.count {
-                    buffer = ZipAES.keystreamBlock(block, key: key)
-                    block += 1
-                    used = 0
+            // Sobre un buffer sin inicializar (cada byte se escribe una vez, sin `append` ni
+            // relleno a cero) y por tramos del keystream disponible, en vez de byte a byte.
+            [UInt8](unsafeUninitializedCapacity: data.count) { out, count in
+                var i = 0
+                while i < data.count {
+                    if used == buffer.count {
+                        buffer = ZipAES.keystreamBlock(block, key: key)
+                        block += 1
+                        used = 0
+                    }
+                    let n = min(buffer.count - used, data.count - i)
+                    for j in 0..<n { out[i + j] = data[i + j] ^ buffer[used + j] }
+                    i += n
+                    used += n
                 }
-                out.append(byte ^ buffer[used])
-                used += 1
+                count = data.count
             }
-            return out
         }
     }
 
