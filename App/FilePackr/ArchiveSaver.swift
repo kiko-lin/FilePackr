@@ -19,40 +19,39 @@ enum SavePayload: Sendable {
     case libArchive(items: [LibArchive.WriteItem], format: LibArchive.WriteFormat)
 }
 
-/// Codifica un `SavePayload` en el fichero de trabajo, en segundo plano. La colocación
-/// final (fichero único o troceado en volúmenes) la decide el documento, que controla
-/// el progreso y el estado del documento.
+/// Codifica un `SavePayload` en el fichero de trabajo, en segundo plano. `work` es un
+/// temporal privado del documento, que es quien lo **coloca de forma atómica** después
+/// (mueve o trocea `work`→destino) y controla progreso y estado. Por eso aquí se escribe
+/// directo, sin un segundo temporal: si algo falla, el documento borra `work`.
 enum ArchiveSaver {
 
     /// Escribe `payload` en `work`. `progress` (fracción 0…1) solo lo emite ZIP.
     static func encode(_ payload: SavePayload, to work: URL,
                        progress: @escaping @Sendable (Double) -> Void) async throws {
-        switch payload {
-        case .zip(let inputs, let encryption, let password):
-            try await writeAtomically(to: work) { handle in
-                try ZipWriter().write(inputs, to: handle, encryption: encryption,
-                                      password: password, progress: progress)
-            }
-        case .data(let make):
-            try await Task.detached(priority: .userInitiated) {
-                try make().write(to: work, options: .atomic)
-            }.value
-        case .stream(let write):
-            try await writeAtomically(to: work, write)
-        case .libArchive(let items, let format):
-            try await Task.detached(priority: .userInitiated) {
+        try await Task.detached(priority: .userInitiated) {
+            switch payload {
+            case .zip(let inputs, let encryption, let password):
+                try writeToFile(work) { handle in
+                    try ZipWriter().write(inputs, to: handle, encryption: encryption,
+                                          password: password, progress: progress)
+                }
+            case .data(let make):
+                try make().write(to: work)
+            case .stream(let write):
+                try writeToFile(work, write)
+            case .libArchive(let items, let format):
                 try LibArchive.write(items, to: work, format: format)
-            }.value
-        }
+            }
+        }.value
     }
 
-    /// Escribe `body` en `url` de forma atómica (temporal + reemplazo) en segundo plano.
-    /// `body` escribe el contenido en el `FileHandle` (el ZIP en streaming, o la compresión
-    /// gz/xz/bz2 del cierre `.stream`).
-    private static func writeAtomically(to url: URL,
-                                        _ body: @escaping @Sendable (FileHandle) throws -> Void) async throws {
-        try await Task.detached(priority: .userInitiated) {
-            try writeFileAtomically(to: url, body)
-        }.value
+    /// Crea `url`, lo abre para escritura, ejecuta `body` y cierra. **No** es atómico (el
+    /// documento coloca el temporal resultante de forma atómica). `body` escribe el
+    /// contenido en el `FileHandle`: el ZIP en streaming o la compresión gz/xz/bz2.
+    nonisolated private static func writeToFile(_ url: URL, _ body: (FileHandle) throws -> Void) throws {
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try body(handle)
     }
 }
