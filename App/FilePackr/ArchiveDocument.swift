@@ -485,17 +485,25 @@ final class ArchiveDocument: ObservableObject {
         let volumes = (outputFormat.supportsVolumeSplit && (volumeSize ?? 0) > 0) ? volumeSize : nil
         let cipher = outputFormat.supportsEncryption ? encryption : .none
         let pwd = outputFormat.supportsEncryption ? password : nil
+        // Arranca **indeterminado** (spinner): el ensamblado del payload no reporta fracción
+        // (puede descomprimir entradas de origen). El escritor ZIP la fija al empezar a escribir,
+        // y la barra pasa a determinada; los demás formatos siguen indeterminados.
         progress = ProgressState(kind: cipher == .none ? .compressing(documentName) : .encrypting(documentName),
-                                 fraction: outputFormat == .zip ? 0 : nil)
+                                 fraction: nil)
         defer { progress = nil }
 
         // 1) Producir el archivo completo en un fichero temporal. El documento decide
-        // *qué* escribir (ensambla el payload leyendo el árbol vía SavePayloadBuilder); el
-        // ArchiveSaver decide *cómo* (codifica a disco).
-        let builder = SavePayloadBuilder(roots: roots, documentName: documentName,
+        // *qué* escribir y el ArchiveSaver decide *cómo* (codifica a disco). El ensamblado del
+        // payload puede descomprimir/descifrar las entradas de origen (p. ej. re-guardar un
+        // tar.gz/7z/zip cifrado), así que se hace en **segundo plano** sobre una instantánea
+        // `Sendable` del árbol; en el hilo principal solo se toma esa instantánea (barata).
+        let snapshot = roots.map(NodeSnapshot.init)
+        let builder = SavePayloadBuilder(roots: snapshot, documentName: documentName,
                                          sourceFormat: format, sourceArchiveData: sourceArchiveData,
                                          entryPassword: entryPassword)
-        let payload = try builder.payload(for: outputFormat, encryption: cipher, password: pwd)
+        let payload = try await Task.detached(priority: .userInitiated) {
+            try builder.payload(for: outputFormat, encryption: cipher, password: pwd)
+        }.value
         let work = url.deletingLastPathComponent()
             .appendingPathComponent(".\(UUID().uuidString).filepackr.work")
         do {

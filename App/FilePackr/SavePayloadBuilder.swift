@@ -1,16 +1,52 @@
 import Foundation
 import ArchiveBrowser
 
-/// Ensambla el `SavePayload` (`Sendable`) que el `ArchiveSaver` escribe a disco, leyendo
-/// el árbol de nodos del documento. Separa el *qué* escribir (recorrer el árbol y
-/// reconstruir el contenido según el formato de salida) del *cómo* codificarlo
-/// (`ArchiveSaver`) y de la orquestación de E/S y estado (`ArchiveDocument`).
+/// Instantánea **`Sendable`** de un nodo del árbol. El ensamblado del payload puede **leer y
+/// descomprimir/descifrar** el contenido de origen (entradas de un archivo abierto), trabajo
+/// que no debe correr en el hilo principal. Como el árbol de `FileNode` es `@MainActor` y no
+/// `Sendable`, el documento toma esta instantánea ligera en el hilo principal (solo estructura:
+/// nombres, fechas y el origen, ya `Sendable`) y el `SavePayloadBuilder` la procesa en segundo
+/// plano.
+struct NodeSnapshot: Sendable {
+    let name: String
+    let isDirectory: Bool
+    let modificationDate: Date?
+    let source: Source
+    let children: [NodeSnapshot]
+
+    /// Origen del contenido, en variantes `Sendable` (sin referencias al árbol vivo).
+    enum Source: Sendable {
+        case folder
+        case diskFile(URL)
+        case entry(ArchiveEntry)
+    }
+
+    /// Toma la instantánea de un nodo del árbol. Se hace en el hilo principal (lee `FileNode`,
+    /// que es `@MainActor`), pero es solo estructura: no toca disco ni descomprime.
+    @MainActor
+    init(_ node: FileNode) {
+        name = node.name
+        isDirectory = node.isDirectory
+        modificationDate = node.modificationDate
+        switch node.source {
+        case .folder: source = .folder
+        case .diskFile(let url): source = .diskFile(url)
+        case .entry(let entry): source = .entry(entry)
+        }
+        children = node.isDirectory ? node.children.map(NodeSnapshot.init) : []
+    }
+}
+
+/// Ensambla el `SavePayload` (`Sendable`) que el `ArchiveSaver` escribe a disco, a partir de
+/// una instantánea `Sendable` del árbol. Separa el *qué* escribir (recorrer el árbol y
+/// reconstruir el contenido según el formato de salida) del *cómo* codificarlo (`ArchiveSaver`)
+/// y de la orquestación de E/S y estado (`ArchiveDocument`).
 ///
-/// Es código puro de serialización: entra un árbol de `FileNode` más el origen del
-/// archivo abierto, sale una estructura `Sendable`. No toca el estado del documento.
-struct SavePayloadBuilder {
-    /// Raíces del árbol a serializar.
-    let roots: [FileNode]
+/// Es `nonisolated` y `Sendable`: el documento lo invoca **en segundo plano**, de modo que leer
+/// los ficheros de disco y descomprimir/descifrar las entradas de origen no bloquea la interfaz.
+nonisolated struct SavePayloadBuilder: Sendable {
+    /// Instantánea de las raíces del árbol a serializar.
+    let roots: [NodeSnapshot]
     /// Nombre del documento (lo usa gzip como nombre interno del fichero).
     let documentName: String
     /// Formato del archivo de origen (para leer las entradas de los nodos `.entry`).
@@ -78,7 +114,7 @@ struct SavePayloadBuilder {
     /// Recorre el árbol en preorden invocando `visit(node, path)` por cada nodo (la ruta
     /// arrastra el prefijo de carpetas). Centraliza la recursión que antes se repetía
     /// idéntica en cada constructor de items.
-    private func walk(_ nodes: [FileNode], prefix: String, _ visit: (FileNode, String) -> Void) {
+    private func walk(_ nodes: [NodeSnapshot], prefix: String, _ visit: (NodeSnapshot, String) -> Void) {
         for node in nodes {
             let path = prefix + node.name
             visit(node, path)
@@ -88,7 +124,7 @@ struct SavePayloadBuilder {
 
     /// Datos sin comprimir de un nodo, leídos según el formato del archivo de origen.
     /// Sirve para reconstruir el contenido al guardar en otro formato.
-    private func nodeData(_ node: FileNode) -> Data? {
+    private func nodeData(_ node: NodeSnapshot) -> Data? {
         switch node.source {
         case .folder: return nil
         case .diskFile(let url): return try? Data(contentsOf: url)
@@ -103,7 +139,7 @@ struct SavePayloadBuilder {
     /// Payload para formatos de un solo fichero (gz/xz/bz2). Si el contenido es un
     /// fichero de disco, comprime en **streaming** (memoria constante); si ya está en
     /// RAM (entrada de un archivo abierto), usa la ruta en memoria.
-    private func singleFilePayload(_ node: FileNode,
+    private func singleFilePayload(_ node: NodeSnapshot,
                                    stream: @escaping @Sendable (FileHandle, FileHandle) throws -> Void,
                                    memory: @escaping @Sendable (Data) -> Data) throws -> SavePayload {
         if case .diskFile(let url) = node.source {
