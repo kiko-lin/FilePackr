@@ -69,13 +69,7 @@ struct SettingsView: View {
     }
 
     private func chooseFixedFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = loc("panel.choose")
-        if let current = settings.fixedExtractFolder { panel.directoryURL = current }
-        if panel.runModal() == .OK, let url = panel.url {
+        if let url = chooseFolderPanel(prompt: loc("panel.choose"), startingAt: settings.fixedExtractFolder) {
             settings.fixedExtractFolder = url
         }
     }

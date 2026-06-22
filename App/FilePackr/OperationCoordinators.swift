@@ -226,13 +226,7 @@ final class ExtractCoordinator: ObservableObject {
 
     /// "Elegir…": abre el navegador de carpetas para cambiar el destino.
     func chooseFolder(prompt: String) {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = prompt
-        panel.directoryURL = destination
-        if panel.runModal() == .OK, let url = panel.url {
+        if let url = chooseFolderPanel(prompt: prompt, startingAt: destination) {
             destination = url
         }
     }
