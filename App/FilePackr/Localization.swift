@@ -155,14 +155,22 @@ private extension Localizer {
 
         // Errors
         "error.title": "The operation could not be completed",
+        "error.needsPassword": "This archive is password-protected. Enter the password to continue.",
+        "error.wrongPassword": "The password is incorrect.",
+        "error.unsupportedEncryption": "This archive uses an encryption method that isn’t supported.",
+        "error.unsupportedMethod": "This archive uses a compression method that isn’t supported.",
+        "error.corrupt": "The file is damaged or isn’t a valid archive.",
+        "error.writeFailed": "The archive could not be written.",
+        "error.readFailed": "The archive could not be read.",
         "button.ok": "OK",
         "button.cancel": "Cancel",
         "button.saveEllipsis": "Save…",
 
         // Extraction conflict
         "conflict.title": "“%@” already exists in the destination",
+        "conflict.message": "An item named “%@” already exists in the destination. Do you want to overwrite it or keep both?",
         "conflict.overwrite": "Overwrite",
-        "conflict.saveAs": "Save as %@",
+        "conflict.keepBoth": "Keep both",
 
         // Add conflict (same name already in the archive)
         "add.conflict.title": "“%@” already exists",
@@ -300,14 +308,22 @@ private extension Localizer {
 
         // Errors
         "error.title": "No se pudo completar la operación",
+        "error.needsPassword": "Este archivo está protegido con contraseña. Introdúcela para continuar.",
+        "error.wrongPassword": "La contraseña no es correcta.",
+        "error.unsupportedEncryption": "Este archivo usa un cifrado que no se admite.",
+        "error.unsupportedMethod": "Este archivo usa un método de compresión que no se admite.",
+        "error.corrupt": "El fichero está dañado o no es un archivo válido.",
+        "error.writeFailed": "No se pudo escribir el archivo.",
+        "error.readFailed": "No se pudo leer el archivo.",
         "button.ok": "Aceptar",
         "button.cancel": "Cancelar",
         "button.saveEllipsis": "Guardar…",
 
         // Extraction conflict
         "conflict.title": "Ya existe «%@» en el destino",
+        "conflict.message": "Ya hay un elemento llamado «%@» en el destino. ¿Quieres sobrescribirlo o conservar ambos?",
         "conflict.overwrite": "Sobrescribir",
-        "conflict.saveAs": "Guardar como %@",
+        "conflict.keepBoth": "Conservar ambos",
 
         // Add conflict (mismo nombre ya en el archivo)
         "add.conflict.title": "Ya existe «%@»",

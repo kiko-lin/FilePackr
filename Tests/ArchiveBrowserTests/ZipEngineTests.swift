@@ -136,4 +136,25 @@ final class ZipEngineTests: XCTestCase {
         XCTAssertEqual(entries.count, 70_000, "el EOCD ZIP64 permite leer >65535 entradas")
         XCTAssertEqual(entries.last?.path, "f69999.txt")
     }
+
+    // MARK: - Cota anti zip-bomb
+
+    func testDeflateRejectsImplausibleDeclaredSize() {
+        // Un central directory mentiroso que declara un tamaño gigantesco para unos pocos
+        // bytes comprimidos debe rechazarse (devolver nil) sin intentar asignar la memoria.
+        let compressed = Data([0x01, 0x02, 0x03, 0x04])
+        let absurd = compressed.count * Deflate.maxDeflateRatio + 1000   // imposible para DEFLATE
+        XCTAssertNil(Deflate.decompress(compressed, uncompressedSize: absurd),
+                     "un tamaño declarado por encima del ratio máximo de DEFLATE debe rechazarse")
+    }
+
+    func testDeflateRoundTripWithinRatioStillWorks() throws {
+        // Un fichero muy compresible (todo ceros) tiene un ratio alto pero legítimo: la cota
+        // no debe rechazarlo.
+        let original = Data(repeating: 0, count: 200_000)
+        let compressed = try XCTUnwrap(Deflate.compress(original))
+        XCTAssertLessThanOrEqual(original.count, compressed.count * Deflate.maxDeflateRatio + 64,
+                                 "un ratio legítimo cae dentro de la cota")
+        XCTAssertEqual(Deflate.decompress(compressed, uncompressedSize: original.count), original)
+    }
 }

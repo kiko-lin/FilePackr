@@ -1,6 +1,13 @@
 import Foundation
 import Compression
 
+public enum ZipWriteError: Error, Equatable {
+    /// Una entrada `.file` llegó a `makeRecord`; debe escribirse en streaming. Invariante
+    /// interno: `writeStream` desvía los `.file` antes. Se lanza (en vez de abortar) por si
+    /// un refactor lo viola.
+    case fileSourceNotStreamed
+}
+
 /// Origen del contenido de una entrada a escribir.
 public enum ZipEntrySource: Sendable {
     case directory
@@ -292,7 +299,7 @@ public struct ZipWriter: Sendable {
         case .data(let data):
             return fileRecord(path: input.path, data: data, time: time, date: date)
         case .file:
-            preconditionFailure("las entradas .file se escriben en streaming, no por makeRecord")
+            throw ZipWriteError.fileSourceNotStreamed
         case .rawEntry(let method, let crc, let compressed, let uncompressedSize):
             return Record(nameBytes: Data(input.path.utf8), method: method, crc32: crc, compressed: compressed,
                           uncompressedSize: uncompressedSize, isDirectory: input.path.hasSuffix("/"),

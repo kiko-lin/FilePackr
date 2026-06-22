@@ -31,22 +31,27 @@ struct ZipCrypto {
         return UInt8(((temp &* (temp ^ 1)) >> 8) & 0xFF)
     }
 
+    // El algoritmo es serial (cada byte actualiza la clave para el siguiente), así que no se
+    // puede vectorizar; el único coste evitable es el `append`: se escribe sobre un buffer sin
+    // inicializar, cada byte una sola vez.
     mutating func decrypt(_ data: [UInt8]) -> [UInt8] {
-        var out = [UInt8](); out.reserveCapacity(data.count)
-        for cipher in data {
-            let plain = cipher ^ keystreamByte()
-            updateKeys(plain)
-            out.append(plain)
+        [UInt8](unsafeUninitializedCapacity: data.count) { out, count in
+            for i in 0..<data.count {
+                let plain = data[i] ^ keystreamByte()
+                updateKeys(plain)
+                out[i] = plain
+            }
+            count = data.count
         }
-        return out
     }
 
     mutating func encrypt(_ data: [UInt8]) -> [UInt8] {
-        var out = [UInt8](); out.reserveCapacity(data.count)
-        for plain in data {
-            out.append(plain ^ keystreamByte())
-            updateKeys(plain)
+        [UInt8](unsafeUninitializedCapacity: data.count) { out, count in
+            for i in 0..<data.count {
+                out[i] = data[i] ^ keystreamByte()
+                updateKeys(data[i])
+            }
+            count = data.count
         }
-        return out
     }
 }

@@ -3,6 +3,18 @@ import Combine
 import UniformTypeIdentifiers
 import ArchiveBrowser
 
+/// Estado de cifrado de un documento. Un único valor hace imposible representar estados
+/// contradictorios (p. ej. pedir a la vez contraseña de apertura y de entrada).
+enum LockState: Equatable {
+    /// Sin cifrado pendiente: el documento es editable/extraíble.
+    case unlocked
+    /// Un 7z con cabeceras cifradas necesita contraseña para **abrirse**; `url` es el archivo
+    /// pendiente de reintentar al darla.
+    case needsOpenPassword(URL)
+    /// El archivo está abierto pero sus **entradas** están cifradas y aún no hay contraseña.
+    case needsEntryPassword
+}
+
 /// Documento de trabajo: el árbol de elementos que acabará siendo un ZIP.
 /// Mantiene, si se abrió un ZIP existente, sus bytes originales para poder
 /// extraer o copiar entradas sin recomprimir.
@@ -33,11 +45,15 @@ final class ArchiveDocument: ObservableObject {
     @Published private(set) var saveFormat: ArchiveFormat = .zip
     /// Tamaño de volumen en bytes si el documento se guarda dividido (nil = un fichero).
     @Published private(set) var saveVolumeSize: Int?
-    /// El archivo abierto tiene entradas cifradas y aún no tenemos la contraseña.
-    @Published private(set) var requiresEntryPassword = false
+    /// Estado de cifrado del documento (única fuente de verdad: estados imposibles de
+    /// contradecir). La vista observa los derivados `requiresEntryPassword`/`requiresOpenPassword`.
+    @Published private(set) var lockState: LockState = .unlocked
+    /// Necesitamos la contraseña de las **entradas** cifradas del archivo abierto (para
+    /// extraer/editar). Derivado de `lockState`.
+    var requiresEntryPassword: Bool { lockState == .needsEntryPassword }
     /// Un 7z con cabeceras cifradas necesita contraseña para **abrirse** (no solo extraer).
-    @Published private(set) var requiresOpenPassword = false
-    private var pendingArchiveURL: URL?
+    /// Derivado de `lockState`.
+    var requiresOpenPassword: Bool { if case .needsOpenPassword = lockState { return true }; return false }
     /// Contraseña para descifrar las entradas del archivo abierto.
     private var entryPassword: String?
 
@@ -106,19 +122,6 @@ final class ArchiveDocument: ObservableObject {
         return node
     }
 
-    /// Decide qué hacer con lo que llega: abrir un ZIP como base o añadir ficheros.
-    func handleIncoming(_ urls: [URL]) async throws {
-        let cleaned = urls.filter { $0.isFileURL }
-        guard !cleaned.isEmpty else { return }
-
-        if isEmpty, cleaned.count == 1, !isDirectory(cleaned[0]), isOpenableArchive(cleaned[0]) {
-            try await openArchive(cleaned[0])
-        } else {
-            if isEmpty { beginNewDocument() }
-            addFiles(cleaned)
-        }
-    }
-
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
     func openArchive(_ url: URL, passphrase: String? = nil) async throws {
@@ -168,8 +171,7 @@ final class ArchiveDocument: ObservableObject {
             joinedTemp = loaded.1
         } catch let error as LibArchiveError where error == .passphraseRequired {
             // 7z con cabeceras cifradas: hay que pedir contraseña para abrir.
-            pendingArchiveURL = url
-            requiresOpenPassword = true
+            lockState = .needsOpenPassword(url)
             return
         }
 
@@ -182,12 +184,12 @@ final class ArchiveDocument: ObservableObject {
         documentName = baseURL.lastPathComponent
         hasActiveDocument = true
         entryPassword = passphrase
-        requiresOpenPassword = false
         // ZIP y 7z pueden tener entradas cifradas; si no dimos contraseña al abrir,
         // se pedirá al extraer/previsualizar. tar/gz/xz/bz2 nunca cifran.
-        requiresEntryPassword = passphrase == nil
+        let entriesLocked = passphrase == nil
             && (result.format == .zip || result.format.usesLibArchive)
             && result.entries.contains { $0.isEncrypted }
+        lockState = entriesLocked ? .needsEntryPassword : .unlocked
         // Al re-guardar, conservar el cifrado original (con su contraseña, cuando se dé).
         saveEncryption = result.format == .zip ? detectedEncryption(in: result.entries) : .none
         savePassword = nil
@@ -216,7 +218,7 @@ final class ArchiveDocument: ObservableObject {
               let node = firstEncryptedFile(in: roots),
               case .zipEntry(let entry) = node.source else {
             entryPassword = password
-            requiresEntryPassword = false
+            lockState = .unlocked
             return true
         }
         do {
@@ -226,7 +228,7 @@ final class ArchiveDocument: ObservableObject {
         }
         entryPassword = password
         savePassword = password   // misma contraseña para re-guardar cifrado
-        requiresEntryPassword = false
+        lockState = .unlocked
         changed()
         return true
     }
@@ -234,7 +236,7 @@ final class ArchiveDocument: ObservableObject {
     /// Da la contraseña para **abrir** un 7z con cabeceras cifradas. Reintenta la
     /// apertura; devuelve `false` si es incorrecta (sigue pidiéndola).
     func provideOpenPassword(_ password: String) async -> Bool {
-        guard let url = pendingArchiveURL else { return false }
+        guard case .needsOpenPassword(let url) = lockState else { return false }
         do {
             try await openArchive(url, passphrase: password)
             return !requiresOpenPassword   // openArchive la limpia si funcionó
@@ -262,9 +264,7 @@ final class ArchiveDocument: ObservableObject {
         hasActiveDocument = true
         hasUnsavedChanges = false
         entryPassword = nil
-        requiresEntryPassword = false
-        requiresOpenPassword = false
-        pendingArchiveURL = nil
+        lockState = .unlocked
         saveEncryption = .none
         savePassword = nil
         format = .zip
@@ -409,9 +409,7 @@ final class ArchiveDocument: ObservableObject {
         hasActiveDocument = false
         hasUnsavedChanges = false
         entryPassword = nil
-        requiresEntryPassword = false
-        requiresOpenPassword = false
-        pendingArchiveURL = nil
+        lockState = .unlocked
         saveEncryption = .none
         savePassword = nil
         format = .zip
@@ -443,28 +441,18 @@ final class ArchiveDocument: ObservableObject {
     nonisolated private func runExtraction(_ plan: ExportPlan, to destination: URL, total: Int) async throws {
         try await Task.detached(priority: .userInitiated) {
             var done = 0
+            var lastReported = 0.0
             try plan.writeContents(to: destination) {
                 done += 1
                 let fraction = Double(done) / Double(total)
+                // Coalescer a saltos de ~1% (igual que la apertura): con muchísimos ficheros
+                // pequeños, un hop al main actor por cada uno satura el hilo principal sin
+                // que el usuario perciba la diferencia.
+                guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
+                lastReported = fraction
                 Task { @MainActor in self.progress?.fraction = fraction }
             }
         }.value
-    }
-
-    /// Devuelve una ruta libre añadiendo "_2", "_3"… cuando ya existe el nombre.
-    func conflictFreeURL(for url: URL) -> URL {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path) else { return url }
-        let directory = url.deletingLastPathComponent()
-        let ext = url.pathExtension
-        let base = url.deletingPathExtension().lastPathComponent
-        var n = 2
-        while true {
-            let name = ext.isEmpty ? "\(base)_\(n)" : "\(base)_\(n).\(ext)"
-            let candidate = directory.appendingPathComponent(name)
-            if !fm.fileExists(atPath: candidate.path) { return candidate }
-            n += 1
-        }
     }
 
     /// Crea un plan de exportación ligero (sin tocar disco) para arrastrar al
@@ -490,18 +478,6 @@ final class ArchiveDocument: ObservableObject {
         ExportPlan(name: name, payload: .folder(roots.map { exportPlan(for: $0) }))
     }
 
-    /// Datos sin comprimir de un nodo, leídos según el formato del archivo de origen.
-    /// Sirve para reconstruir el contenido al guardar en otro formato o al extraer.
-    private func nodeData(_ node: FileNode) -> Data? {
-        switch node.source {
-        case .folder: return nil
-        case .diskFile(let url): return try? Data(contentsOf: url)
-        case .zipEntry(let entry):
-            guard let archive = sourceArchiveData else { return nil }
-            return try? format.codec.entryData(for: entry, in: archive, password: entryPassword)
-        }
-    }
-
     /// Escribe el documento en `url` con el formato/cifrado/volúmenes dados, en streaming
     /// a disco y en segundo plano con progreso. **No toca el estado del documento** — es
     /// la pieza común de `save` (que además adopta el fichero) y `export` (que no).
@@ -515,8 +491,12 @@ final class ArchiveDocument: ObservableObject {
         defer { progress = nil }
 
         // 1) Producir el archivo completo en un fichero temporal. El documento decide
-        // *qué* escribir (lee el árbol); el ArchiveSaver decide *cómo* (codifica a disco).
-        let payload = try makeSavePayload(for: outputFormat, encryption: cipher, password: pwd)
+        // *qué* escribir (ensambla el payload leyendo el árbol vía SavePayloadBuilder); el
+        // ArchiveSaver decide *cómo* (codifica a disco).
+        let builder = SavePayloadBuilder(roots: roots, documentName: documentName,
+                                         sourceFormat: format, sourceArchiveData: sourceArchiveData,
+                                         entryPassword: entryPassword)
+        let payload = try builder.payload(for: outputFormat, encryption: cipher, password: pwd)
         let work = url.deletingLastPathComponent()
             .appendingPathComponent(".\(UUID().uuidString).filepackr.work")
         do {
@@ -568,162 +548,6 @@ final class ArchiveDocument: ObservableObject {
                 encryption: ZipEncryption, password: String?, volumeSize: Int? = nil) async throws {
         try await writeArchive(to: url, format: outputFormat, encryption: encryption,
                                password: password, volumeSize: volumeSize)
-    }
-
-    /// Ensambla, leyendo el árbol, el `SavePayload` (`Sendable`) para el formato de
-    /// salida. Lanza para formatos de solo lectura o si un formato de un solo fichero
-    /// no tiene contenido. El ArchiveSaver lo escribe luego a disco.
-    private func makeSavePayload(for outputFormat: ArchiveFormat,
-                                 encryption: ZipEncryption, password: String?) throws -> SavePayload {
-        switch outputFormat {
-        case .zip:
-            return .zip(inputs: makeSaveInputs(), encryption: encryption, password: password)
-        case .tar:
-            let items = makeTarItems()
-            return .stream { handle in
-                let next = Tar.reader(items)
-                while let chunk = try next() { try handle.write(contentsOf: chunk) }
-            }
-        case .tarGzip:
-            let items = makeTarItems()
-            let name = documentName.isEmpty ? nil : documentName
-            return .stream { handle in
-                try Gzip.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) }, filename: name)
-            }
-        case .tarXz:
-            let items = makeTarItems()
-            return .stream { handle in
-                try Xz.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) })
-            }
-        case .tarBzip2:
-            let items = makeTarItems()
-            return .stream { handle in
-                try Bzip2.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) })
-            }
-        case .gzip:
-            guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
-            let name = node.name
-            return try singleFilePayload(node,
-                stream: { try Gzip.compress(from: $0, to: $1, filename: name) },
-                memory: { Gzip.compress($0, filename: name) })
-        case .xz:
-            guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
-            return try singleFilePayload(node, stream: { try Xz.compress(from: $0, to: $1) },
-                                         memory: { Xz.compress($0) })
-        case .bzip2:
-            guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
-            return try singleFilePayload(node, stream: { try Bzip2.compress(from: $0, to: $1) },
-                                         memory: { Bzip2.compress($0) })
-        case .sevenZip, .iso, .xar:
-            guard let writeFormat = outputFormat.libArchiveWriteFormat else {
-                throw CocoaError(.fileWriteUnsupportedScheme)
-            }
-            return .libArchive(items: makeLibArchiveItems(), format: writeFormat)
-        case .rar, .cpio, .lha, .cab:
-            throw CocoaError(.fileWriteUnsupportedScheme)   // formatos de solo lectura
-        }
-    }
-
-    /// Payload para formatos de un solo fichero (gz/xz/bz2). Si el contenido es un
-    /// fichero de disco, comprime en **streaming** (memoria constante); si ya está en
-    /// RAM (entrada de un archivo abierto), usa la ruta en memoria.
-    private func singleFilePayload(_ node: FileNode,
-                                   stream: @escaping @Sendable (FileHandle, FileHandle) throws -> Void,
-                                   memory: @escaping @Sendable (Data) -> Data) throws -> SavePayload {
-        if case .diskFile(let url) = node.source {
-            return .stream { out in
-                let input = try FileHandle(forReadingFrom: url)
-                defer { try? input.close() }
-                try stream(input, out)
-            }
-        }
-        guard let data = nodeData(node) else { throw CocoaError(.fileWriteUnknown) }
-        return .data { memory(data) }
-    }
-
-    /// Construye las entradas para escribir un TAR. Los ficheros de disco van como **URL**
-    /// (se leen al vuelo al escribir, sin cargarlos en RAM); las entradas de un archivo ya
-    /// abierto van como bytes (reconstruidos en memoria, que es donde están).
-    private func makeTarItems() -> [Tar.WriteItem] {
-        var items: [Tar.WriteItem] = []
-        func walk(_ nodes: [FileNode], prefix: String) {
-            for node in nodes {
-                let path = prefix + node.name
-                if node.isDirectory {
-                    items.append(Tar.WriteItem(path: path + "/", data: Data(),
-                                               modifiedAt: node.modificationDate, isDirectory: true))
-                    walk(node.children, prefix: path + "/")
-                } else if case .diskFile(let url) = node.source {
-                    items.append(Tar.WriteItem(path: path, fileURL: url, modifiedAt: node.modificationDate))
-                } else if let data = nodeData(node) {
-                    items.append(Tar.WriteItem(path: path, data: data,
-                                               modifiedAt: node.modificationDate, isDirectory: false))
-                }
-            }
-        }
-        walk(roots, prefix: "")
-        return items
-    }
-
-    /// Como `makeTarItems`, pero para el escritor de 7z/iso/xar de libarchive: los ficheros
-    /// de disco van como URL (se leen al vuelo); las entradas de un archivo abierto, en memoria.
-    private func makeLibArchiveItems() -> [LibArchive.WriteItem] {
-        var items: [LibArchive.WriteItem] = []
-        func walk(_ nodes: [FileNode], prefix: String) {
-            for node in nodes {
-                let path = prefix + node.name
-                if node.isDirectory {
-                    items.append(LibArchive.WriteItem(path: path, data: Data(),
-                                                      modifiedAt: node.modificationDate, isDirectory: true))
-                    walk(node.children, prefix: path + "/")
-                } else if case .diskFile(let url) = node.source {
-                    items.append(LibArchive.WriteItem(path: path, fileURL: url, modifiedAt: node.modificationDate))
-                } else if let data = nodeData(node) {
-                    items.append(LibArchive.WriteItem(path: path, data: data,
-                                                      modifiedAt: node.modificationDate, isDirectory: false))
-                }
-            }
-        }
-        walk(roots, prefix: "")
-        return items
-    }
-
-    /// Construye las entradas a escribir. Es ligero: los ficheros nuevos van como
-    /// `.file(url)` (se leen al vuelo) y las entradas de un zip abierto como bytes
-    /// comprimidos en crudo (rebanada barata del archivo origen ya mapeado).
-    private func makeSaveInputs() -> [ZipEntryInput] {
-        let extractor = ZipExtractor()
-        var items: [ZipEntryInput] = []
-        func walk(_ nodes: [FileNode], prefix: String) {
-            for node in nodes {
-                let path = prefix + node.name
-                if node.isDirectory {
-                    items.append(ZipEntryInput(path: path + "/", modifiedAt: node.modificationDate, source: .directory))
-                    walk(node.children, prefix: path + "/")
-                } else if case .diskFile(let url) = node.source {
-                    items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .file(url)))
-                } else if case .zipEntry(let entry) = node.source, let archive = sourceArchiveData {
-                    if format != .zip {
-                        // Origen tar/gz: reconstruir el texto claro y dejar que el escritor comprima.
-                        if let data = nodeData(node) {
-                            items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .data(data)))
-                        }
-                    } else if entry.isEncrypted {
-                        // Cifrada: descifrar a texto claro; el escritor la re-cifra (o no) limpiamente.
-                        if let data = try? extractor.extractedData(for: entry, in: archive, password: entryPassword) {
-                            items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate, source: .data(data)))
-                        }
-                    } else if let zip = entry.zip, let raw = try? extractor.rawCompressedData(for: entry, in: archive) {
-                        // Sin cifrar: copiar los bytes comprimidos en crudo (más rápido).
-                        items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate,
-                            source: .rawEntry(method: zip.compressionMethod, crc32: zip.crc32,
-                                              compressed: raw, uncompressedSize: entry.uncompressedSize)))
-                    }
-                }
-            }
-        }
-        walk(roots, prefix: "")
-        return items
     }
 
     // MARK: - Navegación del árbol

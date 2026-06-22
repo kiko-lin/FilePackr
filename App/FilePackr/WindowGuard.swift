@@ -108,6 +108,14 @@ struct WindowGuard: NSViewRepresentable {
             sender.close()
         }
 
+        /// Al cerrarse la ventana (por cualquier vía) retiramos su manejador de guardado
+        /// para no dejar entradas huérfanas en `WindowSaveHandlers`. Reenviamos al delegado
+        /// original de SwiftUI por si depende de este aviso para su propia limpieza.
+        func windowWillClose(_ notification: Notification) {
+            if let window { WindowSaveHandlers.handlers[ObjectIdentifier(window)] = nil }
+            previousDelegate?.windowWillClose?(notification)
+        }
+
         // Transparencia: cualquier mensaje del delegado que no manejemos va al de SwiftUI.
         override func responds(to aSelector: Selector!) -> Bool {
             super.responds(to: aSelector) || (previousDelegate?.responds(to: aSelector) ?? false)

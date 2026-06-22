@@ -12,9 +12,9 @@ public enum ArchiveError: Error, Equatable {
 /// el índice (nombres, tamaños, offsets) se obtiene leyendo unos pocos cientos
 /// de bytes al final del ZIP, independientemente de su tamaño total.
 ///
-/// Limitaciones conscientes del armazón: sólo ZIP, sin ZIP64 (>4 GB) y sin
-/// cifrado de entradas. En producción se sustituye por libarchive para soportar
-/// 7z/tar/rar y streaming de entradas individuales con la misma interfaz pública.
+/// Soporta **ZIP64** (>4 GB o >65.535 entradas) y lee los metadatos de **cifrado**
+/// (ZipCrypto y AES de WinZip) de cada entrada. La extracción/descifrado en sí vive
+/// en `ZipExtractor`; aquí solo se indexa el central directory.
 public struct ZipReader: Sendable {
 
     public init() {}

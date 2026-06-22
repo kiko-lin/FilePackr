@@ -3,222 +3,16 @@ import AppKit
 import UniformTypeIdentifiers
 import ArchiveBrowser
 
-/// Conflicto al extraer: ya existe un fichero/carpeta con ese nombre en destino.
-private struct ExtractionConflict: Identifiable {
-    let id = UUID()
-    let plan: ExportPlan
-    let destination: URL    // ruta que ya existe
-    let alternative: URL    // nombre libre propuesto (p.ej. "3d_2.svg")
-}
-
-/// Conflicto al añadir: ya existe un elemento con ese nombre en la carpeta destino.
-private struct AddConflict: Identifiable {
-    let id = UUID()
-    let url: URL
-    let name: String
-    let target: FileNode?
-}
-
-/// Lo que se va a extraer: uno o varios nodos, o **todo** el archivo. Los planes se
-/// construyen al confirmar (cuando ya tenemos la contraseña, si hacía falta). Con varios
-/// elementos, cada uno se extrae al destino y resuelve sus conflictos por separado.
-private struct ExtractRequest: Identifiable {
-    let id = UUID()
-    let name: String
-    let makePlans: () -> [ExportPlan]
-}
-
-/// Unidad de tamaño de volumen.
-enum VolumeUnit: String, CaseIterable, Identifiable {
-    case kilobytes = "KB", megabytes = "MB", gigabytes = "GB"
-    var id: String { rawValue }
-    var multiplier: Int {
-        switch self {
-        case .kilobytes: return 1024
-        case .megabytes: return 1024 * 1024
-        case .gigabytes: return 1024 * 1024 * 1024
-        }
-    }
-}
-
-/// Hoja "Guardar archivo": formato, cifrado, contraseña y división en volúmenes.
-private struct SaveOptionsSheet: View {
-    @EnvironmentObject var loc: Localizer
-    @Binding var format: ArchiveFormat
-    @Binding var encryption: ZipEncryption
-    @Binding var password: String
-    @Binding var splitEnabled: Bool
-    @Binding var volumeSize: Double
-    @Binding var volumeUnit: VolumeUnit
-    /// Los formatos de un solo fichero (gz/xz) solo se ofrecen si el documento es un fichero.
-    let allowSingleFileFormats: Bool
-    /// Título de la hoja y etiqueta del botón de confirmar (Guardar vs Exportar).
-    let title: String
-    let confirmLabel: String
-    var onSave: () -> Void
-    var onCancel: () -> Void
-
-    private var formats: [ArchiveFormat] {
-        ArchiveFormat.allCases.filter { $0.isWritable && (!$0.isSingleFileOnly || allowSingleFileFormats) }
-    }
-
-    /// El botón Guardar se bloquea si falta la contraseña o el tamaño de volumen no es válido.
-    private var canSave: Bool {
-        if format.supportsEncryption && encryption != .none && password.isEmpty { return false }
-        if splitEnabled && format.supportsVolumeSplit && volumeSize <= 0 { return false }
-        return true
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title).font(.headline)
-            Form {
-                Picker(loc("save.format"), selection: $format) {
-                    ForEach(formats, id: \.self) { fmt in
-                        Text(loc(fmt.nameKey)).tag(fmt)
-                    }
-                }
-                if format.supportsEncryption {
-                    Picker(loc("save.encryption"), selection: $encryption) {
-                        Text(loc("save.encryption.none")).tag(ZipEncryption.none)
-                        Text(loc("save.encryption.weak")).tag(ZipEncryption.zipCrypto)
-                        Text(loc("save.encryption.strong")).tag(ZipEncryption.aes256)
-                    }
-                    if encryption != .none {
-                        SecureField(loc("save.password"), text: $password)
-                            .onSubmit { if canSave { onSave() } }
-                    }
-                } else {
-                    Text(loc("save.noEncryption"))
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                if format.supportsVolumeSplit {
-                    Toggle(loc("save.split"), isOn: $splitEnabled)
-                    if splitEnabled {
-                        HStack {
-                            Text(loc("save.volumeSize"))
-                            Spacer()
-                            TextField("", value: $volumeSize, format: .number)
-                                .frame(width: 70)
-                                .multilineTextAlignment(.trailing)
-                                .textFieldStyle(.roundedBorder)
-                            Picker("", selection: $volumeUnit) {
-                                ForEach(VolumeUnit.allCases) { Text($0.rawValue).tag($0) }
-                            }
-                            .labelsHidden()
-                            .frame(width: 70)
-                        }
-                        Text(loc("save.split.hint", format.fileExtension, format.fileExtension))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            HStack {
-                Spacer()
-                Button(loc("button.cancel"), role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
-                Button(confirmLabel, action: onSave)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canSave)
-            }
-        }
-        .padding(20)
-        .frame(width: 420)
-    }
-}
-
-/// Hoja compacta de extracción: destino (carpeta del zip por defecto) + contraseña.
-/// El navegador de carpetas solo aparece al pulsar "Elegir…".
-private struct ExtractOptionsSheet: View {
-    @EnvironmentObject var loc: Localizer
-    let nodeName: String
-    let needsPassword: Bool
-    @Binding var destination: URL
-    @Binding var password: String
-    var passwordWrong: Bool
-    var onChooseFolder: () -> Void
-    var onExtract: () -> Void
-    var onCancel: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(loc("extract.title", nodeName)).font(.headline)
-            HStack(spacing: 6) {
-                Text(loc("extract.in")).foregroundStyle(.secondary)
-                Image(nsImage: NSWorkspace.shared.icon(for: .folder))
-                    .resizable().frame(width: 16, height: 16)
-                Text(destination.lastPathComponent)
-                    .lineLimit(1).truncationMode(.middle)
-                Spacer()
-                Button(loc("extract.choose"), action: onChooseFolder)
-            }
-            if needsPassword {
-                SecureField(loc("extract.password"), text: $password)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { if !password.isEmpty { onExtract() } }
-                if passwordWrong {
-                    Text(loc("extract.wrongPassword")).font(.callout).foregroundStyle(.red)
-                }
-            }
-            HStack {
-                Spacer()
-                Button(loc("button.cancel"), role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
-                Button(loc("button.extract"), action: onExtract)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(needsPassword && password.isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(width: 420)
-    }
-}
-
-/// Hoja de introducción de contraseña.
-private struct PasswordSheet: View {
-    @EnvironmentObject var loc: Localizer
-    let title: String
-    let confirmLabel: String
-    @Binding var password: String
-    var note: String? = nil
-    var onConfirm: () -> Void
-    var onCancel: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title).font(.headline)
-            SecureField(loc("password.field"), text: $password)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 280)
-                .onSubmit { if !password.isEmpty { onConfirm() } }
-            if let note {
-                Text(note).font(.callout).foregroundStyle(.red)
-            }
-            HStack {
-                Spacer()
-                Button(loc("button.cancel"), role: .cancel, action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                Button(confirmLabel, action: onConfirm)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(password.isEmpty)
-            }
-        }
-        .padding(20)
-    }
-}
-
 /// Gestor de archivos comprimidos: barra superior + barra de documento + cuerpo
 /// central (zona de arrastre cuando está vacío, o el navegador `NSOutlineView`).
 struct ContentView: View {
     @EnvironmentObject private var loc: Localizer
     @EnvironmentObject private var settings: AppSettings
     @StateObject private var doc = ArchiveDocument()
+    /// Máquinas de estado de las colas de añadir y extraer (cola + diálogo de conflicto).
+    @StateObject private var addCoord = AddCoordinator()
+    @StateObject private var extractCoord = ExtractCoordinator()
     @State private var errorMessage: String?
-    @State private var conflict: ExtractionConflict?
-    /// Conflicto de nombre al añadir, y la cola de URLs pendientes con su carpeta destino.
-    @State private var addConflict: AddConflict?
-    @State private var addQueue: [URL] = []
-    @State private var addTarget: FileNode?
-    @State private var addedIDs: [FileNode.ID] = []
     @State private var showingSaveOptions = false
     /// La hoja de opciones está abierta para **Exportar** (copia aparte) en vez de Guardar.
     @State private var optionsSheetIsExport = false
@@ -239,14 +33,6 @@ struct ContentView: View {
     @State private var showingOpenPassword = false
     @State private var openPasswordInput = ""
     @State private var openPasswordWrong = false
-    @State private var extractRequest: ExtractRequest?
-    @State private var extractDestination = FileManager.default.homeDirectoryForCurrentUser
-    @State private var extractPassword = ""
-    @State private var extractPasswordWrong = false
-    /// Cola de planes pendientes de extraer (extracción en lote) y la carpeta destino
-    /// común, capturada al confirmar. Se procesan uno a uno encadenando los conflictos.
-    @State private var extractQueue: [ExportPlan] = []
-    @State private var extractDestinationFolder = FileManager.default.homeDirectoryForCurrentUser
 
     var body: some View {
         VStack(spacing: 0) {
@@ -277,55 +63,35 @@ struct ContentView: View {
             Button(loc("button.ok")) {}
         } message: { Text($0) }
         .confirmationDialog(
-            conflict.map { loc("conflict.title", $0.destination.lastPathComponent) } ?? "",
-            isPresented: Binding(get: { conflict != nil },
-                                 set: { if !$0 { conflict = nil } }),
-            presenting: conflict
+            extractCoord.conflict.map { loc("conflict.title", $0.destination.lastPathComponent) } ?? "",
+            isPresented: Binding(get: { extractCoord.conflict != nil },
+                                 set: { if !$0 { extractCoord.conflict = nil } }),
+            presenting: extractCoord.conflict
         ) { item in
             Button(loc("conflict.overwrite"), role: .destructive) {
-                let plan = item.plan, destination = item.destination
-                conflict = nil
-                Task {
-                    await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: true) }
-                    processNextExtraction()
-                }
+                extractCoord.resolveConflict(item, overwrite: true, doc: doc, perform: runExtraction)
             }
-            Button(loc("conflict.saveAs", item.alternative.lastPathComponent)) {
-                let plan = item.plan, destination = item.alternative
-                conflict = nil
-                Task {
-                    await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) }
-                    processNextExtraction()
-                }
+            Button(loc("conflict.keepBoth")) {
+                extractCoord.resolveConflict(item, overwrite: false, doc: doc, perform: runExtraction)
             }
-            Button(loc("button.cancel"), role: .cancel) { conflict = nil; extractQueue = [] }
+            Button(loc("button.cancel"), role: .cancel) { extractCoord.cancelConflict() }
+        } message: { item in
+            Text(loc("conflict.message", item.destination.lastPathComponent))
         }
         .confirmationDialog(
-            addConflict.map { loc("add.conflict.title", $0.name) } ?? "",
-            isPresented: Binding(get: { addConflict != nil },
-                                 set: { if !$0 { addConflict = nil } }),
-            presenting: addConflict
+            addCoord.conflict.map { loc("add.conflict.title", $0.name) } ?? "",
+            isPresented: Binding(get: { addCoord.conflict != nil },
+                                 set: { if !$0 { addCoord.conflict = nil } }),
+            presenting: addCoord.conflict
         ) { item in
             Button(loc("add.conflict.overwrite"), role: .destructive) {
-                addConflict = nil
-                let existing = doc.child(named: item.name, in: item.target)
-                if let node = doc.addFile(item.url, into: item.target, replacing: existing) {
-                    addedIDs.append(node.id)
-                }
-                processNextAdd()
+                addCoord.overwrite(item, doc: doc)
             }
             Button(loc("add.conflict.keepBoth")) {
-                addConflict = nil
-                let unique = doc.uniqueChildName(item.name, in: item.target)
-                if let node = doc.addFile(item.url, into: item.target, renameTo: unique) {
-                    addedIDs.append(node.id)
-                }
-                processNextAdd()
+                addCoord.keepBoth(item, doc: doc)
             }
             Button(loc("button.cancel"), role: .cancel) {
-                addConflict = nil
-                addQueue = []
-                finishAdd()
+                addCoord.cancel(doc: doc)
             }
         } message: { item in
             Text(loc("add.conflict.message", item.name))
@@ -352,15 +118,15 @@ struct ContentView: View {
                           onConfirm: { confirmEntryPassword() },
                           onCancel: { showingEntryPassword = false; pendingEditAction = nil })
         }
-        .sheet(item: $extractRequest) { req in
+        .sheet(item: $extractCoord.request) { req in
             ExtractOptionsSheet(nodeName: req.name,
                                 needsPassword: doc.requiresEntryPassword,
-                                destination: $extractDestination,
-                                password: $extractPassword,
-                                passwordWrong: extractPasswordWrong,
-                                onChooseFolder: { chooseExtractFolder() },
-                                onExtract: { performExtract() },
-                                onCancel: { extractRequest = nil })
+                                destination: $extractCoord.destination,
+                                password: $extractCoord.password,
+                                passwordWrong: extractCoord.passwordWrong,
+                                onChooseFolder: { extractCoord.chooseFolder(prompt: loc("panel.choose")) },
+                                onExtract: { extractCoord.confirm(doc: doc, perform: runExtraction) },
+                                onCancel: { extractCoord.request = nil })
         }
         .sheet(isPresented: $showingOpenPassword) {
             PasswordSheet(title: loc("password.openTitle"),
@@ -611,9 +377,6 @@ struct ContentView: View {
         .onTapGesture { addAction() }   // la zona de arrastre es también el punto de entrada (clic)
     }
 
-    // MARK: - Barra superior
-
-
     // MARK: - Acciones con paneles del sistema
 
     /// Ejecuta una edición; si el archivo está cifrado y bloqueado, pide la contraseña y,
@@ -646,47 +409,14 @@ struct ContentView: View {
         if let archive = doc.archiveToOpen(from: urls) {
             Task { await runAsync { try await doc.openArchive(archive) } }
         } else {
-            startAdd(urls, into: doc.addTargetFolder())
+            addCoord.start(urls, into: doc.addTargetFolder(), doc: doc)
         }
     }
 
     /// Añade ficheros arrastrados del Finder a una carpeta concreta. Si el archivo está
     /// cifrado y bloqueado, pide la contraseña y los añade tras desbloquear.
     private func addDropped(_ urls: [URL], into folder: FileNode?) {
-        editGuarded { startAdd(urls, into: folder) }
-    }
-
-    /// Añade una lista de URLs a `target`, pidiendo confirmación por cada nombre que ya
-    /// exista (sobrescribir / conservar ambos / cancelar). Al acabar, selecciona y revela
-    /// lo añadido (despliega la carpeta y le da el foco).
-    private func startAdd(_ urls: [URL], into target: FileNode?) {
-        let cleaned = urls.filter { $0.isFileURL }
-        guard !cleaned.isEmpty else { return }
-        addTarget = target
-        addQueue = cleaned
-        addedIDs = []
-        processNextAdd()
-    }
-
-    /// Procesa la siguiente URL pendiente: si su nombre ya existe en el destino, abre el
-    /// diálogo de conflicto (que reanuda la cola al resolverlo); si no, la añade y sigue.
-    private func processNextAdd() {
-        guard !addQueue.isEmpty else { finishAdd(); return }
-        let url = addQueue.removeFirst()
-        let name = url.lastPathComponent
-        if doc.child(named: name, in: addTarget) != nil {
-            addConflict = AddConflict(url: url, name: name, target: addTarget)
-        } else {
-            if let node = doc.addFile(url, into: addTarget) { addedIDs.append(node.id) }
-            processNextAdd()
-        }
-    }
-
-    /// Cierra el lote de añadir: fija la selección sobre lo añadido.
-    private func finishAdd() {
-        if !addedIDs.isEmpty { doc.selectedIDs = Set(addedIDs) }
-        addedIDs = []
-        addTarget = nil
+        editGuarded { addCoord.start(urls, into: folder, doc: doc) }
     }
 
     private func extractAction() {
@@ -697,85 +427,29 @@ struct ContentView: View {
 
     /// Extrae un nodo concreto: abre el diálogo compacto de extracción.
     private func extract(_ node: FileNode) {
-        prepareExtractDestination()
-        extractRequest = ExtractRequest(name: node.name) { [doc.exportPlan(for: node)] }
+        extractCoord.prepareDestination(doc: doc, settings: settings)
+        extractCoord.begin(name: node.name) { [doc.exportPlan(for: node)] }
     }
 
     /// Extrae varios nodos seleccionados: cada uno se coloca en la carpeta destino.
     private func extractNodes(_ nodes: [FileNode]) {
-        prepareExtractDestination()
-        extractRequest = ExtractRequest(name: loc("extract.items", String(nodes.count))) {
+        extractCoord.prepareDestination(doc: doc, settings: settings)
+        extractCoord.begin(name: loc("extract.items", String(nodes.count))) {
             nodes.map { doc.exportPlan(for: $0) }
         }
     }
 
     /// Extrae **todo** el archivo a una carpeta con el nombre del archivo (como Finder).
     private func extractAll() {
-        prepareExtractDestination()
+        extractCoord.prepareDestination(doc: doc, settings: settings)
         let name = strippedBaseName(documentDisplayName)
-        extractRequest = ExtractRequest(name: name) { [doc.exportPlanForAll(named: name)] }
+        extractCoord.begin(name: name) { [doc.exportPlanForAll(named: name)] }
     }
 
-    /// Fija el destino por defecto (carpeta del archivo o fija) y resetea la contraseña.
-    private func prepareExtractDestination() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let archiveFolder = doc.sourceURL?.deletingLastPathComponent()
-        switch settings.extractMode {
-        case .archiveFolder:
-            extractDestination = archiveFolder ?? settings.fixedExtractFolder ?? home
-        case .fixedFolder:
-            extractDestination = settings.fixedExtractFolder ?? archiveFolder ?? home
-        }
-        extractPassword = ""
-        extractPasswordWrong = false
-    }
-
-    /// "Elegir…": abre el navegador de carpetas solo si se quiere cambiar el destino.
-    private func chooseExtractFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = loc("panel.choose")
-        panel.directoryURL = extractDestination
-        if panel.runModal() == .OK, let url = panel.url {
-            extractDestination = url
-        }
-    }
-
-    /// Confirma la extracción (uno, varios o todo) al destino elegido: encola los planes
-    /// y arranca el procesado en lote.
-    private func performExtract() {
-        guard let req = extractRequest else { return }
-        if doc.requiresEntryPassword {
-            guard doc.provideEntryPassword(extractPassword) else {
-                extractPasswordWrong = true
-                extractPassword = ""
-                return
-            }
-        }
-        extractDestinationFolder = extractDestination
-        extractRequest = nil
-        extractQueue = req.makePlans()
-        processNextExtraction()
-    }
-
-    /// Extrae el siguiente plan de la cola en la carpeta destino. Si hay conflicto, abre
-    /// el diálogo (que reanuda la cola al resolverlo); si no, extrae y sigue con el resto.
-    private func processNextExtraction() {
-        guard !extractQueue.isEmpty else { return }
-        let plan = extractQueue.removeFirst()
-        let destination = extractDestinationFolder.appendingPathComponent(plan.name)
-        if FileManager.default.fileExists(atPath: destination.path) {
-            conflict = ExtractionConflict(plan: plan,
-                                          destination: destination,
-                                          alternative: doc.conflictFreeURL(for: destination))
-        } else {
-            Task {
-                await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: false) }
-                processNextExtraction()
-            }
-        }
+    /// Ejecuta la extracción de un plan (la inyecta el coordinador); canaliza el error a la
+    /// alerta de la vista.
+    private func runExtraction(_ plan: ExportPlan, to destination: URL, overwrite: Bool) async {
+        await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: overwrite) }
     }
 
     /// Guarda: si ya tiene fichero, re-guarda con los ajustes; si es nuevo, abre el
@@ -887,11 +561,43 @@ struct ContentView: View {
     }
 
     private func run(_ op: () throws -> Void) {
-        do { try op() } catch { errorMessage = "\(error)" }
+        do { try op() } catch { errorMessage = describe(error) }
     }
 
     private func runAsync(_ op: () async throws -> Void) async {
-        do { try await op() } catch { errorMessage = "\(error)" }
+        do { try await op() } catch { errorMessage = describe(error) }
+    }
+
+    /// Traduce los errores conocidos del motor a un mensaje en el idioma de la app. Para los
+    /// no contemplados (p. ej. errores de fichero del sistema) cae a su `localizedDescription`.
+    private func describe(_ error: Error) -> String {
+        switch error {
+        case let e as ExtractError:
+            switch e {
+            case .needsPassword: return loc("error.needsPassword")
+            case .wrongPassword: return loc("error.wrongPassword")
+            case .unsupportedEncryption: return loc("error.unsupportedEncryption")
+            case .unsupportedMethod: return loc("error.unsupportedMethod")
+            case .corruptLocalHeader, .decompressionFailed: return loc("error.corrupt")
+            }
+        case let e as LibArchiveError:
+            switch e {
+            case .passphraseRequired: return loc("error.needsPassword")
+            case .wrongPassword: return loc("error.wrongPassword")
+            case .writeFailed: return loc("error.writeFailed")
+            case .openFailed, .readFailed, .entryNotFound: return loc("error.readFailed")
+            }
+        case let e as ZipAESError:
+            switch e {
+            case .wrongPassword: return loc("error.wrongPassword")
+            case .unsupportedStrength: return loc("error.unsupportedEncryption")
+            case .corrupt: return loc("error.corrupt")
+            }
+        case is ArchiveError, is TarError, is GzipError, is XzError, is Bzip2Error:
+            return loc("error.corrupt")
+        default:
+            return error.localizedDescription
+        }
     }
 }
 

@@ -304,6 +304,16 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 > formato/streaming que quedan son de *completitud*, en este orden: **DMG ≈ 7z-cifrado (baja)
 > > tar-open (muy baja) > multinúcleo (solo si el rendimiento duele)**.
 
+- [ ] **Verificar en GUI los flujos del refactor de auditoría (rama `refactor/auditoria-2026-06-21`)**
+      · el agente solo compila/test del modelo, no ejecuta la GUI. Probar en Xcode (⌘R) y reportar:
+  - **Añadir con conflicto** de nombre → Sobrescribir / Conservar ambos / Cancelar (H-2b).
+  - **Extraer en lote** con conflictos → diálogo "Sobrescribir / Conservar ambos / Cancelar".
+  - **Caso concreto reportado**: carpeta con «React Compiler – React» y «…React 2»; extraer
+    «…React», «…React 2», «…React 3» y, con "conservar ambos", verificar que C acaba como
+    «…React 3» (su nombre) y **no hay dos ficheros con el mismo nombre** (fix `5772c41`:
+    el alternativo evita disco ∪ lo ya extraído del lote ∪ los nombres literales pendientes).
+  - **Guardar/Exportar** en cada formato (zip, tar.gz, 7z, gz…) sigue produciendo el archivo correcto.
+  - Una vez validado, el usuario hace el `git push` (el agente no tiene red).
 - [x] ~~**Verificar interop AES-256**~~ (hecho 2026-06-20): **verificado bidireccional**
       contra `pyzipper` — ambos sentidos pasan. Test automático en `ZipCryptoTests`
       (`testPyzipperReadsOurAES256` / `testReadsAES256FromPyzipper`), que se **salta** si

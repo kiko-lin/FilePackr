@@ -28,6 +28,9 @@ public enum Gzip {
             sink: sink)
         var footer = Data()
         footer.append(contentsOf: le32(crc.final))
+        // ISIZE = tamaño original módulo 2^32 (lo define así RFC 1952). Para ficheros >4 GB
+        // es intencionadamente el valor truncado; la integridad la garantiza el CRC, no este
+        // campo (la comprobación de tamaño al descomprimir pierde valor a partir de 4 GB).
         footer.append(contentsOf: le32(UInt32(truncatingIfNeeded: size)))
         try sink(footer)
     }
@@ -103,6 +106,8 @@ public enum Gzip {
                 next: CompressionStream.once(body),
                 sink: { chunk in acc.update(chunk); total += UInt64(chunk.count); try sink(chunk) })
         } catch is CompressionStreamError { throw GzipError.corrupt }
+        // `isize` es el tamaño módulo 2^32 (RFC 1952): para >4 GB esta comparación solo valida
+        // los 32 bits bajos. La garantía real de integridad es el CRC, que sí cubre todo.
         guard acc.final == crc, UInt32(truncatingIfNeeded: total) == isize else { throw GzipError.corrupt }
     }
 
@@ -123,7 +128,7 @@ public enum Gzip {
         guard bytes.count >= 10, bytes[0] == 0x1F, bytes[1] == 0x8B, (bytes[3] & 0x08) != 0 else { return nil }
         var p = 10
         if bytes[3] & 0x04 != 0, p + 2 <= bytes.count {
-            p += 2 + Int(bytes[p]) | (Int(bytes[p + 1]) << 8)
+            p += 2 + (Int(bytes[p]) | (Int(bytes[p + 1]) << 8))
         }
         var name = [UInt8]()
         while p < bytes.count, bytes[p] != 0 { name.append(bytes[p]); p += 1 }
