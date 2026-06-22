@@ -441,9 +441,15 @@ final class ArchiveDocument: ObservableObject {
     nonisolated private func runExtraction(_ plan: ExportPlan, to destination: URL, total: Int) async throws {
         try await Task.detached(priority: .userInitiated) {
             var done = 0
+            var lastReported = 0.0
             try plan.writeContents(to: destination) {
                 done += 1
                 let fraction = Double(done) / Double(total)
+                // Coalescer a saltos de ~1% (igual que la apertura): con muchísimos ficheros
+                // pequeños, un hop al main actor por cada uno satura el hilo principal sin
+                // que el usuario perciba la diferencia.
+                guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
+                lastReported = fraction
                 Task { @MainActor in self.progress?.fraction = fraction }
             }
         }.value
