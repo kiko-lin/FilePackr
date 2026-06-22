@@ -191,10 +191,15 @@ public enum LibArchive {
         }
     }
 
-    /// Distingue "necesita contraseña" de un fallo genérico, mirando el mensaje de error.
+    /// Distingue "necesita contraseña" de un fallo genérico. Señal **estructurada** primero
+    /// (`archive_read_has_encrypted_entries` > 0, robusta ante versión/idioma de libarchive) y,
+    /// como complemento para el caso de **cabeceras** cifradas —donde el conteo es desconocido
+    /// hasta tener la clave—, el texto del mensaje de error.
     private static func classifyHeaderFailure(_ a: OpaquePointer, passphrase: String?) -> LibArchiveError {
+        let hasEncrypted = archive_read_has_encrypted_entries(a) > 0
         let message = archive_error_string(a).map { String(cString: $0).lowercased() } ?? ""
-        if message.contains("passphrase") || message.contains("password") || message.contains("encrypt") {
+        let mentionsCrypto = message.contains("passphrase") || message.contains("password") || message.contains("encrypt")
+        if hasEncrypted || mentionsCrypto {
             return passphrase == nil ? .passphraseRequired : .wrongPassword
         }
         return .readFailed
