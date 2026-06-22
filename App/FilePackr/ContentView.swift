@@ -446,26 +446,30 @@ struct ContentView: View {
     /// de opciones (vía `saveCoord`). `completion` se ejecuta solo tras un guardado con éxito
     /// (lo usa "Guardar" del aviso de cambios sin guardar).
     private func saveDocument(then completion: (() -> Void)? = nil) {
-        if doc.requiresEntryPassword { promptEntryPassword(); return }
-        // Re-guardar en el sitio solo si el formato es escribible (rar no lo es).
-        if let url = doc.sourceURL, doc.saveFormat.isWritable {
-            Task {
-                await runAsync { try await doc.save(to: url) }
-                if !doc.hasUnsavedChanges { completion?() }
+        // Si está cifrado y bloqueado, pide la clave y **reanuda** el guardado al desbloquear
+        // (necesita la clave para leer las entradas cifradas); no descartar la acción.
+        editGuarded {
+            // Re-guardar en el sitio solo si el formato es escribible (rar no lo es).
+            if let url = doc.sourceURL, doc.saveFormat.isWritable {
+                Task {
+                    await runAsync { try await doc.save(to: url) }
+                    if !doc.hasUnsavedChanges { completion?() }
+                }
+            } else {
+                saveCoord.prefill(doc: doc, settings: settings)
+                saveCoord.beginSave(then: completion)
             }
-        } else {
-            saveCoord.prefill(doc: doc, settings: settings)
-            saveCoord.beginSave(then: completion)
         }
     }
 
     /// Exporta una copia aparte: siempre abre la hoja de opciones, prerrellenada con los
     /// ajustes actuales. **No** cambia el documento activo — sirve para cambiar contraseña/
-    /// cifrado o convertir de formato.
+    /// cifrado o convertir de formato. Si está bloqueado, pide la clave y reanuda al desbloquear.
     private func exportDocument() {
-        if doc.requiresEntryPassword { promptEntryPassword(); return }
-        saveCoord.prefill(doc: doc, settings: settings)
-        saveCoord.beginExport()
+        editGuarded {
+            saveCoord.prefill(doc: doc, settings: settings)
+            saveCoord.beginExport()
+        }
     }
 
     /// Pide la ubicación y escribe el guardado/exportación con las opciones ya elegidas en la
