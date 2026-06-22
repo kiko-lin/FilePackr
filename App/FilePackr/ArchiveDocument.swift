@@ -216,7 +216,7 @@ final class ArchiveDocument: ObservableObject {
     func provideEntryPassword(_ password: String) -> Bool {
         guard let archive = sourceArchiveData,
               let node = firstEncryptedFile(in: roots),
-              case .zipEntry(let entry) = node.source else {
+              case .entry(let entry) = node.source else {
             entryPassword = password
             lockState = .unlocked
             return true
@@ -249,7 +249,7 @@ final class ArchiveDocument: ObservableObject {
         for node in nodes {
             if node.isDirectory {
                 if let found = firstEncryptedFile(in: node.children) { return found }
-            } else if case .zipEntry(let entry) = node.source, entry.isEncrypted {
+            } else if case .entry(let entry) = node.source, entry.isEncrypted {
                 return node
             }
         }
@@ -464,7 +464,7 @@ final class ArchiveDocument: ObservableObject {
         switch node.source {
         case .diskFile(let url):
             return ExportPlan(name: node.name, payload: .diskFile(url))
-        case .zipEntry(let entry):
+        case .entry(let entry):
             return ExportPlan(name: node.name, payload: .archiveEntry(
                 entry: entry, archive: sourceArchiveData ?? Data(), password: entryPassword, format: format))
         case .folder:
@@ -597,8 +597,8 @@ final class ArchiveDocument: ObservableObject {
 
                 if let existing = index[accumulated] {
                     if isLast {
-                        existing.zipDate = entry.modificationDate
-                        if !entry.isDirectory { existing.source = .zipEntry(entry) }
+                        existing.entryDate = entry.modificationDate
+                        if !entry.isDirectory { existing.source = .entry(entry) }
                     }
                     parent = existing
                     continue
@@ -606,9 +606,9 @@ final class ArchiveDocument: ObservableObject {
                 let node = FileNode(
                     name: part,
                     isDirectory: isDir,
-                    source: (isLast && !entry.isDirectory) ? .zipEntry(entry) : .folder
+                    source: (isLast && !entry.isDirectory) ? .entry(entry) : .folder
                 )
-                if isLast { node.zipDate = entry.modificationDate }
+                if isLast { node.entryDate = entry.modificationDate }
                 node.parent = parent
                 if let parent { parent.children.append(node) } else { rootNodes.append(node) }
                 index[accumulated] = node

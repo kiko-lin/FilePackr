@@ -13,7 +13,7 @@ struct SavePayloadBuilder {
     let roots: [FileNode]
     /// Nombre del documento (lo usa gzip como nombre interno del fichero).
     let documentName: String
-    /// Formato del archivo de origen (para leer las entradas de los nodos `.zipEntry`).
+    /// Formato del archivo de origen (para leer las entradas de los nodos `.entry`).
     let sourceFormat: ArchiveFormat
     /// Bytes del archivo de origen, si se abrió uno (para reconstruir entradas).
     let sourceArchiveData: Data?
@@ -92,7 +92,7 @@ struct SavePayloadBuilder {
         switch node.source {
         case .folder: return nil
         case .diskFile(let url): return try? Data(contentsOf: url)
-        case .zipEntry(let entry):
+        case .entry(let entry):
             guard let archive = sourceArchiveData else { return nil }
             return try? sourceFormat.codec.entryData(for: entry, in: archive, password: entryPassword)
         }
@@ -166,7 +166,7 @@ struct SavePayloadBuilder {
                 items.append(ZipEntryInput(path: path + "/", modifiedAt: node.modificationDate, source: .directory))
             } else if case .diskFile(let url) = node.source {
                 items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .file(url)))
-            } else if case .zipEntry(let entry) = node.source, let archive = sourceArchiveData {
+            } else if case .entry(let entry) = node.source, let archive = sourceArchiveData {
                 if sourceFormat != .zip {
                     // Origen tar/gz: reconstruir el texto claro y dejar que el escritor comprima.
                     if let data = nodeData(node) {

@@ -469,7 +469,7 @@ extension ArchiveOutlineView {
         func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
             guard let node = item as? FileNode else { return nil }
             // Cifrado y sin contraseña: pídela y no inicies el arrastre.
-            if doc.requiresEntryPassword, case .zipEntry(let entry) = node.source, entry.isEncrypted {
+            if doc.requiresEntryPassword, case .entry(let entry) = node.source, entry.isEncrypted {
                 onNeedPassword()
                 return nil
             }
