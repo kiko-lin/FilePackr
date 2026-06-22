@@ -3,6 +3,18 @@ import Combine
 import UniformTypeIdentifiers
 import ArchiveBrowser
 
+/// Estado de cifrado de un documento. Un único valor hace imposible representar estados
+/// contradictorios (p. ej. pedir a la vez contraseña de apertura y de entrada).
+enum LockState: Equatable {
+    /// Sin cifrado pendiente: el documento es editable/extraíble.
+    case unlocked
+    /// Un 7z con cabeceras cifradas necesita contraseña para **abrirse**; `url` es el archivo
+    /// pendiente de reintentar al darla.
+    case needsOpenPassword(URL)
+    /// El archivo está abierto pero sus **entradas** están cifradas y aún no hay contraseña.
+    case needsEntryPassword
+}
+
 /// Documento de trabajo: el árbol de elementos que acabará siendo un ZIP.
 /// Mantiene, si se abrió un ZIP existente, sus bytes originales para poder
 /// extraer o copiar entradas sin recomprimir.
@@ -33,11 +45,15 @@ final class ArchiveDocument: ObservableObject {
     @Published private(set) var saveFormat: ArchiveFormat = .zip
     /// Tamaño de volumen en bytes si el documento se guarda dividido (nil = un fichero).
     @Published private(set) var saveVolumeSize: Int?
-    /// El archivo abierto tiene entradas cifradas y aún no tenemos la contraseña.
-    @Published private(set) var requiresEntryPassword = false
+    /// Estado de cifrado del documento (única fuente de verdad: estados imposibles de
+    /// contradecir). La vista observa los derivados `requiresEntryPassword`/`requiresOpenPassword`.
+    @Published private(set) var lockState: LockState = .unlocked
+    /// Necesitamos la contraseña de las **entradas** cifradas del archivo abierto (para
+    /// extraer/editar). Derivado de `lockState`.
+    var requiresEntryPassword: Bool { lockState == .needsEntryPassword }
     /// Un 7z con cabeceras cifradas necesita contraseña para **abrirse** (no solo extraer).
-    @Published private(set) var requiresOpenPassword = false
-    private var pendingArchiveURL: URL?
+    /// Derivado de `lockState`.
+    var requiresOpenPassword: Bool { if case .needsOpenPassword = lockState { return true }; return false }
     /// Contraseña para descifrar las entradas del archivo abierto.
     private var entryPassword: String?
 
@@ -155,8 +171,7 @@ final class ArchiveDocument: ObservableObject {
             joinedTemp = loaded.1
         } catch let error as LibArchiveError where error == .passphraseRequired {
             // 7z con cabeceras cifradas: hay que pedir contraseña para abrir.
-            pendingArchiveURL = url
-            requiresOpenPassword = true
+            lockState = .needsOpenPassword(url)
             return
         }
 
@@ -169,12 +184,12 @@ final class ArchiveDocument: ObservableObject {
         documentName = baseURL.lastPathComponent
         hasActiveDocument = true
         entryPassword = passphrase
-        requiresOpenPassword = false
         // ZIP y 7z pueden tener entradas cifradas; si no dimos contraseña al abrir,
         // se pedirá al extraer/previsualizar. tar/gz/xz/bz2 nunca cifran.
-        requiresEntryPassword = passphrase == nil
+        let entriesLocked = passphrase == nil
             && (result.format == .zip || result.format.usesLibArchive)
             && result.entries.contains { $0.isEncrypted }
+        lockState = entriesLocked ? .needsEntryPassword : .unlocked
         // Al re-guardar, conservar el cifrado original (con su contraseña, cuando se dé).
         saveEncryption = result.format == .zip ? detectedEncryption(in: result.entries) : .none
         savePassword = nil
@@ -203,7 +218,7 @@ final class ArchiveDocument: ObservableObject {
               let node = firstEncryptedFile(in: roots),
               case .zipEntry(let entry) = node.source else {
             entryPassword = password
-            requiresEntryPassword = false
+            lockState = .unlocked
             return true
         }
         do {
@@ -213,7 +228,7 @@ final class ArchiveDocument: ObservableObject {
         }
         entryPassword = password
         savePassword = password   // misma contraseña para re-guardar cifrado
-        requiresEntryPassword = false
+        lockState = .unlocked
         changed()
         return true
     }
@@ -221,7 +236,7 @@ final class ArchiveDocument: ObservableObject {
     /// Da la contraseña para **abrir** un 7z con cabeceras cifradas. Reintenta la
     /// apertura; devuelve `false` si es incorrecta (sigue pidiéndola).
     func provideOpenPassword(_ password: String) async -> Bool {
-        guard let url = pendingArchiveURL else { return false }
+        guard case .needsOpenPassword(let url) = lockState else { return false }
         do {
             try await openArchive(url, passphrase: password)
             return !requiresOpenPassword   // openArchive la limpia si funcionó
@@ -249,9 +264,7 @@ final class ArchiveDocument: ObservableObject {
         hasActiveDocument = true
         hasUnsavedChanges = false
         entryPassword = nil
-        requiresEntryPassword = false
-        requiresOpenPassword = false
-        pendingArchiveURL = nil
+        lockState = .unlocked
         saveEncryption = .none
         savePassword = nil
         format = .zip
@@ -396,9 +409,7 @@ final class ArchiveDocument: ObservableObject {
         hasActiveDocument = false
         hasUnsavedChanges = false
         entryPassword = nil
-        requiresEntryPassword = false
-        requiresOpenPassword = false
-        pendingArchiveURL = nil
+        lockState = .unlocked
         saveEncryption = .none
         savePassword = nil
         format = .zip
