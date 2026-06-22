@@ -118,6 +118,9 @@ final class ExtractCoordinator: ObservableObject {
     private var queue: [ExportPlan] = []
     /// Carpeta destino fijada al confirmar (común a todo el lote).
     private var destinationFolder = FileManager.default.homeDirectoryForCurrentUser
+    /// Rutas ya comprometidas en este lote (extraídas o decididas), para que dos elementos
+    /// del mismo lote no acaben en el mismo fichero aunque su nombre aún no esté en disco.
+    private var claimed: Set<String> = []
 
     /// Ejecuta la extracción de un plan; la implementa la vista (envuelve el manejo de error).
     typealias Perform = (ExportPlan, URL, Bool) async -> Void
@@ -156,35 +159,62 @@ final class ExtractCoordinator: ObservableObject {
         destinationFolder = destination
         request = nil
         queue = req.makePlans()
+        claimed = []
         processNext(doc: doc, perform: perform)
     }
 
-    /// Extrae el siguiente plan en la carpeta destino. Si hay conflicto, abre el diálogo
-    /// (que reanuda al resolverlo); si no, extrae y sigue con el resto.
+    /// Extrae el siguiente plan en la carpeta destino. Si su nombre ya está ocupado (en disco
+    /// o por otro elemento ya resuelto del lote), abre el diálogo; si no, lo reserva, lo extrae
+    /// y sigue con el resto.
     func processNext(doc: ArchiveDocument, perform: @escaping Perform) {
         guard !queue.isEmpty else { return }
         let plan = queue.removeFirst()
         let dest = destinationFolder.appendingPathComponent(plan.name)
-        if FileManager.default.fileExists(atPath: dest.path) {
+        if isTaken(dest) {
             conflict = ExtractionConflict(plan: plan, destination: dest)
         } else {
-            Task {
-                await perform(plan, dest, false)
-                processNext(doc: doc, perform: perform)
-            }
+            extract(plan, to: dest, overwrite: false, doc: doc, perform: perform)
         }
     }
 
     /// Resuelve el conflicto: sobrescribe el destino existente, o conserva ambos extrayendo
-    /// a un nombre libre **recalculado ahora** (`conflictFreeURL` itera hasta uno que no
-    /// exista, así cubre también lo creado antes en el mismo lote). Luego sigue con la cola.
+    /// a un nombre libre calculado **ahora** (evita disco, lo ya reservado en el lote y los
+    /// nombres literales de los elementos del lote aún pendientes, para no robarles el suyo).
     func resolveConflict(_ item: ExtractionConflict, overwrite: Bool,
                          doc: ArchiveDocument, perform: @escaping Perform) {
-        let dest = overwrite ? item.destination : doc.conflictFreeURL(for: item.destination)
+        let dest = overwrite ? item.destination : freeDestination(for: item.destination)
         conflict = nil
+        extract(item.plan, to: dest, overwrite: overwrite, doc: doc, perform: perform)
+    }
+
+    /// Reserva el destino, lo extrae en segundo plano y, al terminar, procesa el siguiente.
+    private func extract(_ plan: ExportPlan, to dest: URL, overwrite: Bool,
+                         doc: ArchiveDocument, perform: @escaping Perform) {
+        claimed.insert(dest.path)
         Task {
-            await perform(item.plan, dest, overwrite)
+            await perform(plan, dest, overwrite)
             processNext(doc: doc, perform: perform)
+        }
+    }
+
+    /// `true` si la ruta ya existe en disco o ya está reservada por otro elemento del lote.
+    private func isTaken(_ url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path) || claimed.contains(url.path)
+    }
+
+    /// Primer nombre libre «<base> N.<ext>» (separador de espacio, como al añadir) que no
+    /// choque con disco, lo ya reservado, ni el nombre literal de otro plan aún en la cola.
+    private func freeDestination(for url: URL) -> URL {
+        let dir = url.deletingLastPathComponent()
+        let ext = url.pathExtension
+        let base = url.deletingPathExtension().lastPathComponent
+        let pending = Set(queue.map { destinationFolder.appendingPathComponent($0.name).path })
+        var n = 2
+        while true {
+            let name = ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)"
+            let candidate = dir.appendingPathComponent(name)
+            if !isTaken(candidate), !pending.contains(candidate.path) { return candidate }
+            n += 1
         }
     }
 

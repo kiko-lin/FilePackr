@@ -438,22 +438,6 @@ final class ArchiveDocument: ObservableObject {
         }.value
     }
 
-    /// Devuelve una ruta libre añadiendo "_2", "_3"… cuando ya existe el nombre.
-    func conflictFreeURL(for url: URL) -> URL {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path) else { return url }
-        let directory = url.deletingLastPathComponent()
-        let ext = url.pathExtension
-        let base = url.deletingPathExtension().lastPathComponent
-        var n = 2
-        while true {
-            let name = ext.isEmpty ? "\(base)_\(n)" : "\(base)_\(n).\(ext)"
-            let candidate = directory.appendingPathComponent(name)
-            if !fm.fileExists(atPath: candidate.path) { return candidate }
-            n += 1
-        }
-    }
-
     /// Crea un plan de exportación ligero (sin tocar disco) para arrastrar al
     /// Finder. La extracción real ocurre luego, en segundo plano, al soltar.
     func exportPlan(for node: FileNode) -> ExportPlan {
