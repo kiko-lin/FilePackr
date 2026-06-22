@@ -155,6 +155,13 @@ private extension Localizer {
 
         // Errors
         "error.title": "The operation could not be completed",
+        "error.needsPassword": "This archive is password-protected. Enter the password to continue.",
+        "error.wrongPassword": "The password is incorrect.",
+        "error.unsupportedEncryption": "This archive uses an encryption method that isn’t supported.",
+        "error.unsupportedMethod": "This archive uses a compression method that isn’t supported.",
+        "error.corrupt": "The file is damaged or isn’t a valid archive.",
+        "error.writeFailed": "The archive could not be written.",
+        "error.readFailed": "The archive could not be read.",
         "button.ok": "OK",
         "button.cancel": "Cancel",
         "button.saveEllipsis": "Save…",
@@ -301,6 +308,13 @@ private extension Localizer {
 
         // Errors
         "error.title": "No se pudo completar la operación",
+        "error.needsPassword": "Este archivo está protegido con contraseña. Introdúcela para continuar.",
+        "error.wrongPassword": "La contraseña no es correcta.",
+        "error.unsupportedEncryption": "Este archivo usa un cifrado que no se admite.",
+        "error.unsupportedMethod": "Este archivo usa un método de compresión que no se admite.",
+        "error.corrupt": "El fichero está dañado o no es un archivo válido.",
+        "error.writeFailed": "No se pudo escribir el archivo.",
+        "error.readFailed": "No se pudo leer el archivo.",
         "button.ok": "Aceptar",
         "button.cancel": "Cancelar",
         "button.saveEllipsis": "Guardar…",
