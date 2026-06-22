@@ -20,10 +20,10 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 ## Cómo trabajar (importante)
 
-- **Tests del motor**: `swift test` (rápido, sin Xcode). 61 tests.
+- **Tests del motor**: `swift test` (rápido, sin Xcode). 83 tests.
 - **Tests de la app** (modelo `ArchiveDocument`): target `FilePackrTests` en Xcode,
   se corren con **⌘U** (o `xcodebuild test`). NO los recoge `swift test` (viven en el
-  `.pbxproj`, no en el paquete). 5 tests.
+  `.pbxproj`, no en el paquete). 6 tests.
 - **Tests de interop** (verifican compatibilidad con herramientas externas): llaman a
   un binario del sistema y se **saltan solos** (`XCTSkipUnless`) si no está, de modo que
   `swift test` siempre queda en verde sin instalar nada (exit 0; salen como *skipped*).
@@ -108,6 +108,24 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     ventana** (`allowsAutomaticWindowTabbing = false`): cada archivo en su ventana.
 
 ## Hecho
+
+- **Tercera auditoría (2026-06-22, rama `refactor/auditoria-2026-06-22`)** — informe en
+  `docs/auditoria-2026-06-22.md`. Sin hallazgos críticos; 4 MEDIO + 4 BAJO resueltos en 5 commits:
+  - **M-A**: nomenclatura neutral en el árbol (`NodeSource.zipEntry`→`.entry`, `FileNode.zipDate`→
+    `entryDate`); cierra el item 3 a nivel de app (las entradas de cualquier formato ya eran neutrales).
+  - **M-B**: `ArchiveSaver` escribe **directo** al temporal de trabajo; se retiró la atomicidad interna
+    (redundante: el documento ya coloca `work`→`url` atómicamente). `writeFileAtomically` queda solo
+    para la extracción a una ruta real del Finder (`ExportPlan`).
+  - **M-C**: nuevo `SaveCoordinator` (en `OperationCoordinators.swift`) para el flujo Guardar/Exportar,
+    como Añadir/Extraer. `ContentView` 608→562 LOC, `@State` 17→8. La ejecución (panel + async + error)
+    la inyecta la vista por closure (`runSave`).
+  - **M-D**: `SingleFileCodec.open` infla en streaming solo los 263 B de cabecera para la firma ustar
+    (antes inflaba todo el gz/xz/bz2 solo para mirarla).
+  - **B-A** (`describe` cubre `ZipWriteError`), **B-B** (`gzip.entries`/`storedFilename` sin copiar el
+    `.gz` a `[UInt8]`), **B-C** (`provideEntryPassword` simétrico), **B-D** (`pendingAfterSave` no queda
+    colgado si el guardado falla).
+  - Verificado: motor 83 tests + app 6 tests verdes; compila sin avisos. PENDIENTE: verificación en
+    GUI del flujo Guardar/Exportar refactorizado + `git push` (lo hace el usuario).
 
 - **Sesión 2026-06-21 (e) — streaming en libarchive (7z/iso/xar)**: `LibArchive.WriteItem`
   acepta origen `.file(url)` (se lee al vuelo con `writeBody`, sin cargar el fichero en RAM);

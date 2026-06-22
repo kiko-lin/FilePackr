@@ -126,5 +126,31 @@ La rama de cancelar sí lo limpia. Limpiarlo también tras un intento fallido.
 3. **B-A/B-C/B-D** (quick wins de coherencia, sin riesgo).
 4. **M-C** (`SaveCoordinator`: refactor de UI, verificar en GUI).
 5. **M-D / B-B** (ineficiencias de apertura gz/xz/bz2; valor real solo con ficheros enormes).
+
+---
+
+## Estado de implementación (2026-06-22, rama `refactor/auditoria-2026-06-22`)
+
+**TODO resuelto** — 4 MEDIO + 4 BAJO, en 5 commits. Verificado: motor **83 tests**
+(`swift test`), app **compila sin avisos** (`xcodebuild`), modelo **6 tests**
+(`xcodebuild test`). Sin cambios de comportamiento salvo los arreglos descritos.
+
+| Hallazgo | Estado | Commit |
+|----------|--------|--------|
+| M-A · nomenclatura neutral (`.entry`/`entryDate`) | ✅ | `refactor(M-A)` |
+| M-B · saver escribe directo al temporal de trabajo | ✅ | `refactor(M-B)` |
+| B-A · `describe` cubre `ZipWriteError` | ✅ | `fix(B-A,B-C,B-D)` |
+| B-C · `provideEntryPassword` simétrico | ✅ | `fix(B-A,B-C,B-D)` |
+| B-D · `pendingAfterSave` no queda colgado | ✅ | `fix(B-A,B-C,B-D)` |
+| M-D · apertura gz/xz/bz2 sin inflar de más (peek 263 B) | ✅ | `perf(M-D,B-B)` |
+| B-B · `gzip.entries`/`storedFilename` sin copiar el `.gz` | ✅ | `perf(M-D,B-B)` |
+| M-C · `SaveCoordinator` (Guardar/Exportar) | ✅ | `refactor(M-C)` |
+
+Efecto en altitud: `ContentView` **608→562 LOC**, `@State` **17→8**; las tres operaciones
+por lotes (Añadir/Extraer/Guardar) ahora comparten patrón en `OperationCoordinators.swift`.
+
+**Pendiente NO-código:** verificación en GUI del flujo Guardar/Exportar refactorizado (M-C)
+—el agente solo compila y corre tests, no ejecuta la interfaz— y `git push` (lo hace el
+usuario, sin red).
 </content>
 </invoke>
