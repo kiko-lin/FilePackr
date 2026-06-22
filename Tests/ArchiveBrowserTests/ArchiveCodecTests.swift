@@ -23,6 +23,9 @@ final class ArchiveCodecTests: XCTestCase {
         let result = try ArchiveFormat.gzip.codec.open(gz, fallbackName: "nota")
         XCTAssertEqual(result.format, .gzip, "un .gz suelto no debe confundirse con tar.gz")
         XCTAssertEqual(result.entries.count, 1)
+        // El nombre (FNAME) y el tamaño (ISIZE) se leen de la cabecera/pie sin inflar el .gz.
+        XCTAssertEqual(result.entries[0].path, "nota.txt")
+        XCTAssertEqual(result.entries[0].uncompressedSize, UInt64(hello.count))
         let data = try result.format.codec.entryData(for: result.entries[0], in: result.container, password: nil)
         XCTAssertEqual(data, hello)
     }

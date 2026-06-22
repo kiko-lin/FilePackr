@@ -134,11 +134,29 @@ struct SingleFileCodec: ArchiveCodec {
 
     func open(_ data: Data, fallbackName: String, passphrase: String?,
               progress: ((Double) -> Void)?) throws -> ArchiveReadResult {
-        let inner = try decompress(data)
-        if Tar.hasUstarMagic(inner) {
+        // Distinguir un fichero suelto de un `.tar.<x>` solo necesita los primeros 263 bytes
+        // descomprimidos (la firma ustar está en el offset 257). Inflamos solo esa cabecera en
+        // streaming: si es un suelto, no materializamos todo el contenido (que se descartaría).
+        if Tar.hasUstarMagic(try peekDecompressed(data, count: 263)) {
+            let inner = try decompress(data)   // es un TAR: ahora sí necesitamos el contenido entero
             return ArchiveReadResult(format: tarFormat, container: inner, entries: try Tar.listEntries(in: inner))
         }
         return ArchiveReadResult(format: format, container: data, entries: entries(data, fallbackName))
+    }
+
+    /// Descomprime en streaming solo hasta acumular `count` bytes (o EOF), para inspeccionar
+    /// la cabecera sin inflar todo el flujo. La verificación íntegra (CRC/tamaño) la hace la
+    /// extracción real más tarde; aquí solo se necesita la firma.
+    private func peekDecompressed(_ data: Data, count: Int) throws -> Data {
+        struct EnoughRead: Error {}
+        var head = Data()
+        do {
+            try streamDecompress(data) { chunk in
+                head.append(chunk)
+                if head.count >= count { throw EnoughRead() }
+            }
+        } catch is EnoughRead {}
+        return head
     }
 
     func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {

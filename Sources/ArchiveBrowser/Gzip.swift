@@ -114,24 +114,26 @@ public enum Gzip {
     /// Una entrada `ArchiveEntry` que representa el único fichero de un `.gz`
     /// (para navegarlo). La extracción se hace con `decompress`.
     public static func entries(in data: Data, fallbackName: String) -> [ArchiveEntry] {
-        let bytes = [UInt8](data)
-        let size = bytes.count >= 4 ? UInt64(read32(bytes, bytes.count - 4)) : 0
+        // ISIZE (tamaño original mód 2^32) son los últimos 4 bytes; sin copiar el .gz entero.
+        let size = data.count >= 4 ? UInt64(read32(data, data.count - 4)) : 0
         return [ArchiveEntry(
             path: storedFilename(data) ?? fallbackName,
             compressedSize: UInt64(data.count), uncompressedSize: size,
             isDirectory: false, modificationDate: nil, isEncrypted: false)]
     }
 
-    /// Nombre del fichero contenido (de la cabecera FNAME), si lo hay.
+    /// Nombre del fichero contenido (de la cabecera FNAME), si lo hay. Indexa `Data`
+    /// directamente (solo lee la cabecera), sin materializar el `.gz` entero.
     public static func storedFilename(_ data: Data) -> String? {
-        let bytes = [UInt8](data)
-        guard bytes.count >= 10, bytes[0] == 0x1F, bytes[1] == 0x8B, (bytes[3] & 0x08) != 0 else { return nil }
+        let base = data.startIndex
+        func u8(_ i: Int) -> UInt8 { data[base + i] }
+        guard data.count >= 10, u8(0) == 0x1F, u8(1) == 0x8B, (u8(3) & 0x08) != 0 else { return nil }
         var p = 10
-        if bytes[3] & 0x04 != 0, p + 2 <= bytes.count {
-            p += 2 + (Int(bytes[p]) | (Int(bytes[p + 1]) << 8))
+        if u8(3) & 0x04 != 0, p + 2 <= data.count {
+            p += 2 + (Int(u8(p)) | (Int(u8(p + 1)) << 8))
         }
         var name = [UInt8]()
-        while p < bytes.count, bytes[p] != 0 { name.append(bytes[p]); p += 1 }
+        while p < data.count, u8(p) != 0 { name.append(u8(p)); p += 1 }
         return name.isEmpty ? nil : String(decoding: name, as: UTF8.self)
     }
 
@@ -140,7 +142,9 @@ public enum Gzip {
     private static func le32(_ v: UInt32) -> [UInt8] {
         [UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF), UInt8((v >> 16) & 0xFF), UInt8((v >> 24) & 0xFF)]
     }
-    private static func read32(_ b: [UInt8], _ o: Int) -> UInt32 {
-        UInt32(b[o]) | (UInt32(b[o + 1]) << 8) | (UInt32(b[o + 2]) << 16) | (UInt32(b[o + 3]) << 24)
+    /// Lee un UInt32 little-endian en el offset `o` (relativo al inicio de `data`).
+    private static func read32(_ d: Data, _ o: Int) -> UInt32 {
+        let b = d.startIndex + o
+        return UInt32(d[b]) | (UInt32(d[b + 1]) << 8) | (UInt32(d[b + 2]) << 16) | (UInt32(d[b + 3]) << 24)
     }
 }
