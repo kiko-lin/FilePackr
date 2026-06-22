@@ -12,19 +12,9 @@ struct ContentView: View {
     /// Máquinas de estado de las colas de añadir y extraer (cola + diálogo de conflicto).
     @StateObject private var addCoord = AddCoordinator()
     @StateObject private var extractCoord = ExtractCoordinator()
+    /// Máquina de estado del flujo Guardar/Exportar (hoja de opciones + acción pendiente).
+    @StateObject private var saveCoord = SaveCoordinator()
     @State private var errorMessage: String?
-    @State private var showingSaveOptions = false
-    /// La hoja de opciones está abierta para **Exportar** (copia aparte) en vez de Guardar.
-    @State private var optionsSheetIsExport = false
-    /// Acción a ejecutar tras un guardado con éxito (p. ej. cerrar al elegir "Guardar"
-    /// en el aviso de cambios sin guardar). Se descarta si se cancela el guardado.
-    @State private var pendingAfterSave: (() -> Void)?
-    @State private var saveFormatChoice: ArchiveFormat = .zip
-    @State private var saveEncryptionChoice: ZipEncryption = .none
-    @State private var saveOptionsPassword = ""
-    @State private var splitEnabled = false
-    @State private var volumeSizeValue: Double = 100
-    @State private var volumeUnit: VolumeUnit = .megabytes
     @State private var showingEntryPassword = false
     /// Edición a ejecutar tras desbloquear (si se pidió contraseña al pulsarla).
     @State private var pendingEditAction: (() -> Void)?
@@ -97,18 +87,18 @@ struct ContentView: View {
             Text(loc("add.conflict.message", item.name))
         }
         .overlay { progressOverlay }
-        .sheet(isPresented: $showingSaveOptions) {
-            SaveOptionsSheet(format: $saveFormatChoice,
-                             encryption: $saveEncryptionChoice,
-                             password: $saveOptionsPassword,
-                             splitEnabled: $splitEnabled,
-                             volumeSize: $volumeSizeValue,
-                             volumeUnit: $volumeUnit,
+        .sheet(isPresented: $saveCoord.showingOptions) {
+            SaveOptionsSheet(format: $saveCoord.format,
+                             encryption: $saveCoord.encryption,
+                             password: $saveCoord.password,
+                             splitEnabled: $saveCoord.splitEnabled,
+                             volumeSize: $saveCoord.volumeSize,
+                             volumeUnit: $saveCoord.volumeUnit,
                              allowSingleFileFormats: doc.isSingleFile,
-                             title: optionsSheetIsExport ? loc("export.title") : loc("save.title"),
-                             confirmLabel: optionsSheetIsExport ? loc("button.export") : loc("button.saveEllipsis"),
-                             onSave: { confirmSaveOptions() },
-                             onCancel: { showingSaveOptions = false; pendingAfterSave = nil })
+                             title: saveCoord.isExport ? loc("export.title") : loc("save.title"),
+                             confirmLabel: saveCoord.isExport ? loc("button.export") : loc("button.saveEllipsis"),
+                             onSave: { saveCoord.confirm(perform: runSave) },
+                             onCancel: { saveCoord.cancel() })
         }
         .sheet(isPresented: $showingEntryPassword) {
             PasswordSheet(title: loc("password.entryTitle"),
@@ -452,9 +442,9 @@ struct ContentView: View {
         await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: overwrite) }
     }
 
-    /// Guarda: si ya tiene fichero, re-guarda con los ajustes; si es nuevo, abre el
-    /// diálogo de opciones (formato + cifrado + contraseña). `completion` se ejecuta solo
-    /// tras un guardado con éxito (lo usa "Guardar" del aviso de cambios sin guardar).
+    /// Guarda: si ya tiene fichero escribible, re-guarda con los ajustes; si no, abre la hoja
+    /// de opciones (vía `saveCoord`). `completion` se ejecuta solo tras un guardado con éxito
+    /// (lo usa "Guardar" del aviso de cambios sin guardar).
     private func saveDocument(then completion: (() -> Void)? = nil) {
         if doc.requiresEntryPassword { promptEntryPassword(); return }
         // Re-guardar en el sitio solo si el formato es escribible (rar no lo es).
@@ -464,79 +454,39 @@ struct ContentView: View {
                 if !doc.hasUnsavedChanges { completion?() }
             }
         } else {
-            pendingAfterSave = completion
-            optionsSheetIsExport = false
-            prefillOptionsSheet()
-            showingSaveOptions = true
+            saveCoord.prefill(doc: doc, settings: settings)
+            saveCoord.beginSave(then: completion)
         }
     }
 
-    /// Exporta una copia aparte: siempre abre el diálogo de opciones (formato + cifrado +
-    /// contraseña + volúmenes), prerrellenado con los ajustes actuales. **No** cambia el
-    /// documento activo — sirve para cambiar contraseña/cifrado o convertir de formato.
+    /// Exporta una copia aparte: siempre abre la hoja de opciones, prerrellenada con los
+    /// ajustes actuales. **No** cambia el documento activo — sirve para cambiar contraseña/
+    /// cifrado o convertir de formato.
     private func exportDocument() {
         if doc.requiresEntryPassword { promptEntryPassword(); return }
-        optionsSheetIsExport = true
-        prefillOptionsSheet()
-        showingSaveOptions = true
+        saveCoord.prefill(doc: doc, settings: settings)
+        saveCoord.beginExport()
     }
 
-    /// Prerrellena la hoja de opciones con el formato/cifrado/volúmenes actuales
-    /// (documento nuevo: defaults de Ajustes; abierto: lo que traía el archivo).
-    private func prefillOptionsSheet() {
-        let isNew = doc.sourceURL == nil
-        var format = isNew ? settings.defaultFormat : doc.saveFormat
-        if !format.isWritable { format = .zip }                            // rar → zip
-        if format.isSingleFileOnly && !doc.isSingleFile { format = .zip }
-        saveFormatChoice = format
-        saveEncryptionChoice = isNew ? settings.defaultEncryption : doc.saveEncryption
-        saveOptionsPassword = ""
-        if let size = doc.saveVolumeSize {
-            splitEnabled = true
-            volumeUnit = .megabytes
-            volumeSizeValue = max(1, (Double(size) / Double(VolumeUnit.megabytes.multiplier)).rounded())
-        } else {
-            splitEnabled = false
-        }
-    }
-
-    /// Tras elegir opciones, pide ubicación y guarda o exporta con el formato/cifrado elegidos.
-    private func confirmSaveOptions() {
-        showingSaveOptions = false
-        let isExport = optionsSheetIsExport
-        let format = saveFormatChoice
-        let encryption = format.supportsEncryption ? saveEncryptionChoice : .none
-        let password = encryption == .none ? nil : saveOptionsPassword
-        let volumeSize = (splitEnabled && format.supportsVolumeSplit && volumeSizeValue > 0)
-            ? Int(volumeSizeValue * Double(volumeUnit.multiplier)) : nil
-
+    /// Pide la ubicación y escribe el guardado/exportación con las opciones ya elegidas en la
+    /// hoja. La inyecta `saveCoord.confirm`; devuelve `true` si el documento quedó guardado.
+    private func runSave(isExport: Bool, format: ArchiveFormat, encryption: ZipEncryption,
+                         password: String?, volumeSize: Int?) async -> Bool {
         let panel = NSSavePanel()
         panel.allowedContentTypes = format == .zip ? [.zip] : []
         panel.nameFieldStringValue = "\(strippedBaseName(documentDisplayName)).\(format.fileExtension)"
         panel.prompt = isExport ? loc("panel.export") : loc("panel.save")
-        if panel.runModal() == .OK, let url = panel.url {
-            Task {
-                await runAsync {
-                    if isExport {
-                        try await doc.export(to: url, format: format, encryption: encryption,
-                                             password: password, volumeSize: volumeSize)
-                    } else {
-                        try await doc.save(to: url, format: format, encryption: encryption,
-                                           password: password, volumeSize: volumeSize)
-                    }
-                }
-                // Tras guardar (no exportar): ejecutar lo pendiente (p. ej. cerrar) solo si
-                // tuvo éxito, pero limpiarlo siempre — un guardado fallido no debe dejarlo
-                // colgado y dispararse en un guardado posterior.
-                if !isExport {
-                    let after = pendingAfterSave
-                    pendingAfterSave = nil
-                    if !doc.hasUnsavedChanges { after?() }
-                }
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        await runAsync {
+            if isExport {
+                try await doc.export(to: url, format: format, encryption: encryption,
+                                     password: password, volumeSize: volumeSize)
+            } else {
+                try await doc.save(to: url, format: format, encryption: encryption,
+                                   password: password, volumeSize: volumeSize)
             }
-        } else {
-            pendingAfterSave = nil   // se canceló la ubicación: no continuar
         }
+        return !doc.hasUnsavedChanges
     }
 
     /// Nombre base sin la extensión de archivo conocida (zip/tar/tar.gz/tgz/gz).

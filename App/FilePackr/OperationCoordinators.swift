@@ -231,3 +231,90 @@ final class ExtractCoordinator: ObservableObject {
         }
     }
 }
+
+/// Flujo de "Guardar"/"Exportar": posee el estado editable de la hoja de opciones
+/// (formato/cifrado/contraseña/volúmenes) y su orquestación. Igual que las otras dos colas,
+/// la ejecución real (panel de ubicación + escritura async + manejo de error) la inyecta la
+/// vista con la closure `perform`; aquí solo vive el estado de la hoja y la acción pendiente.
+@MainActor
+final class SaveCoordinator: ObservableObject {
+    /// Hoja de opciones abierta. `false` = cerrada.
+    @Published var showingOptions = false
+    /// La hoja está abierta para **Exportar** (copia aparte) en vez de **Guardar**.
+    @Published private(set) var isExport = false
+    // Estado editable que la hoja enlaza por `@Binding`.
+    @Published var format: ArchiveFormat = .zip
+    @Published var encryption: ZipEncryption = .none
+    @Published var password = ""
+    @Published var splitEnabled = false
+    @Published var volumeSize: Double = 100
+    @Published var volumeUnit: VolumeUnit = .megabytes
+    /// Acción a ejecutar tras un guardado con éxito (p. ej. cerrar). Se descarta si se
+    /// cancela o si el guardado falla.
+    private var pendingAfterSave: (() -> Void)?
+
+    /// Ejecuta el guardado/exportación (panel + escritura). Devuelve `true` si el documento
+    /// quedó guardado (para encadenar la acción pendiente). La implementa la vista.
+    typealias Perform = (_ isExport: Bool, _ format: ArchiveFormat, _ encryption: ZipEncryption,
+                         _ password: String?, _ volumeSize: Int?) async -> Bool
+
+    /// Prerrellena la hoja con el formato/cifrado/volúmenes actuales (documento nuevo:
+    /// defaults de Ajustes; abierto: lo que traía el archivo).
+    func prefill(doc: ArchiveDocument, settings: AppSettings) {
+        let isNew = doc.sourceURL == nil
+        var fmt = isNew ? settings.defaultFormat : doc.saveFormat
+        if !fmt.isWritable { fmt = .zip }                            // rar → zip
+        if fmt.isSingleFileOnly && !doc.isSingleFile { fmt = .zip }  // gz/xz/bz2 solo si es un fichero
+        format = fmt
+        encryption = isNew ? settings.defaultEncryption : doc.saveEncryption
+        password = ""
+        if let size = doc.saveVolumeSize {
+            splitEnabled = true
+            volumeUnit = .megabytes
+            volumeSize = max(1, (Double(size) / Double(VolumeUnit.megabytes.multiplier)).rounded())
+        } else {
+            splitEnabled = false
+        }
+    }
+
+    /// Abre la hoja para **Guardar**, recordando la acción a ejecutar al terminar con éxito.
+    func beginSave(then completion: (() -> Void)?) {
+        isExport = false
+        pendingAfterSave = completion
+        showingOptions = true
+    }
+
+    /// Abre la hoja para **Exportar** una copia aparte (no encadena acción).
+    func beginExport() {
+        isExport = true
+        pendingAfterSave = nil
+        showingOptions = true
+    }
+
+    /// Confirma la hoja: deriva cifrado/contraseña/volúmenes del estado actual, cierra la
+    /// hoja y lanza la escritura. Tras guardar (no exportar) ejecuta la acción pendiente solo
+    /// si tuvo éxito, pero la limpia siempre (un guardado fallido no debe dejarla colgada).
+    func confirm(perform: @escaping Perform) {
+        showingOptions = false
+        let exporting = isExport
+        let cipher = format.supportsEncryption ? encryption : .none
+        let pwd = cipher == .none ? nil : password
+        let volumes = (splitEnabled && format.supportsVolumeSplit && volumeSize > 0)
+            ? Int(volumeSize * Double(volumeUnit.multiplier)) : nil
+        let fmt = format
+        Task {
+            let saved = await perform(exporting, fmt, cipher, pwd, volumes)
+            if !exporting {
+                let after = pendingAfterSave
+                pendingAfterSave = nil
+                if saved { after?() }
+            }
+        }
+    }
+
+    /// Cierra la hoja sin guardar (botón Cancelar): descarta la acción pendiente.
+    func cancel() {
+        showingOptions = false
+        pendingAfterSave = nil
+    }
+}
