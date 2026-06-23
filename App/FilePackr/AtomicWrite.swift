@@ -9,7 +9,7 @@ import Foundation
 /// propio temporal de trabajo y es el documento quien lo coloca atómicamente.
 ///
 /// `body` recibe el `FileHandle` del temporal abierto para escritura y escribe el contenido.
-func writeFileAtomically(to url: URL, _ body: (FileHandle) throws -> Void) throws {
+nonisolated func writeFileAtomically(to url: URL, _ body: (FileHandle) throws -> Void) throws {
     let tmp = url.deletingLastPathComponent()
         .appendingPathComponent(".\(UUID().uuidString).filepackr.tmp")
     FileManager.default.createFile(atPath: tmp.path, contents: nil)
