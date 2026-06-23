@@ -87,6 +87,15 @@ struct ContentView: View {
             Text(loc("add.conflict.message", item.name))
         }
         .overlay { progressOverlay }
+        .sheet(isPresented: $saveCoord.showingOptions) {
+            SaveOptionsSheet(coord: saveCoord,
+                             allowSingleFileFormats: doc.isSingleFile,
+                             title: saveCoord.isExport ? loc("export.title") : loc("save.title"),
+                             confirmLabel: saveCoord.isExport ? loc("button.export") : loc("button.saveEllipsis"),
+                             onChooseFolder: { saveCoord.chooseFolder(prompt: loc("panel.choose")) },
+                             onConfirm: { saveCoord.confirm(perform: runSave) },
+                             onCancel: { saveCoord.cancel() })
+        }
         .sheet(isPresented: $showingEntryPassword, onDismiss: { runAfterUnlock() }) {
             PasswordSheet(title: loc("password.entryTitle"),
                           confirmLabel: loc("password.continue"),
@@ -441,9 +450,9 @@ struct ContentView: View {
         await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: overwrite) }
     }
 
-    /// Guarda: si ya tiene fichero escribible, re-guarda con los ajustes; si no, abre el panel
-    /// nativo (con las opciones incrustadas). `completion` se ejecuta solo tras un guardado con
-    /// éxito (lo usa "Guardar" del aviso de cambios sin guardar).
+    /// Guarda: si ya tiene fichero escribible, re-guarda con los ajustes; si no, abre la hoja
+    /// propia de opciones. `completion` se ejecuta solo tras un guardado con éxito (lo usa
+    /// "Guardar" del aviso de cambios sin guardar).
     private func saveDocument(then completion: (() -> Void)? = nil) {
         // Si está cifrado y bloqueado, pide la clave y **reanuda** el guardado al desbloquear
         // (necesita la clave para leer las entradas cifradas); no descartar la acción.
@@ -455,76 +464,36 @@ struct ContentView: View {
                     if !doc.hasUnsavedChanges { completion?() }
                 }
             } else {
-                presentSavePanel(isExport: false, then: completion)
+                saveCoord.prefill(doc: doc, settings: settings, baseName: strippedBaseName(documentDisplayName))
+                saveCoord.beginSave(then: completion)
             }
         }
     }
 
-    /// Exporta una copia aparte: abre el panel nativo con las opciones (formato/cifrado/
-    /// volúmenes). **No** cambia el documento activo — sirve para cambiar contraseña/cifrado o
-    /// convertir de formato. Si está bloqueado, pide la clave y reanuda al desbloquear.
+    /// Exporta una copia aparte: abre la hoja propia de opciones (formato/cifrado/contraseña/
+    /// volúmenes + nombre/carpeta). **No** cambia el documento activo — sirve para cambiar
+    /// contraseña/cifrado o convertir de formato. Si está bloqueado, pide la clave y reanuda.
     private func exportDocument() {
-        editGuarded { presentSavePanel(isExport: true) }
+        editGuarded {
+            saveCoord.prefill(doc: doc, settings: settings, baseName: strippedBaseName(documentDisplayName))
+            saveCoord.beginExport()
+        }
     }
 
-    /// Presenta **un único** diálogo nativo de Guardar/Exportar con las opciones (formato,
-    /// cifrado, contraseña, volúmenes) incrustadas como vista accesoria, en vez de una hoja de
-    /// opciones aparte seguida del panel. Al confirmar escribe con las opciones elegidas.
-    private func presentSavePanel(isExport: Bool, then completion: (() -> Void)? = nil) {
-        saveCoord.prefill(doc: doc, settings: settings)
-
-        let panel = NSSavePanel()
-        panel.prompt = isExport ? loc("panel.export") : loc("panel.save")
-        panel.title = isExport ? loc("export.title") : loc("save.title")
-        applyFormat(saveCoord.format, to: panel)
-
-        // El panel no deja confirmar si falta la contraseña del cifrado elegido (validación
-        // nativa: muestra el error y mantiene el panel abierto).
-        let validator = SavePanelValidator { [weak saveCoord] in
-            (saveCoord?.needsPassword ?? false) ? loc("save.passwordRequired") : nil
-        }
-        panel.delegate = validator
-
-        // Opciones incrustadas (SwiftUI alojado en el panel); al cambiar de formato se reajusta
-        // el nombre/extensión y los tipos permitidos del propio panel.
-        let accessory = SavePanelAccessory(
-            coord: saveCoord, allowSingleFileFormats: doc.isSingleFile,
-            onFormatChange: { [weak panel] format in if let panel { applyFormat(format, to: panel) } })
-            .environmentObject(loc)
-        panel.accessoryView = NSHostingView(rootView: accessory)
-
-        let finish: (NSApplication.ModalResponse) -> Void = { response in
-            _ = validator   // retener el delegado (referencia débil del panel) hasta cerrar
-            // Cancelado: no escribir ni continuar (se descarta `completion`, p. ej. no cerrar).
-            guard response == .OK, let url = panel.url else { return }
-            let opts = saveCoord.resolved
-            Task {
-                await runAsync {
-                    if isExport {
-                        try await doc.export(to: url, format: opts.format, encryption: opts.encryption,
-                                             password: opts.password, volumeSize: opts.volumeSize)
-                    } else {
-                        try await doc.save(to: url, format: opts.format, encryption: opts.encryption,
-                                           password: opts.password, volumeSize: opts.volumeSize)
-                    }
-                }
-                if !isExport, !doc.hasUnsavedChanges { completion?() }
+    /// Escribe el guardado/exportación a la `url` resuelta por la hoja, con las opciones
+    /// elegidas. La inyecta `saveCoord.confirm`; devuelve `true` si el documento quedó guardado.
+    private func runSave(isExport: Bool, url: URL, format: ArchiveFormat, encryption: ZipEncryption,
+                         password: String?, volumeSize: Int?) async -> Bool {
+        await runAsync {
+            if isExport {
+                try await doc.export(to: url, format: format, encryption: encryption,
+                                     password: password, volumeSize: volumeSize)
+            } else {
+                try await doc.save(to: url, format: format, encryption: encryption,
+                                   password: password, volumeSize: volumeSize)
             }
         }
-        if let window = NSApp.mainWindow ?? NSApp.keyWindow {
-            panel.beginSheetModal(for: window, completionHandler: finish)
-        } else {
-            finish(panel.runModal())
-        }
-    }
-
-    /// Ajusta el nombre propuesto (conservando la base que haya escrito el usuario) y los tipos
-    /// permitidos del panel al formato elegido.
-    private func applyFormat(_ format: ArchiveFormat, to panel: NSSavePanel) {
-        let current = panel.nameFieldStringValue
-        let base = strippedBaseName(current.isEmpty ? documentDisplayName : current)
-        panel.nameFieldStringValue = "\(base).\(format.fileExtension)"
-        panel.allowedContentTypes = format == .zip ? [.zip] : []
+        return !doc.hasUnsavedChanges
     }
 
     /// Nombre base sin la extensión de archivo conocida (zip/tar/tar.gz/tgz/gz).

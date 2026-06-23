@@ -21,84 +21,104 @@ enum VolumeUnit: String, CaseIterable, Identifiable {
     }
 }
 
-/// Vista accesoria incrustada en el **panel nativo** de Guardar/Exportar: formato, cifrado,
-/// contraseña y división en volúmenes. Observa el `SaveCoordinator` (estado compartido con el
-/// panel); al cambiar de formato avisa con `onFormatChange` para que el panel reajuste el
-/// nombre propuesto, la extensión y los tipos permitidos. La validación de la contraseña la hace
-/// el propio panel (ver `SavePanelValidator`), no un botón aquí.
-struct SavePanelAccessory: View {
+/// Hoja **propia** (compacta y localizada) de Guardar/Exportar: nombre, carpeta destino,
+/// formato, cifrado, contraseña y división en volúmenes. El navegador de carpetas nativo solo
+/// aparece, transitorio, al pulsar "Elegir…" (`onChooseFolder`), así esta hoja nunca se deforma.
+/// Si el destino ya existe, pide confirmación antes de sobrescribir.
+struct SaveOptionsSheet: View {
     @EnvironmentObject var loc: Localizer
     @ObservedObject var coord: SaveCoordinator
     /// Los formatos de un solo fichero (gz/xz) solo se ofrecen si el documento es un fichero.
     let allowSingleFileFormats: Bool
-    var onFormatChange: (ArchiveFormat) -> Void
+    /// Título de la hoja y etiqueta del botón de confirmar (Guardar vs Exportar).
+    let title: String
+    let confirmLabel: String
+    var onChooseFolder: () -> Void
+    var onConfirm: () -> Void
+    var onCancel: () -> Void
+
+    @State private var confirmingOverwrite = false
 
     private var formats: [ArchiveFormat] {
         ArchiveFormat.allCases.filter { $0.isWritable && (!$0.isSingleFileOnly || allowSingleFileFormats) }
     }
 
+    /// Pulsa confirmar: si el destino ya existe, pide confirmación; si no, sigue.
+    private func attemptConfirm() {
+        if FileManager.default.fileExists(atPath: coord.resolvedURL.path) { confirmingOverwrite = true }
+        else { onConfirm() }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            row(loc("save.format")) {
-                Picker("", selection: $coord.format) {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title).font(.headline)
+            Form {
+                HStack {
+                    Text(loc("save.name"))
+                    Spacer()
+                    TextField("", text: $coord.name)
+                        .frame(width: 200).textFieldStyle(.roundedBorder)
+                        .onSubmit { if coord.canConfirm { attemptConfirm() } }
+                    Text("." + coord.format.fileExtension).foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text(loc("save.where"))
+                    Spacer()
+                    Image(nsImage: NSWorkspace.shared.icon(for: .folder)).resizable().frame(width: 16, height: 16)
+                    Text(coord.destination.lastPathComponent).lineLimit(1).truncationMode(.middle)
+                    Button(loc("extract.choose"), action: onChooseFolder)
+                }
+                Picker(loc("save.format"), selection: $coord.format) {
                     ForEach(formats, id: \.self) { Text(loc($0.nameKey)).tag($0) }
                 }
-                .labelsHidden().frame(width: 230)
-            }
-            if coord.format.supportsEncryption {
-                row(loc("save.encryption")) {
-                    Picker("", selection: $coord.encryption) {
+                if coord.format.supportsEncryption {
+                    Picker(loc("save.encryption"), selection: $coord.encryption) {
                         Text(loc("save.encryption.none")).tag(ZipEncryption.none)
                         Text(loc("save.encryption.weak")).tag(ZipEncryption.zipCrypto)
                         Text(loc("save.encryption.strong")).tag(ZipEncryption.aes256)
                     }
-                    .labelsHidden().frame(width: 230)
+                    if coord.encryption != .none {
+                        SecureField(loc("save.password"), text: $coord.password)
+                            .onSubmit { if coord.canConfirm { attemptConfirm() } }
+                    }
+                } else {
+                    Text(loc("save.noEncryption")).font(.callout).foregroundStyle(.secondary)
                 }
-                if coord.encryption != .none {
-                    SecureField(loc("save.password"), text: $coord.password)
-                        .textFieldStyle(.roundedBorder)
-                }
-            }
-            if coord.format.supportsVolumeSplit {
-                Toggle(loc("save.split"), isOn: $coord.splitEnabled)
-                if coord.splitEnabled {
-                    row(loc("save.volumeSize")) {
-                        TextField("", value: $coord.volumeSize, format: .number)
-                            .frame(width: 70).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
-                        Picker("", selection: $coord.volumeUnit) {
-                            ForEach(VolumeUnit.allCases) { Text($0.rawValue).tag($0) }
+                if coord.format.supportsVolumeSplit {
+                    Toggle(loc("save.split"), isOn: $coord.splitEnabled)
+                    if coord.splitEnabled {
+                        HStack {
+                            Text(loc("save.volumeSize"))
+                            Spacer()
+                            TextField("", value: $coord.volumeSize, format: .number)
+                                .frame(width: 70).multilineTextAlignment(.trailing).textFieldStyle(.roundedBorder)
+                            Picker("", selection: $coord.volumeUnit) {
+                                ForEach(VolumeUnit.allCases) { Text($0.rawValue).tag($0) }
+                            }
+                            .labelsHidden().frame(width: 70)
                         }
-                        .labelsHidden().frame(width: 70)
+                        Text(loc("save.split.hint", coord.format.fileExtension, coord.format.fileExtension))
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
+            .formStyle(.grouped)
+            HStack {
+                Spacer()
+                Button(loc("button.cancel"), role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
+                Button(confirmLabel, action: attemptConfirm)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!coord.canConfirm)
+            }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .frame(width: 480)
-        .onChange(of: coord.format) { _, format in onFormatChange(format) }
-    }
-
-    /// Fila "etiqueta … control(es)" alineada a derecha, para el formato/cifrado/tamaño.
-    private func row(_ label: String, @ViewBuilder _ control: () -> some View) -> some View {
-        HStack(spacing: 10) {
-            Text(label)
-            Spacer()
-            control()
-        }
-    }
-}
-
-/// Delegado de validación del panel de Guardar: si `message()` devuelve un texto, impide
-/// confirmar (el panel muestra ese error y permanece abierto). Lo usa el flujo de guardado para
-/// exigir contraseña cuando se ha elegido cifrado, sin sacar un botón propio del panel nativo.
-final class SavePanelValidator: NSObject, NSOpenSavePanelDelegate {
-    private let message: () -> String?
-    init(message: @escaping () -> String?) { self.message = message }
-
-    func panel(_ sender: Any, validate url: URL) throws {
-        if let message = message() {
-            throw NSError(domain: "FilePackr", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+        .padding(20)
+        .frame(width: 460)
+        .confirmationDialog(loc("save.overwrite.title", coord.resolvedURL.lastPathComponent),
+                            isPresented: $confirmingOverwrite, titleVisibility: .visible) {
+            Button(loc("save.overwrite.confirm"), role: .destructive, action: onConfirm)
+            Button(loc("button.cancel"), role: .cancel) {}
+        } message: {
+            Text(loc("save.overwrite.message", coord.resolvedURL.lastPathComponent))
         }
     }
 }

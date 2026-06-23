@@ -96,7 +96,6 @@ private extension Localizer {
         "button.extractAll": "Extract all",
         "button.export.help": "Save a separate copy with a chosen format, encryption and password (the open document is unchanged).",
         "export.title": "Export Archive",
-        "panel.export": "Export",
 
         // Drop prompt
         "drop.title": "Drag files here or click to choose",
@@ -110,7 +109,11 @@ private extension Localizer {
         "save.encryption.weak": "Weak (PKZip2 compatible)",
         "save.encryption.strong": "Strong (AES-256)",
         "save.password": "Password",
-        "save.passwordRequired": "Enter a password for the encryption you chose.",
+        "save.name": "Name",
+        "save.where": "Where",
+        "save.overwrite.title": "“%@” already exists",
+        "save.overwrite.message": "A file named “%@” already exists in this folder. Replace it?",
+        "save.overwrite.confirm": "Replace",
         "save.noEncryption": "This format doesn't support encryption.",
         "save.split": "Split into volumes",
         "save.volumeSize": "Size of each volume",
@@ -181,7 +184,6 @@ private extension Localizer {
         // System panels
         "panel.add": "Add",
         "panel.choose": "Choose",
-        "panel.save": "Save",
 
         // Outline columns
         "column.name": "Name",
@@ -249,7 +251,6 @@ private extension Localizer {
         "button.extractAll": "Extraer todo",
         "button.export.help": "Guarda una copia aparte con el formato, cifrado y contraseña que elijas (el documento abierto no cambia).",
         "export.title": "Exportar archivo",
-        "panel.export": "Exportar",
 
         // Drop prompt
         "drop.title": "Arrastra archivos aquí o haz clic para elegir",
@@ -263,7 +264,11 @@ private extension Localizer {
         "save.encryption.weak": "Débil (PKZip2 compatible)",
         "save.encryption.strong": "Fuerte (AES-256)",
         "save.password": "Contraseña",
-        "save.passwordRequired": "Introduce una contraseña para el cifrado elegido.",
+        "save.name": "Nombre",
+        "save.where": "Lugar",
+        "save.overwrite.title": "Ya existe «%@»",
+        "save.overwrite.message": "Ya hay un archivo llamado «%@» en esta carpeta. ¿Reemplazarlo?",
+        "save.overwrite.confirm": "Reemplazar",
         "save.noEncryption": "Este formato no admite cifrado.",
         "save.split": "Dividir en volúmenes",
         "save.volumeSize": "Tamaño de cada volumen",
@@ -334,7 +339,6 @@ private extension Localizer {
         // System panels
         "panel.add": "Añadir",
         "panel.choose": "Elegir",
-        "panel.save": "Guardar",
 
         // Outline columns
         "column.name": "Nombre",

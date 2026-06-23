@@ -221,21 +221,38 @@ final class ExtractCoordinator: ObservableObject {
     }
 }
 
-/// Estado de las opciones de "Guardar"/"Exportar" (formato/cifrado/contraseña/volúmenes), que
-/// el panel nativo incrusta como **vista accesoria** (`SavePanelAccessory`). No orquesta la hoja
-/// ni la escritura: solo guarda el estado editable, lo prerrellena y lo resuelve al confirmar.
+/// Flujo de "Guardar"/"Exportar" con un **diálogo propio** (compacto, localizado): posee el
+/// estado editable (nombre, carpeta destino, formato/cifrado/contraseña/volúmenes) y su
+/// orquestación. El navegador de carpetas nativo solo aparece, transitorio, al pulsar "Elegir…".
+/// La escritura real (async + manejo de error) la inyecta la vista con la closure `perform`.
 @MainActor
 final class SaveCoordinator: ObservableObject {
+    /// Hoja de opciones abierta. `false` = cerrada.
+    @Published var showingOptions = false
+    /// La hoja está abierta para **Exportar** (copia aparte) en vez de **Guardar**.
+    @Published private(set) var isExport = false
+    /// Nombre base del archivo (sin extensión, que la añade el formato).
+    @Published var name = ""
+    /// Carpeta destino (se cambia con "Elegir…").
+    @Published var destination = FileManager.default.homeDirectoryForCurrentUser
     @Published var format: ArchiveFormat = .zip
     @Published var encryption: ZipEncryption = .none
     @Published var password = ""
     @Published var splitEnabled = false
     @Published var volumeSize: Double = 100
     @Published var volumeUnit: VolumeUnit = .megabytes
+    /// Acción a ejecutar tras un guardado con éxito (p. ej. cerrar). Se descarta si se cancela
+    /// o si el guardado falla.
+    private var pendingAfterSave: (() -> Void)?
 
-    /// Prerrellena con el formato/cifrado/volúmenes actuales (documento nuevo: defaults de
-    /// Ajustes; abierto: lo que traía el archivo).
-    func prefill(doc: ArchiveDocument, settings: AppSettings) {
+    /// Ejecuta el guardado/exportación a `url`. Devuelve `true` si el documento quedó guardado
+    /// (para encadenar la acción pendiente). La implementa la vista.
+    typealias Perform = (_ isExport: Bool, _ url: URL, _ format: ArchiveFormat,
+                         _ encryption: ZipEncryption, _ password: String?, _ volumeSize: Int?) async -> Bool
+
+    /// Prerrellena con nombre/carpeta y el formato/cifrado/volúmenes actuales (documento nuevo:
+    /// defaults de Ajustes; abierto: lo que traía el archivo).
+    func prefill(doc: ArchiveDocument, settings: AppSettings, baseName: String) {
         let isNew = doc.sourceURL == nil
         var fmt = isNew ? settings.defaultFormat : doc.saveFormat
         if !fmt.isWritable { fmt = .zip }                            // rar → zip
@@ -243,6 +260,10 @@ final class SaveCoordinator: ObservableObject {
         format = fmt
         encryption = isNew ? settings.defaultEncryption : doc.saveEncryption
         password = ""
+        name = baseName
+        destination = doc.sourceURL?.deletingLastPathComponent()
+            ?? settings.fixedExtractFolder
+            ?? FileManager.default.homeDirectoryForCurrentUser
         if let size = doc.saveVolumeSize {
             splitEnabled = true
             volumeUnit = .megabytes
@@ -252,16 +273,66 @@ final class SaveCoordinator: ObservableObject {
         }
     }
 
-    /// Opciones derivadas del estado actual, listas para escribir (cifrado/contraseña solo si el
-    /// formato los admite; volúmenes solo si se activó y el tamaño es válido).
-    var resolved: (format: ArchiveFormat, encryption: ZipEncryption, password: String?, volumeSize: Int?) {
+    /// Abre la hoja para **Guardar**, recordando la acción a ejecutar al terminar con éxito.
+    func beginSave(then completion: (() -> Void)?) {
+        isExport = false
+        pendingAfterSave = completion
+        showingOptions = true
+    }
+
+    /// Abre la hoja para **Exportar** una copia aparte (no encadena acción).
+    func beginExport() {
+        isExport = true
+        pendingAfterSave = nil
+        showingOptions = true
+    }
+
+    /// URL destino resultante (carpeta + nombre + extensión del formato, sin duplicarla).
+    var resolvedURL: URL {
+        let ext = format.fileExtension
+        let fileName = name.hasSuffix("." + ext) ? name : "\(name).\(ext)"
+        return destination.appendingPathComponent(fileName)
+    }
+
+    /// Falta la contraseña del cifrado elegido.
+    var needsPassword: Bool { format.supportsEncryption && encryption != .none && password.isEmpty }
+
+    /// El botón de confirmar está disponible (nombre no vacío, contraseña si procede, tamaño válido).
+    var canConfirm: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && !needsPassword
+            && !(splitEnabled && format.supportsVolumeSplit && volumeSize <= 0)
+    }
+
+    /// Confirma: cierra la hoja y escribe en `resolvedURL`. Tras guardar (no exportar) ejecuta la
+    /// acción pendiente solo si tuvo éxito, pero la limpia siempre.
+    func confirm(perform: @escaping Perform) {
+        guard canConfirm else { return }
+        showingOptions = false
+        let exporting = isExport
+        let url = resolvedURL
         let cipher = format.supportsEncryption ? encryption : .none
         let pwd = cipher == .none ? nil : password
         let volumes = (splitEnabled && format.supportsVolumeSplit && volumeSize > 0)
             ? Int(volumeSize * Double(volumeUnit.multiplier)) : nil
-        return (format, cipher, pwd, volumes)
+        let fmt = format
+        Task {
+            let saved = await perform(exporting, url, fmt, cipher, pwd, volumes)
+            if !exporting {
+                let after = pendingAfterSave
+                pendingAfterSave = nil
+                if saved { after?() }
+            }
+        }
     }
 
-    /// Falta la contraseña del cifrado elegido (para que el panel no deje confirmar).
-    var needsPassword: Bool { format.supportsEncryption && encryption != .none && password.isEmpty }
+    /// Cierra la hoja sin guardar (botón Cancelar): descarta la acción pendiente.
+    func cancel() {
+        showingOptions = false
+        pendingAfterSave = nil
+    }
+
+    /// "Elegir…": abre el navegador de carpetas (nativo, transitorio) para cambiar el destino.
+    func chooseFolder(prompt: String) {
+        if let url = chooseFolderPanel(prompt: prompt, startingAt: destination) { destination = url }
+    }
 }
