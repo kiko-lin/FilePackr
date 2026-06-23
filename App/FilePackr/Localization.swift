@@ -138,14 +138,13 @@ private extension Localizer {
         "extract.items": "%@ items",
         "extract.in": "In:",
         "extract.choose": "Choose…",
-        "extract.password": "Archive password",
-        "extract.wrongPassword": "Wrong password.",
         "button.extract": "Extract",
 
         // Passwords
         "password.field": "Password",
         "password.openTitle": "Password to open the archive",
         "password.open": "Open",
+        "password.continue": "Continue",
         "password.entryTitle": "Archive password",
         "password.wrong": "Wrong password.",
 
@@ -292,14 +291,13 @@ private extension Localizer {
         "extract.items": "%@ elementos",
         "extract.in": "En:",
         "extract.choose": "Elegir…",
-        "extract.password": "Contraseña del archivo",
-        "extract.wrongPassword": "Contraseña incorrecta.",
         "button.extract": "Extraer",
 
         // Passwords
         "password.field": "Contraseña",
         "password.openTitle": "Contraseña para abrir el archivo",
         "password.open": "Abrir",
+        "password.continue": "Continuar",
         "password.entryTitle": "Contraseña del archivo",
         "password.wrong": "Contraseña incorrecta.",
 

@@ -87,20 +87,17 @@ struct ContentView: View {
             Text(loc("add.conflict.message", item.name))
         }
         .overlay { progressOverlay }
-        .sheet(isPresented: $showingEntryPassword) {
+        .sheet(isPresented: $showingEntryPassword, onDismiss: { runAfterUnlock() }) {
             PasswordSheet(title: loc("password.entryTitle"),
-                          confirmLabel: loc("password.open"),
+                          confirmLabel: loc("password.continue"),
                           password: $entryPasswordInput,
                           note: entryPasswordWrong ? loc("password.wrong") : nil,
                           onConfirm: { confirmEntryPassword() },
-                          onCancel: { showingEntryPassword = false; pendingEditAction = nil })
+                          onCancel: { pendingEditAction = nil; showingEntryPassword = false })
         }
         .sheet(item: $extractCoord.request) { req in
             ExtractOptionsSheet(nodeName: req.name,
-                                needsPassword: doc.requiresEntryPassword,
                                 destination: $extractCoord.destination,
-                                password: $extractCoord.password,
-                                passwordWrong: extractCoord.passwordWrong,
                                 onChooseFolder: { extractCoord.chooseFolder(prompt: loc("panel.choose")) },
                                 onExtract: { extractCoord.confirm(doc: doc, perform: runExtraction) },
                                 onCancel: { extractCoord.request = nil })
@@ -135,14 +132,21 @@ struct ContentView: View {
 
     private func confirmEntryPassword() {
         if doc.provideEntryPassword(entryPasswordInput) {
+            // Solo cerrar la hoja. La acción pendiente se ejecuta en `onDismiss`, ya cerrada la
+            // hoja, para no presentar el panel/hoja siguiente sobre una que aún se está cerrando.
             showingEntryPassword = false
-            let action = pendingEditAction      // ya desbloqueado: ejecutar lo pendiente
-            pendingEditAction = nil
-            action?()
         } else {
             entryPasswordWrong = true
             entryPasswordInput = ""
         }
+    }
+
+    /// Ejecuta la acción que esperaba al desbloqueo (extraer/exportar/editar), una vez la hoja
+    /// de contraseña está completamente cerrada. Nil si se canceló o no había acción.
+    private func runAfterUnlock() {
+        let action = pendingEditAction
+        pendingEditAction = nil
+        action?()
     }
 
     private func confirmOpenPassword() {
@@ -356,8 +360,9 @@ struct ContentView: View {
 
     // MARK: - Acciones con paneles del sistema
 
-    /// Ejecuta una edición; si el archivo está cifrado y bloqueado, pide la contraseña y,
-    /// al desbloquear, ejecuta la acción (en vez de descartarla).
+    /// Ejecuta una acción que necesita el archivo desbloqueado (editar, extraer, exportar). Si
+    /// está cifrado y bloqueado, pide la contraseña y, **al desbloquear**, ejecuta la acción (no
+    /// la descarta); si ya está desbloqueado, la ejecuta de inmediato.
     private func editGuarded(_ action: @escaping () -> Void) {
         if doc.isLocked {
             pendingEditAction = action
@@ -402,25 +407,32 @@ struct ContentView: View {
         if nodes.count == 1 { extract(nodes[0]) } else { extractNodes(nodes) }
     }
 
-    /// Extrae un nodo concreto: abre el diálogo compacto de extracción.
+    /// Extrae un nodo concreto: abre el diálogo compacto de extracción (desbloqueando antes
+    /// si hace falta, para poder leer las entradas cifradas).
     private func extract(_ node: FileNode) {
-        extractCoord.prepareDestination(doc: doc, settings: settings)
-        extractCoord.begin(name: node.name) { [doc.exportPlan(for: node)] }
+        editGuarded {
+            extractCoord.prepareDestination(doc: doc, settings: settings)
+            extractCoord.begin(name: node.name) { [doc.exportPlan(for: node)] }
+        }
     }
 
     /// Extrae varios nodos seleccionados: cada uno se coloca en la carpeta destino.
     private func extractNodes(_ nodes: [FileNode]) {
-        extractCoord.prepareDestination(doc: doc, settings: settings)
-        extractCoord.begin(name: loc("extract.items", String(nodes.count))) {
-            nodes.map { doc.exportPlan(for: $0) }
+        editGuarded {
+            extractCoord.prepareDestination(doc: doc, settings: settings)
+            extractCoord.begin(name: loc("extract.items", String(nodes.count))) {
+                nodes.map { doc.exportPlan(for: $0) }
+            }
         }
     }
 
     /// Extrae **todo** el archivo a una carpeta con el nombre del archivo (como Finder).
     private func extractAll() {
-        extractCoord.prepareDestination(doc: doc, settings: settings)
-        let name = strippedBaseName(documentDisplayName)
-        extractCoord.begin(name: name) { [doc.exportPlanForAll(named: name)] }
+        editGuarded {
+            extractCoord.prepareDestination(doc: doc, settings: settings)
+            let name = strippedBaseName(documentDisplayName)
+            extractCoord.begin(name: name) { [doc.exportPlanForAll(named: name)] }
+        }
     }
 
     /// Ejecuta la extracción de un plan (la inyecta el coordinador); canaliza el error a la

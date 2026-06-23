@@ -113,8 +113,6 @@ final class ExtractCoordinator: ObservableObject {
     @Published var conflict: ExtractionConflict?
     /// Carpeta destino mostrada y editable en la hoja.
     @Published var destination = FileManager.default.homeDirectoryForCurrentUser
-    @Published var password = ""
-    @Published var passwordWrong = false
     private var queue: [ExportPlan] = []
     /// Carpeta destino fijada al confirmar (común a todo el lote).
     private var destinationFolder = FileManager.default.homeDirectoryForCurrentUser
@@ -125,8 +123,8 @@ final class ExtractCoordinator: ObservableObject {
     /// Ejecuta la extracción de un plan; la implementa la vista (envuelve el manejo de error).
     typealias Perform = (ExportPlan, URL, Bool) async -> Void
 
-    /// Fija el destino por defecto (carpeta del archivo o fija, según ajustes) y resetea la
-    /// contraseña, antes de abrir la hoja.
+    /// Fija el destino por defecto (carpeta del archivo o fija, según ajustes) antes de abrir
+    /// la hoja. La contraseña, si el archivo está cifrado, se pide antes (al desbloquear).
     func prepareDestination(doc: ArchiveDocument, settings: AppSettings) {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let archiveFolder = doc.sourceURL?.deletingLastPathComponent()
@@ -136,8 +134,6 @@ final class ExtractCoordinator: ObservableObject {
         case .fixedFolder:
             destination = settings.fixedExtractFolder ?? archiveFolder ?? home
         }
-        password = ""
-        passwordWrong = false
     }
 
     /// Abre la hoja de extracción para `name`, con la fábrica de planes a usar al confirmar.
@@ -145,17 +141,10 @@ final class ExtractCoordinator: ObservableObject {
         request = ExtractRequest(name: name, makePlans: makePlans)
     }
 
-    /// Confirma la hoja: valida la contraseña (si hace falta), captura el destino, encola
-    /// los planes y arranca el procesado en lote.
+    /// Confirma la hoja: captura el destino, encola los planes y arranca el procesado en lote
+    /// (el archivo ya está desbloqueado en este punto).
     func confirm(doc: ArchiveDocument, perform: @escaping Perform) {
         guard let req = request else { return }
-        if doc.requiresEntryPassword {
-            guard doc.provideEntryPassword(password) else {
-                passwordWrong = true
-                password = ""
-                return
-            }
-        }
         destinationFolder = destination
         request = nil
         queue = req.makePlans()

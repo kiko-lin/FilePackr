@@ -103,15 +103,13 @@ final class SavePanelValidator: NSObject, NSOpenSavePanelDelegate {
     }
 }
 
-/// Hoja compacta de extracción: destino (carpeta del zip por defecto) + contraseña.
-/// El navegador de carpetas solo aparece al pulsar "Elegir…".
+/// Hoja compacta de extracción: solo el destino (carpeta del archivo por defecto). El navegador
+/// de carpetas aparece al pulsar "Elegir…". La contraseña, si el archivo está cifrado, se pide
+/// **antes** (al desbloquear), así que aquí ya no hace falta.
 struct ExtractOptionsSheet: View {
     @EnvironmentObject var loc: Localizer
     let nodeName: String
-    let needsPassword: Bool
     @Binding var destination: URL
-    @Binding var password: String
-    var passwordWrong: Bool
     var onChooseFolder: () -> Void
     var onExtract: () -> Void
     var onCancel: () -> Void
@@ -128,20 +126,10 @@ struct ExtractOptionsSheet: View {
                 Spacer()
                 Button(loc("extract.choose"), action: onChooseFolder)
             }
-            if needsPassword {
-                SecureField(loc("extract.password"), text: $password)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { if !password.isEmpty { onExtract() } }
-                if passwordWrong {
-                    Text(loc("extract.wrongPassword")).font(.callout).foregroundStyle(.red)
-                }
-            }
             HStack {
                 Spacer()
                 Button(loc("button.cancel"), role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
-                Button(loc("button.extract"), action: onExtract)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(needsPassword && password.isEmpty)
+                Button(loc("button.extract"), action: onExtract).keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
