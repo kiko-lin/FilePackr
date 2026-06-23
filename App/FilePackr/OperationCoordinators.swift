@@ -32,7 +32,8 @@ struct AddConflict: Identifiable {
 /// elementos, cada uno se extrae al destino y resuelve sus conflictos por separado.
 struct ExtractRequest: Identifiable {
     let id = UUID()
-    let name: String
+    /// Título de la hoja, según la acción ("Extraer todo" / "…archivo seleccionado" / "…archivos…").
+    let title: String
     let makePlans: () -> [ExportPlan]
 }
 
@@ -136,9 +137,9 @@ final class ExtractCoordinator: ObservableObject {
         }
     }
 
-    /// Abre la hoja de extracción para `name`, con la fábrica de planes a usar al confirmar.
-    func begin(name: String, makePlans: @escaping () -> [ExportPlan]) {
-        request = ExtractRequest(name: name, makePlans: makePlans)
+    /// Abre la hoja de extracción con `title`, y la fábrica de planes a usar al confirmar.
+    func begin(title: String, makePlans: @escaping () -> [ExportPlan]) {
+        request = ExtractRequest(title: title, makePlans: makePlans)
     }
 
     /// Confirma la hoja: captura el destino, encola los planes y arranca el procesado en lote

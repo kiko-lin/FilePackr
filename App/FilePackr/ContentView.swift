@@ -90,7 +90,7 @@ struct ContentView: View {
         .sheet(isPresented: $saveCoord.showingOptions) {
             SaveOptionsSheet(coord: saveCoord,
                              allowSingleFileFormats: doc.isSingleFile,
-                             title: saveCoord.isExport ? loc("export.title") : loc("save.title"),
+                             title: saveOptionsTitle,
                              confirmLabel: saveCoord.isExport ? loc("button.export") : loc("button.saveEllipsis"),
                              onChooseFolder: { saveCoord.chooseFolder(prompt: loc("panel.choose")) },
                              onConfirm: { saveCoord.confirm(perform: runSave) },
@@ -105,7 +105,7 @@ struct ContentView: View {
                           onCancel: { pendingEditAction = nil; showingEntryPassword = false })
         }
         .sheet(item: $extractCoord.request) { req in
-            ExtractOptionsSheet(nodeName: req.name,
+            ExtractOptionsSheet(title: req.title,
                                 destination: $extractCoord.destination,
                                 onChooseFolder: { extractCoord.chooseFolder(prompt: loc("panel.choose")) },
                                 onExtract: { extractCoord.confirm(doc: doc, perform: runExtraction) },
@@ -174,6 +174,13 @@ struct ContentView: View {
     /// idioma actual) mientras no se haya guardado. La i18n vive en la vista, no en el modelo.
     private var documentDisplayName: String {
         doc.sourceURL == nil ? loc("doc.untitled") : doc.documentName
+    }
+
+    /// Título del diálogo de Guardar/Exportar según el contexto: exportar a otro formato,
+    /// guardar un documento nuevo, o guardar los cambios de uno existente.
+    private var saveOptionsTitle: String {
+        if saveCoord.isExport { return loc("export.title") }
+        return doc.sourceURL == nil ? loc("save.title") : loc("save.title.changes")
     }
 
     /// Traduce el token de progreso del modelo. Resolver el nombre vacío a "Sin título"
@@ -421,7 +428,7 @@ struct ContentView: View {
     private func extract(_ node: FileNode) {
         editGuarded {
             extractCoord.prepareDestination(doc: doc, settings: settings)
-            extractCoord.begin(name: node.name) { [doc.exportPlan(for: node)] }
+            extractCoord.begin(title: loc("extract.title.one")) { [doc.exportPlan(for: node)] }
         }
     }
 
@@ -429,7 +436,7 @@ struct ContentView: View {
     private func extractNodes(_ nodes: [FileNode]) {
         editGuarded {
             extractCoord.prepareDestination(doc: doc, settings: settings)
-            extractCoord.begin(name: loc("extract.items", String(nodes.count))) {
+            extractCoord.begin(title: loc("extract.title.many")) {
                 nodes.map { doc.exportPlan(for: $0) }
             }
         }
@@ -440,7 +447,7 @@ struct ContentView: View {
         editGuarded {
             extractCoord.prepareDestination(doc: doc, settings: settings)
             let name = strippedBaseName(documentDisplayName)
-            extractCoord.begin(name: name) { [doc.exportPlanForAll(named: name)] }
+            extractCoord.begin(title: loc("extract.title.all")) { [doc.exportPlanForAll(named: name)] }
         }
     }
 

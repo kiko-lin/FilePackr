@@ -128,7 +128,7 @@ struct SaveOptionsSheet: View {
 /// **antes** (al desbloquear), así que aquí ya no hace falta.
 struct ExtractOptionsSheet: View {
     @EnvironmentObject var loc: Localizer
-    let nodeName: String
+    let title: String
     @Binding var destination: URL
     var onChooseFolder: () -> Void
     var onExtract: () -> Void
@@ -136,7 +136,7 @@ struct ExtractOptionsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(loc("extract.title", nodeName)).font(.headline)
+            Text(title).font(.headline)
             HStack(spacing: 6) {
                 Text(loc("extract.in")).foregroundStyle(.secondary)
                 Image(nsImage: NSWorkspace.shared.icon(for: .folder))

@@ -95,14 +95,15 @@ private extension Localizer {
         "button.export": "Export",
         "button.extractAll": "Extract all",
         "button.export.help": "Save a separate copy with a chosen format, encryption and password (the open document is unchanged).",
-        "export.title": "Export Archive",
+        "export.title": "Export to another format",
 
         // Drop prompt
         "drop.title": "Drag files here or click to choose",
         "drop.subtitle": "A .zip, .7z, .rar, .tar(.gz/.xz/.bz2), .gz, .xz or .bz2 opens for editing; other files create a new one.",
 
         // Save sheet
-        "save.title": "Save Archive",
+        "save.title": "Save file",
+        "save.title.changes": "Save changes",
         "save.format": "Format",
         "save.encryption": "Encryption",
         "save.encryption.none": "Not encrypted",
@@ -137,8 +138,9 @@ private extension Localizer {
         "format.cab": "CAB (read only)",
 
         // Extract sheet
-        "extract.title": "Extract “%@”",
-        "extract.items": "%@ items",
+        "extract.title.all": "Extract all",
+        "extract.title.one": "Extract selected file",
+        "extract.title.many": "Extract selected files",
         "extract.in": "In:",
         "extract.choose": "Choose…",
         "button.extract": "Extract",
@@ -250,7 +252,7 @@ private extension Localizer {
         "button.export": "Exportar",
         "button.extractAll": "Extraer todo",
         "button.export.help": "Guarda una copia aparte con el formato, cifrado y contraseña que elijas (el documento abierto no cambia).",
-        "export.title": "Exportar archivo",
+        "export.title": "Exportar a otro formato",
 
         // Drop prompt
         "drop.title": "Arrastra archivos aquí o haz clic para elegir",
@@ -258,6 +260,7 @@ private extension Localizer {
 
         // Save sheet
         "save.title": "Guardar archivo",
+        "save.title.changes": "Guardar cambios",
         "save.format": "Formato",
         "save.encryption": "Cifrado",
         "save.encryption.none": "No cifrado",
@@ -292,8 +295,9 @@ private extension Localizer {
         "format.cab": "CAB (solo lectura)",
 
         // Extract sheet
-        "extract.title": "Extraer «%@»",
-        "extract.items": "%@ elementos",
+        "extract.title.all": "Extraer todo",
+        "extract.title.one": "Extraer archivo seleccionado",
+        "extract.title.many": "Extraer archivos seleccionados",
         "extract.in": "En:",
         "extract.choose": "Elegir…",
         "button.extract": "Extraer",
