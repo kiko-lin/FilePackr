@@ -26,6 +26,40 @@ enum ExtractDestinationMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Qué hacer con los archivos ocultos y de sistema al **añadirlos** desde el disco
+/// (botón Añadir o arrastre). No afecta a lo que se muestra dentro de un archivo abierto:
+/// el contenido siempre se enseña íntegro. El filtro se aplica al expandir carpetas; un
+/// elemento elegido/arrastrado de forma explícita en el primer nivel se respeta siempre.
+enum AddHiddenPolicy: String, CaseIterable, Identifiable {
+    case includeAll, excludeSystemFiles, excludeAllHidden
+    var id: String { rawValue }
+    var nameKey: String { "settings.hidden.\(rawValue)" }
+
+    /// Nombres y carpetas de sistema/metadatos que excluyen tanto `.excludeSystemFiles`
+    /// como `.excludeAllHidden`.
+    private static let systemNames: Set<String> = [
+        ".DS_Store", ".localized", ".Spotlight-V100", ".Trashes", ".fseventsd",
+        ".TemporaryItems", ".apdisk", "__MACOSX", "Thumbs.db", "Desktop.ini"
+    ]
+
+    /// `true` si un elemento con este nombre debe excluirse al añadirlo desde el disco.
+    func excludes(_ name: String) -> Bool {
+        switch self {
+        case .includeAll: return false
+        case .excludeSystemFiles: return name.hasPrefix("._") || Self.systemNames.contains(name)
+        case .excludeAllHidden: return name.hasPrefix(".") || Self.systemNames.contains(name)
+        }
+    }
+}
+
+/// Pestañas de la ventana de Ajustes.
+enum SettingsTab: String, CaseIterable, Identifiable {
+    case general, files
+    var id: String { rawValue }
+    var nameKey: String { self == .general ? "settings.tab.general" : "settings.tab.files" }
+    var systemImage: String { self == .general ? "gearshape" : "doc.zipper" }
+}
+
 /// Preferencias de la app (aparte del idioma, que gestiona `Localizer`). Se guardan
 /// en `UserDefaults` y se aplican en caliente.
 @MainActor
@@ -48,6 +82,28 @@ final class AppSettings: ObservableObject {
     @Published var fixedExtractFolder: URL? {
         didSet { defaults.set(fixedExtractFolder?.path, forKey: "fixedExtractFolder") }
     }
+    /// Política de exclusión de ocultos/sistema al añadir ficheros desde el disco.
+    @Published var addHiddenPolicy: AddHiddenPolicy {
+        didSet { defaults.set(addHiddenPolicy.rawValue, forKey: "addHiddenPolicy") }
+    }
+
+    /// Formatos de los que FilePackr se ofrece como app por defecto en el Finder
+    /// (pestaña Archivos de Ajustes). Se persisten como lista de `rawValue`.
+    @Published var associatedFormats: Set<ArchiveFormat> {
+        didSet { defaults.set(associatedFormats.map(\.rawValue), forKey: "associatedFormats") }
+    }
+
+    /// `true` tras mostrar (una vez) el diálogo de "compresor por defecto" del primer arranque.
+    @Published var firstRunPromptShown: Bool {
+        didSet { defaults.set(firstRunPromptShown, forKey: "firstRunPromptShown") }
+    }
+
+    /// Pestaña activa de la ventana de Ajustes (no se persiste; el primer arranque
+    /// la fija en `.files` antes de abrir Ajustes).
+    @Published var selectedSettingsTab: SettingsTab = .general
+
+    /// Formatos premarcados por defecto: los más habituales (ZIP > RAR > 7Z + Unix).
+    static let defaultAssociatedFormats: Set<ArchiveFormat> = [.zip, .sevenZip, .rar, .tarGzip, .gzip, .tar]
 
     private let defaults = UserDefaults.standard
 
@@ -57,6 +113,13 @@ final class AppSettings: ObservableObject {
         defaultEncryption = ZipEncryption(persistID: defaults.string(forKey: "defaultEncryption") ?? "") ?? .none
         extractMode = ExtractDestinationMode(rawValue: defaults.string(forKey: "extractMode") ?? "") ?? .archiveFolder
         fixedExtractFolder = defaults.string(forKey: "fixedExtractFolder").map { URL(fileURLWithPath: $0) }
+        addHiddenPolicy = AddHiddenPolicy(rawValue: defaults.string(forKey: "addHiddenPolicy") ?? "") ?? .excludeSystemFiles
+        firstRunPromptShown = defaults.bool(forKey: "firstRunPromptShown")
+        if let raw = defaults.array(forKey: "associatedFormats") as? [String] {
+            associatedFormats = Set(raw.compactMap(ArchiveFormat.init(rawValue:)))
+        } else {
+            associatedFormats = Self.defaultAssociatedFormats
+        }
     }
 }
 

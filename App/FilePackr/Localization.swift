@@ -70,6 +70,8 @@ private extension Localizer {
 
         // Settings window
         "settings.title": "Settings",
+        "settings.tab.general": "General",
+        "settings.tab.files": "Files",
         "settings.language": "Language",
         "settings.appearance": "Appearance",
         "theme.system": "Follow System",
@@ -81,7 +83,26 @@ private extension Localizer {
         "extract.dest.archiveFolder": "The archive's folder",
         "extract.dest.fixedFolder": "A fixed folder",
         "settings.noFolder": "No folder chosen",
+        "settings.addHidden": "When adding files",
+        "settings.addHidden.note": "Applies when expanding dragged or added folders. The contents of an open archive are always shown in full.",
+        "settings.hidden.includeAll": "Include everything",
+        "settings.hidden.excludeSystemFiles": "Exclude system files",
+        "settings.hidden.excludeAllHidden": "Exclude all hidden files",
+        "status.excluded.one": "1 system file excluded",
+        "status.excluded.many": "%d system files excluded",
         "button.done": "Done",
+
+        // Settings · Files tab
+        "settings.files.header": "Open these archives with FilePackr by default",
+        "settings.files.selectAll": "Select all",
+        "settings.files.deselectAll": "Deselect all",
+        "settings.files.note": "Unchecking a format doesn't hand it back to another app; change “Open with → Change All” in Finder to pick a different default.",
+
+        // First-run prompt
+        "firstrun.title": "Make FilePackr your default compressor?",
+        "firstrun.message": "Would you like FilePackr to open compressed files by default? You can choose which formats next.",
+        "firstrun.yes": "Yes",
+        "firstrun.later": "Not now",
 
         // Document bar
         "doc.encrypted.help": "Encrypted archive",
@@ -227,6 +248,8 @@ private extension Localizer {
 
         // Settings window
         "settings.title": "Ajustes",
+        "settings.tab.general": "General",
+        "settings.tab.files": "Archivos",
         "settings.language": "Idioma",
         "settings.appearance": "Apariencia",
         "theme.system": "Según el sistema",
@@ -238,7 +261,26 @@ private extension Localizer {
         "extract.dest.archiveFolder": "La carpeta del archivo",
         "extract.dest.fixedFolder": "Una carpeta fija",
         "settings.noFolder": "Ninguna carpeta elegida",
+        "settings.addHidden": "Al añadir archivos",
+        "settings.addHidden.note": "Se aplica al expandir las carpetas que arrastres o añadas. El contenido de un archivo ya abierto se muestra siempre íntegro.",
+        "settings.hidden.includeAll": "Incluir todo",
+        "settings.hidden.excludeSystemFiles": "Excluir archivos de sistema",
+        "settings.hidden.excludeAllHidden": "Excluir todos los ocultos",
+        "status.excluded.one": "Se excluyó 1 archivo de sistema",
+        "status.excluded.many": "Se excluyeron %d archivos de sistema",
         "button.done": "Hecho",
+
+        // Pestaña Archivos de Ajustes
+        "settings.files.header": "Abrir estos archivos con FilePackr por defecto",
+        "settings.files.selectAll": "Marcar todos",
+        "settings.files.deselectAll": "Desmarcar todos",
+        "settings.files.note": "Desmarcar un formato no se lo devuelve a otra app; usa «Abrir con → Cambiar todos» en el Finder para elegir otra app por defecto.",
+
+        // Diálogo de primer arranque
+        "firstrun.title": "¿Hacer de FilePackr tu compresor por defecto?",
+        "firstrun.message": "¿Quieres que FilePackr abra los archivos comprimidos por defecto? Después podrás elegir qué formatos.",
+        "firstrun.yes": "Sí",
+        "firstrun.later": "Ahora no",
 
         // Document bar
         "doc.encrypted.help": "Archivo cifrado",

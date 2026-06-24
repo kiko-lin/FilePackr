@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Las claves estándar (CFBundleName, versión, etc.) las añade Xcode al fusionar
+	     el Info.plist generado (GENERATE_INFOPLIST_FILE = YES) con este archivo. Aquí
+	     solo declaramos los tipos de documento que FilePackr puede abrir y sus iconos. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key><string>ZIP archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-ZIP</string>
+			<key>LSItemContentTypes</key><array><string>public.zip-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>TAR archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-TAR</string>
+			<key>LSItemContentTypes</key><array><string>public.tar-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Gzip-compressed TAR archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-TAR</string>
+			<key>LSItemContentTypes</key><array><string>org.gnu.gnu-zip-tar-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Xz-compressed TAR archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-TAR</string>
+			<key>LSItemContentTypes</key><array><string>com.filepackr.tar-xz</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Bzip2-compressed TAR archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-TAR</string>
+			<key>LSItemContentTypes</key><array><string>com.filepackr.tar-bzip2</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Gzip archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-GZIP</string>
+			<key>LSItemContentTypes</key><array><string>org.gnu.gnu-zip-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Xz archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-XZ</string>
+			<key>LSItemContentTypes</key><array><string>org.tukaani.xz-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Bzip2 archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-BZ2</string>
+			<key>LSItemContentTypes</key><array><string>public.bzip2-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>7-Zip archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-7Z</string>
+			<key>LSItemContentTypes</key><array><string>org.7-zip.7-zip-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>RAR archive</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-RAR</string>
+			<key>LSItemContentTypes</key><array><string>com.rarlab.rar-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>ISO disc image</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-ISO</string>
+			<key>LSItemContentTypes</key><array><string>public.iso-image</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>CPIO archive</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-CPIO</string>
+			<key>LSItemContentTypes</key><array><string>public.cpio-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>XAR archive</string>
+			<key>CFBundleTypeRole</key><string>Editor</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-XAR</string>
+			<key>LSItemContentTypes</key><array><string>com.filepackr.xar-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>LHA archive</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-LHA</string>
+			<key>LSItemContentTypes</key><array><string>com.filepackr.lha-archive</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key><string>Cabinet archive</string>
+			<key>CFBundleTypeRole</key><string>Viewer</string>
+			<key>CFBundleTypeIconFile</key><string>FormatIcon-CAB</string>
+			<key>LSItemContentTypes</key><array><string>com.microsoft.cab-archive</string></array>
+		</dict>
+	</array>
+
+	<!-- Tipos PROPIOS de FilePackr (los inventamos nosotros): se EXPORTAN para que macOS
+	     honre su icono y descripción. Sus extensiones no las define Apple. -->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.filepackr.tar-xz</string>
+			<key>UTTypeDescription</key><string>Xz-compressed TAR archive</string>
+			<key>UTTypeConformsTo</key><array><string>public.archive</string><string>public.data</string></array>
+			<key>UTTypeIconFile</key><string>FormatIcon-TAR</string>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>tar.xz</string><string>txz</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.filepackr.tar-bzip2</string>
+			<key>UTTypeDescription</key><string>Bzip2-compressed TAR archive</string>
+			<key>UTTypeConformsTo</key><array><string>public.archive</string><string>public.data</string></array>
+			<key>UTTypeIconFile</key><string>FormatIcon-TAR</string>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>tar.bz2</string><string>tbz</string><string>tbz2</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.filepackr.xar-archive</string>
+			<key>UTTypeDescription</key><string>XAR archive</string>
+			<key>UTTypeConformsTo</key><array><string>public.archive</string><string>public.data</string></array>
+			<key>UTTypeIconFile</key><string>FormatIcon-XAR</string>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>xar</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.filepackr.lha-archive</string>
+			<key>UTTypeDescription</key><string>LHA archive</string>
+			<key>UTTypeConformsTo</key><array><string>public.archive</string><string>public.data</string></array>
+			<key>UTTypeIconFile</key><string>FormatIcon-LHA</string>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>lha</string><string>lzh</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.microsoft.cab-archive</string>
+			<key>UTTypeDescription</key><string>Cabinet archive</string>
+			<key>UTTypeConformsTo</key><array><string>public.archive</string><string>public.data</string></array>
+			<key>UTTypeIconFile</key><string>FormatIcon-CAB</string>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>cab</string></array></dict>
+		</dict>
+	</array>
+
+	<!-- Tipos definidos por terceros (no por Apple ni por nosotros): se IMPORTAN. -->
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key><string>org.7-zip.7-zip-archive</string>
+			<key>UTTypeDescription</key><string>7-Zip archive</string>
+			<key>UTTypeConformsTo</key><array><string>public.archive</string><string>public.data</string></array>
+			<key>UTTypeIconFile</key><string>FormatIcon-7Z</string>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>7z</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>com.rarlab.rar-archive</string>
+			<key>UTTypeDescription</key><string>RAR archive</string>
+			<key>UTTypeConformsTo</key><array><string>public.archive</string><string>public.data</string></array>
+			<key>UTTypeIconFile</key><string>FormatIcon-RAR</string>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>rar</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key><string>org.tukaani.xz-archive</string>
+			<key>UTTypeDescription</key><string>Xz archive</string>
+			<key>UTTypeConformsTo</key><array><string>public.archive</string><string>public.data</string></array>
+			<key>UTTypeIconFile</key><string>FormatIcon-XZ</string>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>xz</string></array></dict>
+		</dict>
+	</array>
+</dict>
+</plist>

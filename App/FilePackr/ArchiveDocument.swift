@@ -109,17 +109,19 @@ final class ArchiveDocument: ObservableObject {
     /// Añade un único fichero/carpeta del disco dentro de `target` y devuelve el nodo creado.
     /// `replacing` elimina antes el elemento existente (sobrescribir); `renameTo` fuerza un
     /// nombre libre (conservar ambos). No toca la selección: la fija la vista al acabar el lote.
+    /// Devuelve el nodo añadido y cuántos elementos omitió la política al expandir las carpetas.
     @discardableResult
     func addFile(_ url: URL, into target: FileNode?, replacing existing: FileNode? = nil,
-                 renameTo newName: String? = nil) -> FileNode? {
-        guard !isLocked else { return nil }
+                 renameTo newName: String? = nil,
+                 hiddenPolicy: AddHiddenPolicy = .excludeSystemFiles) -> (node: FileNode?, excluded: Int) {
+        guard !isLocked else { return (nil, 0) }
         if !hasActiveDocument { beginNewDocument() }
         if let existing { remove(existing) }
-        let node = importFromDisk(url)
-        if let newName { node.name = newName }
-        insert(node, into: target)
+        let imported = importFromDisk(url, hiddenPolicy: hiddenPolicy)
+        if let newName { imported.node.name = newName }
+        insert(imported.node, into: target)
         markChanged()
-        return node
+        return (imported.node, imported.excluded)
     }
 
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
@@ -280,12 +282,13 @@ final class ArchiveDocument: ObservableObject {
     /// Deja seleccionados los elementos añadidos para que la vista los revele
     /// (desplegando la carpeta destino) y les dé el foco, como al crear una carpeta.
     @discardableResult
-    func addFiles(_ urls: [URL], into target: FileNode?) -> [FileNode] {
+    func addFiles(_ urls: [URL], into target: FileNode?,
+                  hiddenPolicy: AddHiddenPolicy = .excludeSystemFiles) -> [FileNode] {
         guard !isLocked else { return [] }
         if !hasActiveDocument { beginNewDocument() }
         var added: [FileNode] = []
         for url in urls {
-            let node = importFromDisk(url)
+            let node = importFromDisk(url, hiddenPolicy: hiddenPolicy).node
             insert(node, into: target)
             added.append(node)
         }
@@ -625,20 +628,31 @@ final class ArchiveDocument: ObservableObject {
         return rootNodes
     }
 
-    private func importFromDisk(_ url: URL) -> FileNode {
+    /// Importa recursivamente un elemento del disco y devuelve el nodo creado junto al número
+    /// de elementos omitidos por la política. Al expandir una carpeta, omite los hijos que la
+    /// política marque como ocultos/sistema (enumeramos sin `.skipsHiddenFiles` para decidirlo
+    /// nosotros: así `.includeAll` puede de verdad incluir los ocultos), contando cada nombre
+    /// omitido como uno. El elemento raíz no se filtra aquí —se respeta la elección explícita;
+    /// el filtro lo aplica quien añade.
+    private func importFromDisk(_ url: URL, hiddenPolicy: AddHiddenPolicy) -> (node: FileNode, excluded: Int) {
         if isDirectory(url) {
             let folder = FileNode(name: url.lastPathComponent, isDirectory: true, source: .folder)
             let contents = (try? FileManager.default.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles])) ?? []
+                at: url, includingPropertiesForKeys: nil)) ?? []
+            var excluded = 0
             for child in contents.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                let node = importFromDisk(child)
-                node.parent = folder
-                folder.children.append(node)
+                if hiddenPolicy.excludes(child.lastPathComponent) {
+                    excluded += 1
+                    continue
+                }
+                let imported = importFromDisk(child, hiddenPolicy: hiddenPolicy)
+                imported.node.parent = folder
+                folder.children.append(imported.node)
+                excluded += imported.excluded
             }
-            return folder
+            return (folder, excluded)
         }
-        return FileNode(name: url.lastPathComponent, isDirectory: false, source: .diskFile(url))
+        return (FileNode(name: url.lastPathComponent, isDirectory: false, source: .diskFile(url)), 0)
     }
 
 

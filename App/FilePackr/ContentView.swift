@@ -8,6 +8,7 @@ import ArchiveBrowser
 struct ContentView: View {
     @EnvironmentObject private var loc: Localizer
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.openSettings) private var openSettings
     @StateObject private var doc = ArchiveDocument()
     /// Máquinas de estado de las colas de añadir y extraer (cola + diálogo de conflicto).
     @StateObject private var addCoord = AddCoordinator()
@@ -23,6 +24,13 @@ struct ContentView: View {
     @State private var showingOpenPassword = false
     @State private var openPasswordInput = ""
     @State private var openPasswordWrong = false
+    /// La app se lanzó abriendo un archivo desde el Finder: no es momento de ofrecer el
+    /// diálogo de "compresor por defecto".
+    @State private var openingExternalFile = false
+    /// Aviso discreto en la barra de estado (p. ej. "Se excluyeron N archivos de sistema"),
+    /// con un token para que un auto-descarte antiguo no borre un aviso más reciente.
+    @State private var exclusionNotice: String?
+    @State private var exclusionNoticeToken = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -129,6 +137,47 @@ struct ContentView: View {
                 showingOpenPassword = true
             }
         }
+        .onOpenURL { url in
+            openingExternalFile = true
+            handleOpen([url])
+        }
+        .onAppear { promptDefaultCompressorIfNeeded() }
+    }
+
+    /// Primer arranque: ofrece (una sola vez) hacer de FilePackr el compresor por defecto.
+    /// Si el usuario acepta, abre Ajustes en la pestaña Archivos para elegir formatos.
+    private func promptDefaultCompressorIfNeeded() {
+        guard !settings.firstRunPromptShown else { return }
+
+        // `onAppear` se dispara antes de que la ventana sea key; un salto al siguiente turno
+        // del run loop garantiza que la hoja se adjunte a una ventana ya visible (y deja que
+        // `onOpenURL` marque si la app se abrió por un archivo, en cuyo caso no preguntamos).
+        DispatchQueue.main.async {
+            guard !openingExternalFile else { return }
+            settings.firstRunPromptShown = true
+
+            let alert = NSAlert()
+            alert.messageText = loc("firstrun.title")
+            alert.informativeText = loc("firstrun.message")
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: loc("firstrun.yes"))     // 1º → por defecto (Intro)
+            let later = alert.addButton(withTitle: loc("firstrun.later"))
+            later.keyEquivalent = "\u{1b}"                       // Escape pospone
+
+            if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
+                alert.beginSheetModal(for: window) { if $0 == .alertFirstButtonReturn { openFilesSettings() } }
+            } else if alert.runModal() == .alertFirstButtonReturn {
+                openFilesSettings()
+            }
+        }
+    }
+
+    /// Abre la ventana de Ajustes de la app en la pestaña Archivos. Usa la acción oficial
+    /// `openSettings` del entorno (fiable, a diferencia del selector privado que podía abrir
+    /// los Ajustes del Sistema). El salto de run loop deja cerrarse antes la hoja.
+    private func openFilesSettings() {
+        settings.selectedSettingsTab = .files
+        DispatchQueue.main.async { openSettings() }
     }
 
     /// Muestra la hoja para introducir la contraseña del archivo cifrado.
@@ -326,14 +375,22 @@ struct ContentView: View {
     private var statusBar: some View {
         HStack {
             Spacer()
-            Text(statusText)
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            if let notice = exclusionNotice {
+                Label(notice, systemImage: "eye.slash")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
+            } else {
+                Text(statusText)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
         .background(.bar)
+        .animation(.easeInOut(duration: 0.2), value: exclusionNotice)
     }
 
     private var statusText: String {
@@ -407,14 +464,34 @@ struct ContentView: View {
         if let archive = doc.archiveToOpen(from: urls) {
             Task { await runAsync { try await doc.openArchive(archive) } }
         } else {
-            addCoord.start(urls, into: doc.addTargetFolder(), doc: doc)
+            addCoord.start(urls, into: doc.addTargetFolder(), doc: doc,
+                           hiddenPolicy: settings.addHiddenPolicy,
+                           onFinish: { noteExcluded($0) })
         }
     }
 
     /// Añade ficheros arrastrados del Finder a una carpeta concreta. Si el archivo está
     /// cifrado y bloqueado, pide la contraseña y los añade tras desbloquear.
     private func addDropped(_ urls: [URL], into folder: FileNode?) {
-        editGuarded { addCoord.start(urls, into: folder, doc: doc) }
+        editGuarded {
+            addCoord.start(urls, into: folder, doc: doc,
+                           hiddenPolicy: settings.addHiddenPolicy,
+                           onFinish: { noteExcluded($0) })
+        }
+    }
+
+    /// Muestra el aviso discreto de elementos omitidos por la política de ocultos/sistema y
+    /// lo retira solo tras unos segundos (el token evita que un descarte previo borre uno nuevo).
+    private func noteExcluded(_ count: Int) {
+        guard count > 0 else { return }
+        exclusionNoticeToken += 1
+        let token = exclusionNoticeToken
+        let key = count == 1 ? "status.excluded.one" : "status.excluded.many"
+        exclusionNotice = loc(key, count)
+        Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            if exclusionNoticeToken == token { exclusionNotice = nil }
+        }
     }
 
     private func extractAction() {

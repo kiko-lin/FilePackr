@@ -47,12 +47,24 @@ final class AddCoordinator: ObservableObject {
     private var queue: [URL] = []
     private var target: FileNode?
     private var addedIDs: [FileNode.ID] = []
+    /// Política de ocultos/sistema del lote en curso (fijada al arrancar).
+    private var hiddenPolicy: AddHiddenPolicy = .excludeSystemFiles
+    /// Total de elementos omitidos por la política en el lote en curso.
+    private var excludedCount = 0
+    /// Se llama al cerrar el lote con el total omitido (>0) para que la vista lo avise.
+    private var onFinish: ((Int) -> Void)?
 
-    /// Arranca un lote: filtra URLs de fichero, fija el destino y procesa la primera.
-    func start(_ urls: [URL], into target: FileNode?, doc: ArchiveDocument) {
+    /// Arranca un lote: filtra URLs de fichero, fija el destino y procesa la primera. `onFinish`
+    /// recibe, al cerrar el lote, cuántos elementos omitió la política (para avisar al usuario).
+    func start(_ urls: [URL], into target: FileNode?, doc: ArchiveDocument,
+               hiddenPolicy: AddHiddenPolicy = .excludeSystemFiles,
+               onFinish: ((Int) -> Void)? = nil) {
         let cleaned = urls.filter { $0.isFileURL }
         guard !cleaned.isEmpty else { return }
         self.target = target
+        self.hiddenPolicy = hiddenPolicy
+        self.onFinish = onFinish
+        excludedCount = 0
         queue = cleaned
         addedIDs = []
         processNext(doc: doc)
@@ -67,7 +79,9 @@ final class AddCoordinator: ObservableObject {
         if doc.child(named: name, in: target) != nil {
             conflict = AddConflict(url: url, name: name, target: target)
         } else {
-            if let node = doc.addFile(url, into: target) { addedIDs.append(node.id) }
+            let result = doc.addFile(url, into: target, hiddenPolicy: hiddenPolicy)
+            if let node = result.node { addedIDs.append(node.id) }
+            excludedCount += result.excluded
             processNext(doc: doc)
         }
     }
@@ -76,7 +90,9 @@ final class AddCoordinator: ObservableObject {
     func overwrite(_ item: AddConflict, doc: ArchiveDocument) {
         conflict = nil
         let existing = doc.child(named: item.name, in: item.target)
-        if let node = doc.addFile(item.url, into: item.target, replacing: existing) { addedIDs.append(node.id) }
+        let result = doc.addFile(item.url, into: item.target, replacing: existing, hiddenPolicy: hiddenPolicy)
+        if let node = result.node { addedIDs.append(node.id) }
+        excludedCount += result.excluded
         processNext(doc: doc)
     }
 
@@ -84,7 +100,9 @@ final class AddCoordinator: ObservableObject {
     func keepBoth(_ item: AddConflict, doc: ArchiveDocument) {
         conflict = nil
         let unique = doc.uniqueChildName(item.name, in: item.target)
-        if let node = doc.addFile(item.url, into: item.target, renameTo: unique) { addedIDs.append(node.id) }
+        let result = doc.addFile(item.url, into: item.target, renameTo: unique, hiddenPolicy: hiddenPolicy)
+        if let node = result.node { addedIDs.append(node.id) }
+        excludedCount += result.excluded
         processNext(doc: doc)
     }
 
@@ -95,11 +113,14 @@ final class AddCoordinator: ObservableObject {
         finish(doc: doc)
     }
 
-    /// Cierra el lote: fija la selección sobre lo añadido.
+    /// Cierra el lote: fija la selección sobre lo añadido y avisa de lo omitido (si lo hubo).
     private func finish(doc: ArchiveDocument) {
         if !addedIDs.isEmpty { doc.selectedIDs = Set(addedIDs) }
         addedIDs = []
         target = nil
+        if excludedCount > 0 { onFinish?(excludedCount) }
+        excludedCount = 0
+        onFinish = nil
     }
 }
 
