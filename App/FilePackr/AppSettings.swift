@@ -75,6 +75,9 @@ final class AppSettings: ObservableObject {
     @Published var defaultEncryption: ZipEncryption {
         didSet { defaults.set(defaultEncryption.persistID, forKey: "defaultEncryption") }
     }
+    @Published var defaultCompressionLevel: CompressionLevel {
+        didSet { defaults.set(defaultCompressionLevel.rawValue, forKey: "defaultCompressionLevel") }
+    }
     @Published var extractMode: ExtractDestinationMode {
         didSet { defaults.set(extractMode.rawValue, forKey: "extractMode") }
     }
@@ -111,6 +114,7 @@ final class AppSettings: ObservableObject {
         theme = AppTheme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .system
         defaultFormat = ArchiveFormat(rawValue: defaults.string(forKey: "defaultFormat") ?? "") ?? .zip
         defaultEncryption = ZipEncryption(persistID: defaults.string(forKey: "defaultEncryption") ?? "") ?? .none
+        defaultCompressionLevel = CompressionLevel(rawValue: defaults.string(forKey: "defaultCompressionLevel") ?? "") ?? .default
         extractMode = ExtractDestinationMode(rawValue: defaults.string(forKey: "extractMode") ?? "") ?? .archiveFolder
         fixedExtractFolder = defaults.string(forKey: "fixedExtractFolder").map { URL(fileURLWithPath: $0) }
         addHiddenPolicy = AddHiddenPolicy(rawValue: defaults.string(forKey: "addHiddenPolicy") ?? "") ?? .excludeSystemFiles
@@ -121,6 +125,11 @@ final class AppSettings: ObservableObject {
             associatedFormats = Self.defaultAssociatedFormats
         }
     }
+}
+
+/// Clave de localización del nivel de compresión para los `Picker` de la UI.
+extension CompressionLevel {
+    var nameKey: String { "level.\(rawValue)" }
 }
 
 /// Persistencia estable del cifrado (el enum del paquete no es `RawRepresentable`).

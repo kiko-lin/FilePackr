@@ -59,7 +59,8 @@ nonisolated struct SavePayloadBuilder: Sendable {
     /// Ensambla el payload para el formato de salida. Lanza para formatos de solo
     /// lectura o si un formato de un solo fichero no tiene contenido.
     func payload(for outputFormat: ArchiveFormat,
-                 encryption: ZipEncryption, password: String?) throws -> SavePayload {
+                 encryption: ZipEncryption, password: String?,
+                 level: CompressionLevel = .default) throws -> SavePayload {
         switch outputFormat {
         case .zip:
             return .zip(inputs: zipInputs(), encryption: encryption, password: password)
@@ -83,7 +84,8 @@ nonisolated struct SavePayloadBuilder: Sendable {
         case .tarBzip2:
             let items = tarItems()
             return .stream { handle in
-                try Bzip2.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) })
+                try Bzip2.compress(blockSize: level.bzip2BlockSize, next: Tar.reader(items),
+                                   sink: { try handle.write(contentsOf: $0) })
             }
         case .gzip:
             guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
@@ -97,13 +99,14 @@ nonisolated struct SavePayloadBuilder: Sendable {
                                          memory: { Xz.compress($0) })
         case .bzip2:
             guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
-            return try singleFilePayload(node, stream: { try Bzip2.compress(from: $0, to: $1) },
-                                         memory: { Bzip2.compress($0) })
+            let blockSize = level.bzip2BlockSize
+            return try singleFilePayload(node, stream: { try Bzip2.compress(from: $0, to: $1, blockSize: blockSize) },
+                                         memory: { Bzip2.compress($0, blockSize: blockSize) })
         case .sevenZip, .iso, .xar:
             guard let writeFormat = outputFormat.libArchiveWriteFormat else {
                 throw CocoaError(.fileWriteUnsupportedScheme)
             }
-            return .libArchive(items: libArchiveItems(), format: writeFormat)
+            return .libArchive(items: libArchiveItems(), format: writeFormat, level: level)
         case .rar, .cpio, .lha, .cab:
             throw CocoaError(.fileWriteUnsupportedScheme)   // formatos de solo lectura
         }

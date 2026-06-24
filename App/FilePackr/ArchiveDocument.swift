@@ -45,6 +45,8 @@ final class ArchiveDocument: ObservableObject {
     @Published private(set) var saveFormat: ArchiveFormat = .zip
     /// Tamaño de volumen en bytes si el documento se guarda dividido (nil = un fichero).
     @Published private(set) var saveVolumeSize: Int?
+    /// Nivel de compresión elegido al guardar (se recuerda para el botón Guardar).
+    @Published private(set) var saveLevel: CompressionLevel = .default
     /// Estado de cifrado del documento (única fuente de verdad: estados imposibles de
     /// contradecir). La vista observa los derivados `requiresEntryPassword`/`requiresOpenPassword`.
     @Published private(set) var lockState: LockState = .unlocked
@@ -484,7 +486,8 @@ final class ArchiveDocument: ObservableObject {
     /// a disco y en segundo plano con progreso. **No toca el estado del documento** — es
     /// la pieza común de `save` (que además adopta el fichero) y `export` (que no).
     private func writeArchive(to url: URL, format outputFormat: ArchiveFormat,
-                              encryption: ZipEncryption, password: String?, volumeSize: Int?) async throws {
+                              encryption: ZipEncryption, password: String?, volumeSize: Int?,
+                              level: CompressionLevel) async throws {
         let volumes = (outputFormat.supportsVolumeSplit && (volumeSize ?? 0) > 0) ? volumeSize : nil
         let cipher = outputFormat.supportsEncryption ? encryption : .none
         let pwd = outputFormat.supportsEncryption ? password : nil
@@ -505,7 +508,7 @@ final class ArchiveDocument: ObservableObject {
                                          sourceFormat: format, sourceArchiveData: sourceArchiveData,
                                          entryPassword: entryPassword)
         let payload = try await Task.detached(priority: .userInitiated) {
-            try builder.payload(for: outputFormat, encryption: cipher, password: pwd)
+            try builder.payload(for: outputFormat, encryption: cipher, password: pwd, level: level)
         }.value
         let work = url.deletingLastPathComponent()
             .appendingPathComponent(".\(UUID().uuidString).filepackr.work")
@@ -532,22 +535,24 @@ final class ArchiveDocument: ObservableObject {
     /// Guarda en `url`, **adopta** el fichero como documento activo y recuerda los ajustes
     /// para re-guardar. (Primer guardado / botón Guardar.)
     func save(to url: URL, format outputFormat: ArchiveFormat,
-              encryption: ZipEncryption, password: String?, volumeSize: Int? = nil) async throws {
+              encryption: ZipEncryption, password: String?, volumeSize: Int? = nil,
+              level: CompressionLevel = .default) async throws {
         saveFormat = outputFormat
+        saveLevel = level
         saveVolumeSize = (outputFormat.supportsVolumeSplit && (volumeSize ?? 0) > 0) ? volumeSize : nil
         if outputFormat == .zip {
             saveEncryption = outputFormat.supportsEncryption ? encryption : .none
             savePassword = outputFormat.supportsEncryption ? password : nil
         }
         try await writeArchive(to: url, format: outputFormat, encryption: encryption,
-                               password: password, volumeSize: volumeSize)
+                               password: password, volumeSize: volumeSize, level: level)
         markSaved(as: url)
     }
 
     /// Re-guarda con los ajustes ya elegidos (botón Guardar de un documento existente).
     func save(to url: URL) async throws {
         try await save(to: url, format: saveFormat, encryption: saveEncryption,
-                       password: savePassword, volumeSize: saveVolumeSize)
+                       password: savePassword, volumeSize: saveVolumeSize, level: saveLevel)
     }
 
     /// Exporta el documento a `url` con el formato/cifrado/volúmenes elegidos **sin**
@@ -555,9 +560,10 @@ final class ArchiveDocument: ObservableObject {
     /// y su `sourceURL` intactos. Es la vía para cambiar cifrado/contraseña o convertir
     /// de formato escribiendo una copia aparte.
     func export(to url: URL, format outputFormat: ArchiveFormat,
-                encryption: ZipEncryption, password: String?, volumeSize: Int? = nil) async throws {
+                encryption: ZipEncryption, password: String?, volumeSize: Int? = nil,
+                level: CompressionLevel = .default) async throws {
         try await writeArchive(to: url, format: outputFormat, encryption: encryption,
-                               password: password, volumeSize: volumeSize)
+                               password: password, volumeSize: volumeSize, level: level)
     }
 
     // MARK: - Navegación del árbol

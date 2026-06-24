@@ -71,6 +71,11 @@ struct SaveOptionsSheet: View {
                 Picker(loc("save.format"), selection: $coord.format) {
                     ForEach(formats, id: \.self) { Text(loc($0.nameKey)).tag($0) }
                 }
+                if coord.format.honorsCompressionLevel {
+                    Picker(loc("save.level"), selection: $coord.level) {
+                        ForEach(CompressionLevel.allCases, id: \.self) { Text(loc($0.nameKey)).tag($0) }
+                    }
+                }
                 if coord.format.supportsEncryption {
                     Picker(loc("save.encryption"), selection: $coord.encryption) {
                         Text(loc("save.encryption.none")).tag(ZipEncryption.none)

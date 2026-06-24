@@ -112,11 +112,13 @@ public enum LibArchive {
     /// Formatos de escritura que soporta la libarchive de Apple.
     public enum WriteFormat: Sendable {
         case sevenZip, iso, xar
-        func apply(_ a: OpaquePointer) {
+        func apply(_ a: OpaquePointer, level: CompressionLevel) {
             switch self {
             case .sevenZip:
                 archive_write_set_format_7zip(a)
-                _ = "7zip:compression=lzma2".withCString { archive_write_set_options(a, $0) }
+                // lzma2 + nivel 0–9: el único formato de libarchive con compresión regulable aquí.
+                _ = "7zip:compression=lzma2,compression-level=\(level.libArchiveLevel)"
+                    .withCString { archive_write_set_options(a, $0) }
             case .iso: archive_write_set_format_iso9660(a)
             case .xar: archive_write_set_format_xar(a)
             }
@@ -125,10 +127,11 @@ public enum LibArchive {
 
     /// Escribe un archivo (7z/iso/xar) en `url`. **En claro**: el escritor de 7z de
     /// libarchive no cifra (el cifrado de 7z solo está disponible en lectura).
-    public static func write(_ items: [WriteItem], to url: URL, format: WriteFormat = .sevenZip) throws {
+    public static func write(_ items: [WriteItem], to url: URL, format: WriteFormat = .sevenZip,
+                             level: CompressionLevel = .default) throws {
         guard let a = archive_write_new() else { throw LibArchiveError.writeFailed }
         defer { archive_write_free(a) }
-        format.apply(a)
+        format.apply(a, level: level)
         guard url.path.withCString({ archive_write_open_filename(a, $0) }) == OK else {
             throw LibArchiveError.writeFailed
         }

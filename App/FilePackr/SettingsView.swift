@@ -58,6 +58,9 @@ struct SettingsView: View {
                     Text(loc("save.encryption.weak")).tag(ZipEncryption.zipCrypto)
                     Text(loc("save.encryption.strong")).tag(ZipEncryption.aes256)
                 }
+                Picker(loc("settings.defaultLevel"), selection: $settings.defaultCompressionLevel) {
+                    ForEach(CompressionLevel.allCases, id: \.self) { Text(loc($0.nameKey)).tag($0) }
+                }
             }
 
             Section {

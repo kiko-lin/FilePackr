@@ -16,7 +16,7 @@ enum SavePayload: Sendable {
     /// un fichero de disco).
     case stream(write: @Sendable (FileHandle) throws -> Void)
     /// Formatos de libarchive (7z/iso/xar): se escriben directamente a un fichero.
-    case libArchive(items: [LibArchive.WriteItem], format: LibArchive.WriteFormat)
+    case libArchive(items: [LibArchive.WriteItem], format: LibArchive.WriteFormat, level: CompressionLevel)
 }
 
 /// Codifica un `SavePayload` en el fichero de trabajo, en segundo plano. `work` es un
@@ -39,8 +39,8 @@ enum ArchiveSaver {
                 try make().write(to: work)
             case .stream(let write):
                 try writeToFile(work, write)
-            case .libArchive(let items, let format):
-                try LibArchive.write(items, to: work, format: format)
+            case .libArchive(let items, let format, let level):
+                try LibArchive.write(items, to: work, format: format, level: level)
             }
         }.value
     }

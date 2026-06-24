@@ -259,6 +259,7 @@ final class SaveCoordinator: ObservableObject {
     @Published var destination = FileManager.default.homeDirectoryForCurrentUser
     @Published var format: ArchiveFormat = .zip
     @Published var encryption: ZipEncryption = .none
+    @Published var level: CompressionLevel = .default
     @Published var password = ""
     @Published var splitEnabled = false
     @Published var volumeSize: Double = 100
@@ -270,7 +271,8 @@ final class SaveCoordinator: ObservableObject {
     /// Ejecuta el guardado/exportación a `url`. Devuelve `true` si el documento quedó guardado
     /// (para encadenar la acción pendiente). La implementa la vista.
     typealias Perform = (_ isExport: Bool, _ url: URL, _ format: ArchiveFormat,
-                         _ encryption: ZipEncryption, _ password: String?, _ volumeSize: Int?) async -> Bool
+                         _ encryption: ZipEncryption, _ password: String?, _ volumeSize: Int?,
+                         _ level: CompressionLevel) async -> Bool
 
     /// Prerrellena con nombre/carpeta y el formato/cifrado/volúmenes actuales (documento nuevo:
     /// defaults de Ajustes; abierto: lo que traía el archivo).
@@ -281,6 +283,7 @@ final class SaveCoordinator: ObservableObject {
         if fmt.isSingleFileOnly && !doc.isSingleFile { fmt = .zip }  // gz/xz/bz2 solo si es un fichero
         format = fmt
         encryption = isNew ? settings.defaultEncryption : doc.saveEncryption
+        level = isNew ? settings.defaultCompressionLevel : doc.saveLevel
         password = ""
         name = baseName
         destination = doc.sourceURL?.deletingLastPathComponent()
@@ -337,8 +340,9 @@ final class SaveCoordinator: ObservableObject {
         let volumes = (splitEnabled && format.supportsVolumeSplit && volumeSize > 0)
             ? Int(volumeSize * Double(volumeUnit.multiplier)) : nil
         let fmt = format
+        let lvl = format.honorsCompressionLevel ? level : .default
         Task {
-            let saved = await perform(exporting, url, fmt, cipher, pwd, volumes)
+            let saved = await perform(exporting, url, fmt, cipher, pwd, volumes, lvl)
             if !exporting {
                 let after = pendingAfterSave
                 pendingAfterSave = nil

@@ -567,14 +567,14 @@ struct ContentView: View {
     /// Escribe el guardado/exportación a la `url` resuelta por la hoja, con las opciones
     /// elegidas. La inyecta `saveCoord.confirm`; devuelve `true` si el documento quedó guardado.
     private func runSave(isExport: Bool, url: URL, format: ArchiveFormat, encryption: ZipEncryption,
-                         password: String?, volumeSize: Int?) async -> Bool {
+                         password: String?, volumeSize: Int?, level: CompressionLevel) async -> Bool {
         await runAsync {
             if isExport {
                 try await doc.export(to: url, format: format, encryption: encryption,
-                                     password: password, volumeSize: volumeSize)
+                                     password: password, volumeSize: volumeSize, level: level)
             } else {
                 try await doc.save(to: url, format: format, encryption: encryption,
-                                   password: password, volumeSize: volumeSize)
+                                   password: password, volumeSize: volumeSize, level: level)
             }
         }
         return !doc.hasUnsavedChanges

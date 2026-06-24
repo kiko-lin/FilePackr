@@ -37,6 +37,13 @@ public enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
     /// Formatos de un solo fichero (gzip/xz/bzip2): solo si el documento es un fichero.
     public var isSingleFileOnly: Bool { self == .gzip || self == .xz || self == .bzip2 }
 
+    /// Formatos cuyo nivel de compresión es efectivo **hoy**: bzip2 (vía `blockSize`) y 7z
+    /// (vía la opción `compression-level` de libarchive). ZIP/gzip/xz pasan por el framework
+    /// `Compression` de Apple, que no expone nivel; se sumarán al migrar a zlib/liblzma.
+    public var honorsCompressionLevel: Bool {
+        self == .bzip2 || self == .tarBzip2 || self == .sevenZip
+    }
+
     /// `false` para formatos solo de lectura (rar propietario; cpio/lha/cab no se escriben).
     public var isWritable: Bool { ![.rar, .cpio, .lha, .cab].contains(self) }
 
