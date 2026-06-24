@@ -1,29 +1,23 @@
 import Foundation
 import Compression
 
-/// Compresión/descompresión DEFLATE en crudo (RFC 1951), que es la que usa el
-/// formato ZIP. Se apoya en el framework `Compression` de Apple: el algoritmo
-/// `COMPRESSION_ZLIB` produce/consume DEFLATE sin la cabecera zlib.
+/// Compresión/descompresión DEFLATE en crudo (RFC 1951), que es la que usa el formato ZIP.
+/// Al **escribir** se usa la zlib del sistema (`Zlib`), que admite **nivel** 0–9; al **leer**
+/// se sigue usando el framework `Compression` de Apple (`COMPRESSION_ZLIB`, que produce/consume
+/// DEFLATE sin la cabecera zlib y no necesita nivel).
 enum Deflate {
 
-    /// Comprime `input` con DEFLATE. Devuelve `nil` si no logra reducir el tamaño
-    /// (en ese caso conviene almacenar sin comprimir, método 0).
-    static func compress(_ input: Data) -> Data? {
+    /// Comprime `input` con DEFLATE al `level` indicado. Devuelve `nil` si no logra reducir el
+    /// tamaño (en ese caso conviene almacenar sin comprimir, método 0).
+    static func compress(_ input: Data, level: CompressionLevel = .default) -> Data? {
         guard !input.isEmpty else { return nil }
-        let dstCapacity = input.count + 64
-        var dst = Data(count: dstCapacity)
-
-        let written = dst.withUnsafeMutableBytes { dstRaw -> Int in
-            input.withUnsafeBytes { srcRaw in
-                compression_encode_buffer(
-                    dstRaw.bindMemory(to: UInt8.self).baseAddress!, dstCapacity,
-                    srcRaw.bindMemory(to: UInt8.self).baseAddress!, input.count,
-                    nil, COMPRESSION_ZLIB
-                )
-            }
-        }
-        guard written > 0, written < input.count else { return nil }
-        return dst.prefix(written)
+        var out = Data()
+        do {
+            try Zlib.encode(level: level.zlibLevel, next: CompressionStream.once(input),
+                            sink: { out.append($0) })
+        } catch { return nil }
+        guard !out.isEmpty, out.count < input.count else { return nil }
+        return out
     }
 
     /// Ratio de compresión máximo de DEFLATE (~1032:1). Un tamaño declarado mayor que

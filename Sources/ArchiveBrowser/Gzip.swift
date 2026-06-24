@@ -14,11 +14,14 @@ public enum Gzip {
     /// salida por trozos (`sink`). Calcula CRC-32 y tamaño al vuelo para el footer. Los
     /// adaptadores en memoria / fichero / pipe (tar.gz) cuelgan de aquí.
     public static func compress(next: () throws -> Data?, sink: (Data) throws -> Void,
-                                filename: String? = nil, mtime: Date? = nil) throws {
+                                filename: String? = nil, mtime: Date? = nil,
+                                level: CompressionLevel = .default) throws {
         try sink(header(filename: filename, mtime: mtime))
         var crc = CRC32.Accumulator()
         var size: UInt64 = 0
-        try CompressionStream.run(operation: COMPRESSION_STREAM_ENCODE, algorithm: COMPRESSION_ZLIB,
+        // Cuerpo DEFLATE en crudo vía zlib (con nivel); el framing gzip (cabecera + CRC + ISIZE)
+        // lo seguimos poniendo nosotros, así no cambia la interoperabilidad del `.gz`.
+        try Zlib.encode(level: level.zlibLevel,
             next: {
                 guard let chunk = try next() else { return nil }
                 crc.update(chunk)
@@ -36,19 +39,21 @@ public enum Gzip {
     }
 
     /// Comprime `data` a un flujo gzip (en memoria). `filename` opcional va en la cabecera.
-    public static func compress(_ data: Data, filename: String? = nil, mtime: Date? = nil) -> Data {
+    public static func compress(_ data: Data, filename: String? = nil, mtime: Date? = nil,
+                                level: CompressionLevel = .default) -> Data {
         var out = Data()
         do { try compress(next: CompressionStream.once(data), sink: { out.append($0) },
-                          filename: filename, mtime: mtime) } catch { return Data() }
+                          filename: filename, mtime: mtime, level: level) } catch { return Data() }
         return out
     }
 
     /// Comprime de `input` a `output` en **streaming** (memoria constante): produce el
     /// mismo flujo gzip que `compress(_:)` pero sin cargar el fichero entero en RAM.
     public static func compress(from input: FileHandle, to output: FileHandle,
-                                filename: String? = nil, mtime: Date? = nil) throws {
+                                filename: String? = nil, mtime: Date? = nil,
+                                level: CompressionLevel = .default) throws {
         try compress(next: CompressionStream.reader(input), sink: { try output.write(contentsOf: $0) },
-                     filename: filename, mtime: mtime)
+                     filename: filename, mtime: mtime, level: level)
     }
 
     /// Cabecera gzip (RFC 1952): magic + método + flags + MTIME + nombre opcional.

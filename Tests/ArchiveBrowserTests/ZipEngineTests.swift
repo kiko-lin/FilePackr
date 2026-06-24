@@ -19,6 +19,33 @@ final class ZipEngineTests: XCTestCase {
         ZipEntryInput(path: path, modifiedAt: nil, source: .directory)
     }
 
+    func testCompressionLevelAffectsSizeAndRoundTrips() throws {
+        // Datos compresibles pero no triviales (texto pseudo-variado) para que el nivel
+        // marque diferencia real de tamaño entre rápido y máximo.
+        var bytes = [UInt8]()
+        for i in 0..<4000 {
+            let v: Int = (i * 37 + (i % 7) * 11) % 97 + 32
+            bytes.append(UInt8(v))
+        }
+        let payload = Data(bytes)
+        func zip(_ level: CompressionLevel) throws -> Data {
+            try writer.build([dataInput("a.txt", payload)], level: level)
+        }
+        let fast = try zip(.fast)
+        let maximum = try zip(.maximum)
+
+        // Máximo no debe ser mayor que rápido, y al menos un nivel debe comprimir de verdad.
+        XCTAssertLessThanOrEqual(maximum.count, fast.count)
+        XCTAssertLessThan(maximum.count, payload.count)
+
+        // Ambos round-trip al texto original (zlib comprime, el framework de Apple lee).
+        for data in [fast, maximum] {
+            let entry = try XCTUnwrap(try reader.listEntries(in: data).first)
+            XCTAssertEqual(entry.zip?.compressionMethod, 8)
+            XCTAssertEqual(try extractor.extractedData(for: entry, in: data), payload)
+        }
+    }
+
     func testCreateReadAndExtractRoundTrip() throws {
         let texto = Data(String(repeating: "contenido repetido ", count: 100).utf8)
         let binario = Data((0..<32).map { UInt8($0) })

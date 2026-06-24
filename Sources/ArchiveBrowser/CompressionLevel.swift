@@ -27,4 +27,13 @@ public enum CompressionLevel: String, Sendable, CaseIterable, Hashable {
         case .maximum: return 9
         }
     }
+
+    /// zlib: nivel DEFLATE 0–9 para ZIP y gzip. `normal` usa 6, el `Z_DEFAULT_COMPRESSION`.
+    public var zlibLevel: Int32 {
+        switch self {
+        case .fast: return 1
+        case .normal: return 6
+        case .maximum: return 9
+        }
+    }
 }

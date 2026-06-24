@@ -31,7 +31,11 @@ final class ZipCryptoTests: XCTestCase {
     }
 
     func testRoundTrip() throws {
-        let payload = Data("ida y vuelta con ZipCrypto ñ áé".utf8)
+        // Payload compresible (se repite) para que la entrada vaya en DEFLATE: así una clave
+        // incorrecta corrompe el flujo deflate y el rechazo es determinista. Con datos
+        // incompresibles iría en *store* y ZipCrypto solo detectaría por el byte de
+        // verificación (1/256 de falso positivo), haciendo el test inestable.
+        let payload = Data(String(repeating: "ida y vuelta con ZipCrypto ñ áé ", count: 20).utf8)
         let zip = try writer.build([ZipEntryInput(path: "a.txt", modifiedAt: nil, source: .data(payload))],
                                    encryption: .zipCrypto, password: "clave")
         let entry = try XCTUnwrap(try reader.listEntries(in: zip).first)

@@ -6,8 +6,8 @@ import ArchiveBrowser
 /// segundo plano. Así el documento no conoce la mecánica de ficheros temporales ni el
 /// streaming de ZIP, y el saver no toca el árbol (que es `@MainActor`).
 enum SavePayload: Sendable {
-    /// ZIP: entradas ya resueltas (ficheros al vuelo o bytes en crudo) + cifrado.
-    case zip(inputs: [ZipEntryInput], encryption: ZipEncryption, password: String?)
+    /// ZIP: entradas ya resueltas (ficheros al vuelo o bytes en crudo) + cifrado + nivel.
+    case zip(inputs: [ZipEntryInput], encryption: ZipEncryption, password: String?, level: CompressionLevel)
     /// Formatos que se producen como un único `Data` (tar/tar.gz/tar.xz/tar.bz2/gz/xz/bz2).
     /// El cómputo va diferido en un cierre `@Sendable` para ejecutarse en segundo plano.
     case data(@Sendable () throws -> Data)
@@ -30,10 +30,10 @@ enum ArchiveSaver {
                        progress: @escaping @Sendable (Double) -> Void) async throws {
         try await Task.detached(priority: .userInitiated) {
             switch payload {
-            case .zip(let inputs, let encryption, let password):
+            case .zip(let inputs, let encryption, let password, let level):
                 try writeToFile(work) { handle in
                     try ZipWriter().write(inputs, to: handle, encryption: encryption,
-                                          password: password, progress: progress)
+                                          password: password, level: level, progress: progress)
                 }
             case .data(let make):
                 try make().write(to: work)

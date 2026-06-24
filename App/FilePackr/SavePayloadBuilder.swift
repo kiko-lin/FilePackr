@@ -63,7 +63,7 @@ nonisolated struct SavePayloadBuilder: Sendable {
                  level: CompressionLevel = .default) throws -> SavePayload {
         switch outputFormat {
         case .zip:
-            return .zip(inputs: zipInputs(), encryption: encryption, password: password)
+            return .zip(inputs: zipInputs(), encryption: encryption, password: password, level: level)
         case .tar:
             let items = tarItems()
             return .stream { handle in
@@ -74,7 +74,8 @@ nonisolated struct SavePayloadBuilder: Sendable {
             let items = tarItems()
             let name = documentName.isEmpty ? nil : documentName
             return .stream { handle in
-                try Gzip.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) }, filename: name)
+                try Gzip.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) },
+                                  filename: name, level: level)
             }
         case .tarXz:
             let items = tarItems()
@@ -91,8 +92,8 @@ nonisolated struct SavePayloadBuilder: Sendable {
             guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
             let name = node.name
             return try singleFilePayload(node,
-                stream: { try Gzip.compress(from: $0, to: $1, filename: name) },
-                memory: { Gzip.compress($0, filename: name) })
+                stream: { try Gzip.compress(from: $0, to: $1, filename: name, level: level) },
+                memory: { Gzip.compress($0, filename: name, level: level) })
         case .xz:
             guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
             return try singleFilePayload(node, stream: { try Xz.compress(from: $0, to: $1) },
