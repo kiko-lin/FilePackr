@@ -24,19 +24,19 @@ struct FileFormatsSettingsView: View {
 
             List {
                 ForEach(formats, id: \.self) { format in
-                    Toggle(isOn: binding(for: format)) {
-                        HStack(spacing: 10) {
-                            Image(nsImage: NSImage(named: format.iconAssetName) ?? NSImage())
-                                .resizable().scaledToFit()
-                                .frame(width: 28, height: 28)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(loc(format.nameKey))
-                                Text(format.displayExtensions)
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
+                    HStack(spacing: 10) {
+                        Toggle(isOn: binding(for: format)) { }
+                            .toggleStyle(.checkbox)
+                            .labelsHidden()
+                        Image(nsImage: NSImage(named: format.iconAssetName) ?? NSImage())
+                            .resizable().scaledToFit()
+                            .frame(width: 28, height: 28)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(loc(format.nameKey))
+                            Text(format.displayExtensions)
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     }
-                    .toggleStyle(.checkbox)
                 }
             }
             .listStyle(.inset)
