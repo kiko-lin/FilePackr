@@ -33,6 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = false
     }
 
+    /// Cerrar la última ventana cierra la app (utilidad de una sola ventana): evita que el
+    /// proceso quede vivo de fondo, p. ej. con una extracción aún corriendo.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let edited = sender.windows.first(where: { $0.isDocumentEdited }) else { return .terminateNow }
         UnsavedChangesAlert.present(on: sender.keyWindow ?? edited) { choice in

@@ -432,27 +432,46 @@ final class ArchiveDocument: ObservableObject {
 
     /// Escribe un plan en una ruta destino concreta (en segundo plano, con progreso),
     /// opcionalmente sobrescribiendo.
-    /// `true` mientras una extracción (botón Extraer) está en curso y se puede cancelar.
-    /// La vista lo usa para mostrar la (X) del overlay solo en ese caso.
+    /// `true` mientras hay una extracción cancelable en curso (botón Extraer **o** arrastre al
+    /// Finder). La vista lo usa para mostrar la (X) del overlay.
     @Published private(set) var extractionCancellable = false
-    private var extractionTask: Task<Void, Error>?
+    /// Token de la extracción activa; lo comparte la ruta de fondo que descomprime.
+    private var cancelToken: CancelToken?
+
+    /// Registra una extracción cancelable y prepara el progreso. Lo llaman ambas rutas (el
+    /// botón aquí mismo; el arrastre al Finder desde el delegado de promesas). Hilo principal.
+    func registerExtraction(token: CancelToken, total: Int64) {
+        cancelToken = token
+        extractionCancellable = true
+        // Determinado si conocemos el tamaño total; si no (entradas sin tamaño), indeterminado.
+        progress = ProgressState(kind: .extracting, fraction: total > 0 ? 0 : nil)
+    }
+
+    /// Fin de la extracción: limpia progreso, flag y token.
+    func endExtraction() {
+        progress = nil
+        extractionCancellable = false
+        cancelToken = nil
+    }
+
+    /// Cancela la extracción en curso (X del overlay o cierre de la ventana): la descompresión
+    /// aborta en el siguiente trozo y `writeFileAtomically` descarta el temporal a medias.
+    func cancelExtraction() { cancelToken?.cancel() }
 
     func performExtraction(of plan: ExportPlan, to destination: URL, overwrite: Bool) async throws {
         if overwrite, FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
         let total = plan.byteCount()
-        // Determinado si conocemos el tamaño total; si no (entradas sin tamaño), indeterminado.
-        progress = ProgressState(kind: .extracting, fraction: total > 0 ? 0 : nil)
-        extractionCancellable = true
-        defer { progress = nil; extractionCancellable = false; extractionTask = nil }
+        let token = CancelToken()
+        registerExtraction(token: token, total: total)
+        defer { endExtraction() }
 
-        // Tarea separada (cancelable): la descompresión comprueba `Task.isCancelled` en cada
-        // trozo y lanza `CancellationError`, que `writeFileAtomically` convierte en descarte
-        // limpio del temporal. Coalescemos progreso/nombre a saltos del ~1% para no saturar main.
-        let task = Task.detached(priority: .userInitiated) {
+        // Tarea separada (fondo): la descompresión consulta el token en cada trozo y lanza
+        // `CancellationError` al cancelar. Coalescemos progreso/nombre a saltos del ~1%.
+        try await Task.detached(priority: .userInitiated) {
             guard total > 0 else {
-                try plan.writeContents(to: destination, isCancelled: { Task.isCancelled })
+                try plan.writeContents(to: destination, isCancelled: { token.isCancelled })
                 return
             }
             var done: Int64 = 0
@@ -466,15 +485,9 @@ final class ArchiveDocument: ObservableObject {
                     self.progress?.fraction = fraction
                     self.progress?.detail = name
                 }
-            }, isCancelled: { Task.isCancelled })
-        }
-        extractionTask = task
-        try await task.value
+            }, isCancelled: { token.isCancelled })
+        }.value
     }
-
-    /// Cancela la extracción en curso (botón X del overlay): aborta en el siguiente trozo y
-    /// descarta el temporal a medias. La acción cancelada propaga `CancellationError`.
-    func cancelExtraction() { extractionTask?.cancel() }
 
     /// Crea un plan de exportación ligero (sin tocar disco) para arrastrar al
     /// Finder. La extracción real ocurre luego, en segundo plano, al soltar.

@@ -95,3 +95,13 @@ struct ProgressState {
     var fraction: Double?   // nil = indeterminado
     var detail: String?     // nombre del fichero en curso (p. ej. al extraer), opcional
 }
+
+/// Señal de cancelación **hilo-segura**, compartida por las dos rutas de extracción (botón
+/// Extraer y arrastre al Finder): se marca desde el hilo principal (al pulsar la X o cerrar la
+/// ventana) y se consulta desde el hilo de fondo que descomprime, en cada trozo.
+nonisolated final class CancelToken: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+}

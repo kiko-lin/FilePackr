@@ -142,6 +142,11 @@ struct ContentView: View {
             handleOpen([url])
         }
         .onAppear { promptDefaultCompressorIfNeeded() }
+        .onDisappear {
+            // Al cerrar la ventana, no dejar la descompresión corriendo de fondo.
+            doc.cancelExtraction()
+            extractCoord.cancelBatch()
+        }
     }
 
     /// Primer arranque: ofrece (una sola vez) hacer de FilePackr el compresor por defecto.

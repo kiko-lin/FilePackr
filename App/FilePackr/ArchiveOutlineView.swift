@@ -551,13 +551,16 @@ extension ArchiveOutlineView {
                                  completionHandler: @escaping (Error?) -> Void) {
             guard let plan = filePromiseProvider.userInfo as? ExportPlan else { completionHandler(nil); return }
             let total = plan.byteCount()
-            Task { @MainActor in doc.progress = ProgressState(kind: .extracting, fraction: total > 0 ? 0 : nil) }
-            defer { Task { @MainActor in doc.progress = nil } }
+            // Registramos la extracción en el documento (en main) para mostrar la barra y la (X)
+            // de cancelar; el token se consulta aquí, en el hilo de fondo, en cada trozo.
+            let token = CancelToken()
+            Task { @MainActor in doc.registerExtraction(token: token, total: total) }
+            defer { Task { @MainActor in doc.endExtraction() } }
             do {
                 if total > 0 {
                     var done: Int64 = 0
                     var lastReported = 0.0
-                    try plan.writeContents(to: url) { name, bytes in
+                    try plan.writeContents(to: url, onProgress: { name, bytes in
                         done += bytes
                         let fraction = min(1, Double(done) / Double(total))
                         guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
@@ -566,9 +569,9 @@ extension ArchiveOutlineView {
                             doc.progress?.fraction = fraction
                             doc.progress?.detail = name
                         }
-                    }
+                    }, isCancelled: { token.isCancelled })
                 } else {
-                    try plan.writeContents(to: url)
+                    try plan.writeContents(to: url, isCancelled: { token.isCancelled })
                 }
                 completionHandler(nil)
             } catch {
