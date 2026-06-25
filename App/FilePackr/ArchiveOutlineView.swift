@@ -195,25 +195,40 @@ extension ArchiveOutlineView {
             return sortedForDisplay(base)
         }
 
-        /// Orden solo para mostrar: no toca el modelo (evita publicar en el render).
+        /// Orden solo para mostrar: no toca el modelo (evita publicar en el render). La clave de
+        /// orden se calcula **una vez por nodo** (decorate-sort), no en cada comparación: la de
+        /// "Clase" (`kindDescription`, con `UTType`) es costosa y, llamada O(n log n) veces con
+        /// muchos ficheros, colgaba la app.
         private func sortedForDisplay(_ nodes: [FileNode]) -> [FileNode] {
             guard let sort = currentSort else { return nodes }
-            return nodes.sorted { a, b in
-                let ascending: Bool
-                switch sort.key {
-                case "date":
-                    ascending = (a.modificationDate ?? .distantPast) < (b.modificationDate ?? .distantPast)
-                case "size":
-                    ascending = (a.fileSize ?? 0) < (b.fileSize ?? 0)
-                case "csize":
-                    ascending = (a.compressedSize ?? 0) < (b.compressedSize ?? 0)
-                case "kind":
-                    ascending = kindDescription(for: a).localizedStandardCompare(kindDescription(for: b)) == .orderedAscending
-                default:
-                    ascending = a.name.localizedStandardCompare(b.name) == .orderedAscending
-                }
-                return sort.ascending ? ascending : !ascending
+            switch sort.key {
+            case "date":  return sortedByComparable(nodes, sort.ascending) { $0.modificationDate ?? .distantPast }
+            case "size":  return sortedByComparable(nodes, sort.ascending) { $0.fileSize ?? 0 }
+            case "csize": return sortedByComparable(nodes, sort.ascending) { $0.compressedSize ?? 0 }
+            case "kind":  return sortedByString(nodes, sort.ascending) { kindDescription(for: $0) }
+            default:      return sortedByString(nodes, sort.ascending) { $0.name }
             }
+        }
+
+        /// Decorate-sort por una clave `Comparable`. Ante empate no declara orden (orden débil
+        /// estricto: si no, en descendente devolvería `true` para (a,b) y (b,a) y el sort peta).
+        private func sortedByComparable<Key: Comparable>(_ nodes: [FileNode], _ ascending: Bool,
+                                                         key: (FileNode) -> Key) -> [FileNode] {
+            nodes.map { (node: $0, key: key($0)) }
+                .sorted { ascending ? $0.key < $1.key : $0.key > $1.key }
+                .map(\.node)
+        }
+
+        /// Decorate-sort por una clave de texto con comparación natural localizada.
+        private func sortedByString(_ nodes: [FileNode], _ ascending: Bool,
+                                    key: (FileNode) -> String) -> [FileNode] {
+            nodes.map { (node: $0, key: key($0)) }
+                .sorted {
+                    let r = $0.key.localizedStandardCompare($1.key)
+                    guard r != .orderedSame else { return false }
+                    return ascending ? (r == .orderedAscending) : (r == .orderedDescending)
+                }
+                .map(\.node)
         }
 
         // MARK: - Views
@@ -332,14 +347,22 @@ extension ArchiveOutlineView {
 
         /// Texto de la columna "Clase" ("Carpeta", "Imagen PNG"…), como en el Finder.
         /// Es formateo de presentación, así que vive en la vista, no en `FileNode`.
+        /// Caché de descripción de tipo por extensión (la resolución `UTType` es costosa y se
+        /// repite mucho al ordenar/renderizar). Usa el locale del sistema, estable en sesión.
+        private static var utTypeKindCache: [String: String] = [:]
+
         private func kindDescription(for node: FileNode) -> String {
             if node.isDirectory { return Localizer.shared("kind.folder") }
             let ext = (node.name as NSString).pathExtension
-            if !ext.isEmpty, let type = UTType(filenameExtension: ext), let desc = type.localizedDescription {
-                return desc.prefix(1).uppercased() + desc.dropFirst()
+            guard !ext.isEmpty else { return Localizer.shared("kind.document") }
+            let key = ext.lowercased()
+            if let cached = Self.utTypeKindCache[key] { return cached }
+            if let type = UTType(filenameExtension: ext), let desc = type.localizedDescription {
+                let formatted = desc.prefix(1).uppercased() + desc.dropFirst()
+                Self.utTypeKindCache[key] = formatted
+                return formatted
             }
-            return ext.isEmpty ? Localizer.shared("kind.document")
-                               : Localizer.shared("kind.documentExt", ext.uppercased())
+            return Localizer.shared("kind.documentExt", ext.uppercased())
         }
 
         // MARK: - Selección
