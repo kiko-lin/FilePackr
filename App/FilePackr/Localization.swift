@@ -183,6 +183,9 @@ private extension Localizer {
         "unsaved.title": "Do you want to save your changes?",
         "unsaved.message": "If you don't save them, your changes will be lost.",
         "unsaved.dontSave": "Close Without Saving",
+        "extract.close.title": "Close the window?",
+        "extract.close.message": "If you close this window, the extraction in progress will be cancelled.",
+        "extract.close.continue": "Continue",
 
         // Errors
         "error.title": "The operation could not be completed",
@@ -366,6 +369,9 @@ private extension Localizer {
         "unsaved.title": "¿Quieres guardar los cambios?",
         "unsaved.message": "Si no los guardas, se perderán.",
         "unsaved.dontSave": "Cerrar sin guardar",
+        "extract.close.title": "¿Cerrar la ventana?",
+        "extract.close.message": "Si cierras esta ventana se cancelará la extracción en curso.",
+        "extract.close.continue": "Continuar",
 
         // Errors
         "error.title": "No se pudo completar la operación",

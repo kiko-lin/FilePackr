@@ -53,7 +53,9 @@ struct ContentView: View {
         .ignoresSafeArea(.container, edges: .top)   // el contenido sube a la zona del título
         .preferredColorScheme(settings.theme.colorScheme)
         .background(WindowGuard(edited: doc.hasUnsavedChanges,
-                                onSave: { proceed in saveDocument(then: proceed) }))
+                                extracting: doc.extractionCancellable,
+                                onSave: { proceed in saveDocument(then: proceed) },
+                                onCancelExtraction: { cancelExtraction() }))
         .alert(loc("error.title"),
                isPresented: Binding(get: { errorMessage != nil },
                                     set: { if !$0 { errorMessage = nil } }),
@@ -253,45 +255,42 @@ struct ContentView: View {
     private var progressOverlay: some View {
         if let progress = doc.progress {
             ZStack {
-                // Fondo opaco: oculta por completo lo que haya debajo.
-                Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
-                VStack(spacing: 14) {
+                // Atenúa la app de fondo (sigue viéndose, sin taparla por completo).
+                Color.black.opacity(0.4).ignoresSafeArea()
+                // Tarjeta flotante compacta centrada con el progreso.
+                VStack(spacing: 16) {
                     VStack(spacing: 4) {
                         Text(progressLabel(progress.kind))
                             .font(.callout)
                             .foregroundStyle(.secondary)
-                        if let detail = progress.detail, !detail.isEmpty {
-                            Text(detail)
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .frame(maxWidth: 280)
-                        }
+                        // Reservamos siempre la línea del nombre (aunque esté vacía) para que la
+                        // caja no se agrande al aparecer el nombre del fichero.
+                        Text(progress.detail ?? " ")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 240)
                     }
                     if let fraction = progress.fraction {
                         ProgressView(value: fraction)
                             .progressViewStyle(.linear)
-                            .frame(width: 260)
+                            .frame(width: 240)
                     } else {
                         ProgressView()
-                            .controlSize(.large)
+                            .controlSize(.small)
+                    }
+                    // Botón "Cancelar" rojo con borde (destructivo), solo en extracción cancelable.
+                    if doc.extractionCancellable {
+                        Button(loc("button.cancel"), role: .destructive, action: cancelExtraction)
+                            .buttonStyle(.bordered)
                     }
                 }
-            }
-            // (X) para cancelar: solo durante una extracción cancelable (botón Extraer).
-            .overlay(alignment: .topTrailing) {
-                if doc.extractionCancellable {
-                    Button(action: cancelExtraction) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(18)
-                    .help(loc("button.cancel"))
-                }
+                .padding(.vertical, 24)
+                .padding(.horizontal, 28)
+                .frame(width: 320)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.08)))
             }
         }
     }

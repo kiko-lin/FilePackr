@@ -54,14 +54,20 @@ enum WindowSaveHandlers {
 /// mensajes al delegado original de SwiftUI para no romper su gestión de ventanas.
 struct WindowGuard: NSViewRepresentable {
     var edited: Bool
+    /// Hay una extracción en curso: cerrar la ventana debe pedir confirmación (la cancelaría).
+    var extracting: Bool
     /// Ejecuta el flujo de guardado de la vista; llama a la continuación al guardar con éxito.
     var onSave: (@escaping () -> Void) -> Void
+    /// Cancela la extracción en curso (al confirmar el cierre).
+    var onCancelExtraction: () -> Void
 
     func makeNSView(context: Context) -> NSView { NSView() }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         context.coordinator.edited = edited
+        context.coordinator.extracting = extracting
         context.coordinator.onSave = onSave
+        context.coordinator.onCancelExtraction = onCancelExtraction
         DispatchQueue.main.async { context.coordinator.attach(to: nsView.window) }
     }
 
@@ -69,7 +75,9 @@ struct WindowGuard: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSWindowDelegate {
         var edited = false { didSet { window?.isDocumentEdited = edited } }
+        var extracting = false
         var onSave: ((@escaping () -> Void) -> Void)?
+        var onCancelExtraction: (() -> Void)?
         private weak var window: NSWindow?
         private weak var previousDelegate: NSWindowDelegate?
 
@@ -90,6 +98,24 @@ struct WindowGuard: NSViewRepresentable {
         }
 
         func windowShouldClose(_ sender: NSWindow) -> Bool {
+            // Extracción en curso: cerrar la cancelaría → pedir confirmación.
+            if extracting {
+                let alert = NSAlert()
+                alert.messageText = Localizer.shared("extract.close.title")
+                alert.informativeText = Localizer.shared("extract.close.message")
+                alert.alertStyle = .warning
+                let cancel = alert.addButton(withTitle: Localizer.shared("button.cancel"))  // 1º = Intro: NO cerrar
+                cancel.keyEquivalent = "\u{1b}"                                              //   Escape también
+                let cont = alert.addButton(withTitle: Localizer.shared("extract.close.continue"))  // 2º: cerrar+cancelar
+                cont.hasDestructiveAction = true
+                alert.beginSheetModal(for: sender) { [weak self] response in
+                    if response == .alertSecondButtonReturn {
+                        self?.onCancelExtraction?()
+                        self?.forceClose(sender)
+                    }
+                }
+                return false
+            }
             guard edited else { return true }
             UnsavedChangesAlert.present(on: sender) { [weak self] choice in
                 switch choice {
