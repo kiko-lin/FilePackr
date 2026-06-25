@@ -149,6 +149,11 @@ extension ArchiveOutlineView {
         // Quick Look
         private var qlPlans: [ExportPlan] = []
         private var qlCache: [Int: URL] = [:]
+        /// Índices que se están materializando en segundo plano (evita relanzar el trabajo si
+        /// Quick Look vuelve a pedir el mismo elemento mientras se descomprime).
+        private var qlMaterializing: Set<Int> = []
+        /// Umbral para materializar en el acto (rápido, sin parpadeo) vs. en segundo plano.
+        private let qlInlineLimit: Int64 = 16 * 1024 * 1024
         var qlStartIndex = 0
 
         /// Cola **de fondo** para cumplir las promesas de fichero del Finder (extraer al
@@ -545,10 +550,23 @@ extension ArchiveOutlineView {
         func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, writePromiseTo url: URL,
                                  completionHandler: @escaping (Error?) -> Void) {
             guard let plan = filePromiseProvider.userInfo as? ExportPlan else { completionHandler(nil); return }
-            Task { @MainActor in doc.progress = ProgressState(kind: .extracting, fraction: nil) }
+            let total = plan.byteCount()
+            Task { @MainActor in doc.progress = ProgressState(kind: .extracting, fraction: total > 0 ? 0 : nil) }
             defer { Task { @MainActor in doc.progress = nil } }
             do {
-                try plan.writeContents(to: url)
+                if total > 0 {
+                    var done: Int64 = 0
+                    var lastReported = 0.0
+                    try plan.writeContents(to: url) { bytes in
+                        done += bytes
+                        let fraction = min(1, Double(done) / Double(total))
+                        guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
+                        lastReported = fraction
+                        Task { @MainActor in doc.progress?.fraction = fraction }
+                    }
+                } else {
+                    try plan.writeContents(to: url)
+                }
                 completionHandler(nil)
             } catch {
                 completionHandler(error)
@@ -582,9 +600,27 @@ extension ArchiveOutlineView {
 
         func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
             if let url = qlCache[index] { return url as NSURL }
-            let url = (try? qlPlans[index].materialize()) ?? URL(fileURLWithPath: "/dev/null")
-            qlCache[index] = url
-            return url as NSURL
+            let plan = qlPlans[index]
+            // Ficheros pequeños: materializar al momento (preview instantáneo, sin parpadeo).
+            // Grandes: descomprimir en segundo plano para no bloquear el hilo principal,
+            // devolviendo un marcador y recargando el panel al terminar.
+            if plan.byteCount() <= qlInlineLimit {
+                let url = (try? plan.materialize()) ?? URL(fileURLWithPath: "/dev/null")
+                qlCache[index] = url
+                return url as NSURL
+            }
+            if !qlMaterializing.contains(index) {
+                qlMaterializing.insert(index)
+                promiseQueue.addOperation {
+                    let url = (try? plan.materialize()) ?? URL(fileURLWithPath: "/dev/null")
+                    OperationQueue.main.addOperation {
+                        self.qlCache[index] = url
+                        self.qlMaterializing.remove(index)
+                        QLPreviewPanel.shared()?.reloadData()
+                    }
+                }
+            }
+            return URL(fileURLWithPath: "/dev/null") as NSURL
         }
     }
 }

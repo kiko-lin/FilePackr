@@ -28,35 +28,46 @@ struct ExportPlan: Sendable {
         return destination
     }
 
-    /// Número de ficheros (hojas) que contiene, para calcular el progreso.
-    nonisolated func fileCount() -> Int {
+    /// Tamaño total **descomprimido** en bytes, para una barra de progreso fina (incluido el
+    /// caso de un único fichero enorme). `0` si no se conoce (entradas sin tamaño declarado):
+    /// el consumidor cae entonces a un indicador indeterminado.
+    nonisolated func byteCount() -> Int64 {
         switch payload {
-        case .folder(let children): return children.reduce(0) { $0 + $1.fileCount() }
-        case .diskFile, .archiveEntry: return 1
+        case .folder(let children): return children.reduce(0) { $0 + $1.byteCount() }
+        case .diskFile(let url): return Self.fileSize(url)
+        case .archiveEntry(let entry, _, _, _): return Int64(entry.uncompressedSize)
         }
     }
 
-    /// Escribe el contenido en la ruta `destination` (nombre final incluido).
-    /// Llama a `onFile` tras escribir cada fichero (para reportar progreso).
-    nonisolated func writeContents(to destination: URL, onFile: () -> Void = {}) throws {
+    nonisolated private static func fileSize(_ url: URL) -> Int64 {
+        Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+    }
+
+    /// Escribe el contenido en la ruta `destination` (nombre final incluido). `onBytes` recibe
+    /// los bytes descomprimidos a medida que se escriben (por trozos, en streaming), para
+    /// reportar progreso fino. Quien lo consuma debe **acumular y coalescer** (p. ej. a saltos
+    /// del 1 %): aquí se llama por cada trozo, que con ficheros grandes son muchos.
+    nonisolated func writeContents(to destination: URL, onBytes: (Int64) -> Void = { _ in }) throws {
         switch payload {
         case .folder(let children):
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
             for child in children {
-                try child.writeContents(to: destination.appendingPathComponent(child.name), onFile: onFile)
+                try child.writeContents(to: destination.appendingPathComponent(child.name), onBytes: onBytes)
             }
         case .diskFile(let url):
             try FileManager.default.copyItem(at: url, to: destination)
-            onFile()
+            onBytes(Self.fileSize(url))   // copyItem no es por trozos: un único salto al acabar
         case .archiveEntry(let entry, let archive, let password, let format):
             // Extracción en **streaming**: la salida descomprimida no se materializa en RAM.
             // Se escribe a un temporal y se mueve al final (atomicidad + limpieza si falla,
             // p. ej. si el MAC de AES no cuadra a mitad).
             try writeFileAtomically(to: destination) { handle in
                 try format.codec.extract(entry, in: archive, password: password,
-                                         sink: { try handle.write(contentsOf: $0) })
+                                         sink: { chunk in
+                                             try handle.write(contentsOf: chunk)
+                                             onBytes(Int64(chunk.count))
+                                         })
             }
-            onFile()
         }
     }
 }

@@ -436,22 +436,23 @@ final class ArchiveDocument: ObservableObject {
         if overwrite, FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
-        let total = max(1, plan.fileCount())
-        progress = ProgressState(kind: .extracting, fraction: 0)
+        let total = plan.byteCount()
+        // Determinado si conocemos el tamaño total; si no (entradas sin tamaño), indeterminado.
+        progress = ProgressState(kind: .extracting, fraction: total > 0 ? 0 : nil)
         defer { progress = nil }
         try await runExtraction(plan, to: destination, total: total)
     }
 
-    nonisolated private func runExtraction(_ plan: ExportPlan, to destination: URL, total: Int) async throws {
+    nonisolated private func runExtraction(_ plan: ExportPlan, to destination: URL, total: Int64) async throws {
         try await Task.detached(priority: .userInitiated) {
-            var done = 0
+            guard total > 0 else { try plan.writeContents(to: destination); return }
+            var done: Int64 = 0
             var lastReported = 0.0
-            try plan.writeContents(to: destination) {
-                done += 1
-                let fraction = Double(done) / Double(total)
-                // Coalescer a saltos de ~1% (igual que la apertura): con muchísimos ficheros
-                // pequeños, un hop al main actor por cada uno satura el hilo principal sin
-                // que el usuario perciba la diferencia.
+            try plan.writeContents(to: destination) { bytes in
+                done += bytes
+                let fraction = min(1, Double(done) / Double(total))
+                // Coalescer a saltos de ~1%: con un fichero grande son miles de trozos, y un
+                // hop al main actor por cada uno saturaría el hilo principal sin verse mejor.
                 guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
                 lastReported = fraction
                 Task { @MainActor in self.progress?.fraction = fraction }
