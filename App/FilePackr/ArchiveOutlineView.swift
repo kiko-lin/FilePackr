@@ -151,7 +151,16 @@ extension ArchiveOutlineView {
         private var qlCache: [Int: URL] = [:]
         var qlStartIndex = 0
 
-        private let promiseQueue = OperationQueue.main
+        /// Cola **de fondo** para cumplir las promesas de fichero del Finder (extraer al
+        /// soltar). Antes era `.main`, lo que descomprimía en el hilo principal y bloqueaba la
+        /// app (bola de colores) con archivos grandes. En serie para no lanzar N descompresiones
+        /// a la vez al arrastrar varios elementos.
+        private let promiseQueue: OperationQueue = {
+            let queue = OperationQueue()
+            queue.qualityOfService = .userInitiated
+            queue.maxConcurrentOperationCount = 1
+            return queue
+        }()
 
         init(doc: ArchiveDocument, onExtract: @escaping (FileNode) -> Void,
              onNeedPassword: @escaping () -> Void,
@@ -474,7 +483,9 @@ extension ArchiveOutlineView {
                 return nil
             }
             let provider = NSFilePromiseProvider(fileType: utType(for: node).identifier, delegate: self)
-            provider.userInfo = node
+            // Construimos aquí (en el hilo principal, con acceso al documento) el plan ligero
+            // y `Sendable`; así la promesa se cumple en la cola de fondo sin tocar el documento.
+            provider.userInfo = doc.exportPlan(for: node)
             return provider
         }
 
@@ -525,14 +536,19 @@ extension ArchiveOutlineView {
         // MARK: - NSFilePromiseProviderDelegate (extraer al Finder)
 
         func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String) -> String {
-            (filePromiseProvider.userInfo as? FileNode)?.name ?? Localizer.shared("promise.fallback")
+            (filePromiseProvider.userInfo as? ExportPlan)?.name ?? Localizer.shared("promise.fallback")
         }
 
+        /// AppKit invoca esto en `promiseQueue` (de fondo). Descomprime en streaming sin tocar
+        /// el documento (usa el plan `Sendable` ya construido) y muestra/oculta la barra de
+        /// progreso de la app saltando al hilo principal, para dar feedback sin bloquear.
         func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, writePromiseTo url: URL,
                                  completionHandler: @escaping (Error?) -> Void) {
-            guard let node = filePromiseProvider.userInfo as? FileNode else { completionHandler(nil); return }
+            guard let plan = filePromiseProvider.userInfo as? ExportPlan else { completionHandler(nil); return }
+            Task { @MainActor in doc.progress = ProgressState(kind: .extracting, fraction: nil) }
+            defer { Task { @MainActor in doc.progress = nil } }
             do {
-                try doc.exportPlan(for: node).writeContents(to: url)
+                try plan.writeContents(to: url)
                 completionHandler(nil)
             } catch {
                 completionHandler(error)
