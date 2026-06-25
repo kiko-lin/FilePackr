@@ -235,6 +235,12 @@ final class ExtractCoordinator: ObservableObject {
         queue = []
     }
 
+    /// Vacía la cola pendiente: tras cancelar la extracción en curso, el lote no sigue con
+    /// los elementos restantes (el `processNext` de la tarea actual encontrará la cola vacía).
+    func cancelBatch() {
+        queue = []
+    }
+
     /// "Elegir…": abre el navegador de carpetas para cambiar el destino.
     func chooseFolder(prompt: String) {
         if let url = chooseFolderPanel(prompt: prompt, startingAt: destination) {

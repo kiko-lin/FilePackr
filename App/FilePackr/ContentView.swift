@@ -274,7 +274,27 @@ struct ContentView: View {
                     }
                 }
             }
+            // (X) para cancelar: solo durante una extracción cancelable (botón Extraer).
+            .overlay(alignment: .topTrailing) {
+                if doc.extractionCancellable {
+                    Button(action: cancelExtraction) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(18)
+                    .help(loc("button.cancel"))
+                }
+            }
         }
+    }
+
+    /// Cancela la extracción en curso y vacía la cola pendiente del lote.
+    private func cancelExtraction() {
+        doc.cancelExtraction()
+        extractCoord.cancelBatch()
     }
 
     // MARK: - Cuerpo central
@@ -618,7 +638,9 @@ struct ContentView: View {
     }
 
     private func runAsync(_ op: () async throws -> Void) async {
-        do { try await op() } catch { errorMessage = describe(error) }
+        do { try await op() }
+        catch is CancellationError { /* cancelado por el usuario: parada limpia, sin alerta */ }
+        catch { errorMessage = describe(error) }
     }
 
     /// Traduce los errores conocidos del motor a un mensaje en el idioma de la app. Para los

@@ -432,6 +432,11 @@ final class ArchiveDocument: ObservableObject {
 
     /// Escribe un plan en una ruta destino concreta (en segundo plano, con progreso),
     /// opcionalmente sobrescribiendo.
+    /// `true` mientras una extracción (botón Extraer) está en curso y se puede cancelar.
+    /// La vista lo usa para mostrar la (X) del overlay solo en ese caso.
+    @Published private(set) var extractionCancellable = false
+    private var extractionTask: Task<Void, Error>?
+
     func performExtraction(of plan: ExportPlan, to destination: URL, overwrite: Bool) async throws {
         if overwrite, FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
@@ -439,30 +444,37 @@ final class ArchiveDocument: ObservableObject {
         let total = plan.byteCount()
         // Determinado si conocemos el tamaño total; si no (entradas sin tamaño), indeterminado.
         progress = ProgressState(kind: .extracting, fraction: total > 0 ? 0 : nil)
-        defer { progress = nil }
-        try await runExtraction(plan, to: destination, total: total)
-    }
+        extractionCancellable = true
+        defer { progress = nil; extractionCancellable = false; extractionTask = nil }
 
-    nonisolated private func runExtraction(_ plan: ExportPlan, to destination: URL, total: Int64) async throws {
-        try await Task.detached(priority: .userInitiated) {
-            guard total > 0 else { try plan.writeContents(to: destination); return }
+        // Tarea separada (cancelable): la descompresión comprueba `Task.isCancelled` en cada
+        // trozo y lanza `CancellationError`, que `writeFileAtomically` convierte en descarte
+        // limpio del temporal. Coalescemos progreso/nombre a saltos del ~1% para no saturar main.
+        let task = Task.detached(priority: .userInitiated) {
+            guard total > 0 else {
+                try plan.writeContents(to: destination, isCancelled: { Task.isCancelled })
+                return
+            }
             var done: Int64 = 0
             var lastReported = 0.0
-            try plan.writeContents(to: destination) { name, bytes in
+            try plan.writeContents(to: destination, onProgress: { name, bytes in
                 done += bytes
                 let fraction = min(1, Double(done) / Double(total))
-                // Coalescer a saltos de ~1%: con un fichero grande son miles de trozos, y un
-                // hop al main actor por cada uno saturaría el hilo principal sin verse mejor.
-                // El nombre del fichero en curso se actualiza en esos mismos saltos.
                 guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
                 lastReported = fraction
                 Task { @MainActor in
                     self.progress?.fraction = fraction
                     self.progress?.detail = name
                 }
-            }
-        }.value
+            }, isCancelled: { Task.isCancelled })
+        }
+        extractionTask = task
+        try await task.value
     }
+
+    /// Cancela la extracción en curso (botón X del overlay): aborta en el siguiente trozo y
+    /// descarta el temporal a medias. La acción cancelada propaga `CancellationError`.
+    func cancelExtraction() { extractionTask?.cancel() }
 
     /// Crea un plan de exportación ligero (sin tocar disco) para arrastrar al
     /// Finder. La extracción real ocurre luego, en segundo plano, al soltar.

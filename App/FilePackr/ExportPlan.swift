@@ -49,23 +49,27 @@ struct ExportPlan: Sendable {
     /// debe **acumular y coalescer** (p. ej. a saltos del 1 %): aquí se llama por cada trozo,
     /// que con ficheros grandes son muchos.
     nonisolated func writeContents(to destination: URL,
-                                   onProgress: (_ name: String, _ bytes: Int64) -> Void = { _, _ in }) throws {
+                                   onProgress: (_ name: String, _ bytes: Int64) -> Void = { _, _ in },
+                                   isCancelled: () -> Bool = { false }) throws {
+        if isCancelled() { throw CancellationError() }
         switch payload {
         case .folder(let children):
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
             for child in children {
-                try child.writeContents(to: destination.appendingPathComponent(child.name), onProgress: onProgress)
+                try child.writeContents(to: destination.appendingPathComponent(child.name),
+                                        onProgress: onProgress, isCancelled: isCancelled)
             }
         case .diskFile(let url):
             try FileManager.default.copyItem(at: url, to: destination)
             onProgress(name, Self.fileSize(url))   // copyItem no es por trozos: un salto al acabar
         case .archiveEntry(let entry, let archive, let password, let format):
             // Extracción en **streaming**: la salida descomprimida no se materializa en RAM.
-            // Se escribe a un temporal y se mueve al final (atomicidad + limpieza si falla,
-            // p. ej. si el MAC de AES no cuadra a mitad).
+            // Se escribe a un temporal y se mueve al final (atomicidad + limpieza si falla, p. ej.
+            // si el MAC de AES no cuadra a mitad, o si se **cancela**: el temporal se descarta).
             try writeFileAtomically(to: destination) { handle in
                 try format.codec.extract(entry, in: archive, password: password,
                                          sink: { chunk in
+                                             if isCancelled() { throw CancellationError() }
                                              try handle.write(contentsOf: chunk)
                                              onProgress(name, Int64(chunk.count))
                                          })
