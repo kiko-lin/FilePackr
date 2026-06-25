@@ -57,6 +57,9 @@ struct ArchiveOutlineView: NSViewRepresentable {
 
         outline.dataSource = coordinator
         outline.delegate = coordinator
+        // Doble clic en una carpeta: plegar/desplegar (como el Finder).
+        outline.target = coordinator
+        outline.doubleAction = #selector(Coordinator.handleDoubleClick(_:))
         outline.headerView = NSTableHeaderView()
         outline.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
         coordinator.currentSort = (key: "name", ascending: true)
@@ -490,6 +493,17 @@ extension ArchiveOutlineView {
             return outline.item(atRow: outline.clickedRow) as? FileNode
         }
 
+        /// Doble clic en una fila: si es carpeta, la pliega o despliega (toggle).
+        @objc func handleDoubleClick(_ sender: Any?) {
+            guard let outline, outline.clickedRow >= 0,
+                  let node = outline.item(atRow: outline.clickedRow) as? FileNode, node.isDirectory else { return }
+            if outline.isItemExpanded(node) {
+                outline.collapseItem(node)
+            } else {
+                outline.expandItem(node)
+            }
+        }
+
         @objc private func menuRename() {
             guard let outline, outline.clickedRow >= 0 else { return }
             if doc.isLocked { onNeedPassword(); return }
@@ -519,7 +533,16 @@ extension ArchiveOutlineView {
 
         func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                          willBeginAt screenPoint: NSPoint, forItems draggedItems: [Any]) {
-            draggedNodes = draggedItems.compactMap { $0 as? FileNode }
+            let nodes = draggedItems.compactMap { $0 as? FileNode }
+            draggedNodes = nodes
+            // Imagen de arrastre = solo el icono (como el Finder), no el snapshot de la fila entera.
+            let size = NSSize(width: 32, height: 32)
+            session.enumerateDraggingItems(options: [], for: outlineView,
+                                           classes: [NSFilePromiseProvider.self], searchOptions: [:]) { item, index, _ in
+                guard index < nodes.count, let icon = self.icon(for: nodes[index]).copy() as? NSImage else { return }
+                icon.size = size
+                item.setDraggingFrame(NSRect(origin: item.draggingFrame.origin, size: size), contents: icon)
+            }
         }
 
         func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
