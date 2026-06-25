@@ -448,14 +448,18 @@ final class ArchiveDocument: ObservableObject {
             guard total > 0 else { try plan.writeContents(to: destination); return }
             var done: Int64 = 0
             var lastReported = 0.0
-            try plan.writeContents(to: destination) { bytes in
+            try plan.writeContents(to: destination) { name, bytes in
                 done += bytes
                 let fraction = min(1, Double(done) / Double(total))
                 // Coalescer a saltos de ~1%: con un fichero grande son miles de trozos, y un
                 // hop al main actor por cada uno saturaría el hilo principal sin verse mejor.
+                // El nombre del fichero en curso se actualiza en esos mismos saltos.
                 guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
                 lastReported = fraction
-                Task { @MainActor in self.progress?.fraction = fraction }
+                Task { @MainActor in
+                    self.progress?.fraction = fraction
+                    self.progress?.detail = name
+                }
             }
         }.value
     }

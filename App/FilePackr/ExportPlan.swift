@@ -43,20 +43,22 @@ struct ExportPlan: Sendable {
         Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
     }
 
-    /// Escribe el contenido en la ruta `destination` (nombre final incluido). `onBytes` recibe
-    /// los bytes descomprimidos a medida que se escriben (por trozos, en streaming), para
-    /// reportar progreso fino. Quien lo consuma debe **acumular y coalescer** (p. ej. a saltos
-    /// del 1 %): aquí se llama por cada trozo, que con ficheros grandes son muchos.
-    nonisolated func writeContents(to destination: URL, onBytes: (Int64) -> Void = { _ in }) throws {
+    /// Escribe el contenido en la ruta `destination` (nombre final incluido). `onProgress`
+    /// recibe, a medida que se escribe (por trozos, en streaming), el **nombre del fichero en
+    /// curso** y los **bytes** de ese trozo, para una barra fina con etiqueta. Quien lo consuma
+    /// debe **acumular y coalescer** (p. ej. a saltos del 1 %): aquí se llama por cada trozo,
+    /// que con ficheros grandes son muchos.
+    nonisolated func writeContents(to destination: URL,
+                                   onProgress: (_ name: String, _ bytes: Int64) -> Void = { _, _ in }) throws {
         switch payload {
         case .folder(let children):
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
             for child in children {
-                try child.writeContents(to: destination.appendingPathComponent(child.name), onBytes: onBytes)
+                try child.writeContents(to: destination.appendingPathComponent(child.name), onProgress: onProgress)
             }
         case .diskFile(let url):
             try FileManager.default.copyItem(at: url, to: destination)
-            onBytes(Self.fileSize(url))   // copyItem no es por trozos: un único salto al acabar
+            onProgress(name, Self.fileSize(url))   // copyItem no es por trozos: un salto al acabar
         case .archiveEntry(let entry, let archive, let password, let format):
             // Extracción en **streaming**: la salida descomprimida no se materializa en RAM.
             // Se escribe a un temporal y se mueve al final (atomicidad + limpieza si falla,
@@ -65,7 +67,7 @@ struct ExportPlan: Sendable {
                 try format.codec.extract(entry, in: archive, password: password,
                                          sink: { chunk in
                                              try handle.write(contentsOf: chunk)
-                                             onBytes(Int64(chunk.count))
+                                             onProgress(name, Int64(chunk.count))
                                          })
             }
         }
@@ -87,4 +89,5 @@ enum ProgressKind: Equatable {
 struct ProgressState {
     var kind: ProgressKind
     var fraction: Double?   // nil = indeterminado
+    var detail: String?     // nombre del fichero en curso (p. ej. al extraer), opcional
 }

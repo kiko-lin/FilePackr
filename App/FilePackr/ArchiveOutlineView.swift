@@ -557,12 +557,15 @@ extension ArchiveOutlineView {
                 if total > 0 {
                     var done: Int64 = 0
                     var lastReported = 0.0
-                    try plan.writeContents(to: url) { bytes in
+                    try plan.writeContents(to: url) { name, bytes in
                         done += bytes
                         let fraction = min(1, Double(done) / Double(total))
                         guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
                         lastReported = fraction
-                        Task { @MainActor in doc.progress?.fraction = fraction }
+                        Task { @MainActor in
+                            doc.progress?.fraction = fraction
+                            doc.progress?.detail = name
+                        }
                     }
                 } else {
                     try plan.writeContents(to: url)

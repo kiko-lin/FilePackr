@@ -251,9 +251,19 @@ struct ContentView: View {
                 // Fondo opaco: oculta por completo lo que haya debajo.
                 Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
                 VStack(spacing: 14) {
-                    Text(progressLabel(progress.kind))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    VStack(spacing: 4) {
+                        Text(progressLabel(progress.kind))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        if let detail = progress.detail, !detail.isEmpty {
+                            Text(detail)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: 280)
+                        }
+                    }
                     if let fraction = progress.fraction {
                         ProgressView(value: fraction)
                             .progressViewStyle(.linear)
