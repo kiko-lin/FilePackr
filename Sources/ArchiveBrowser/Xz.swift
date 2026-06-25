@@ -3,29 +3,33 @@ import Compression
 
 public enum XzError: Error, Equatable { case notXz, corrupt }
 
-/// xz (LZMA2 en contenedor `.xz`): comprime/descomprime **un** flujo. Se apoya en la
-/// *Compression framework* de Apple (`COMPRESSION_LZMA`), cuya salida es un `.xz`
-/// estándar (firma `FD 37 7A 58 5A 00`), interoperable con `xz`, liblzma, Keka…
+/// xz (LZMA2 en contenedor `.xz`): comprime/descomprime **un** flujo. **Escritura** vía la
+/// liblzma del sistema (`Lzma`), que admite `level`; **lectura** vía la *Compression framework*
+/// de Apple (`COMPRESSION_LZMA`). Salida `.xz` estándar (firma `FD 37 7A 58 5A 00`),
+/// interoperable con `xz`, liblzma, Keka…
 public enum Xz {
 
-    /// Núcleo único: comprime a `.xz` leyendo la entrada por trozos (`next`) y emitiendo
-    /// la salida por trozos (`sink`). Los adaptadores en memoria / fichero cuelgan de aquí.
-    public static func compress(next: () throws -> Data?, sink: (Data) throws -> Void) throws {
-        try CompressionStream.run(operation: COMPRESSION_STREAM_ENCODE, algorithm: COMPRESSION_LZMA,
-                                  next: next, sink: sink)
+    /// Núcleo único: comprime a `.xz` con `level` leyendo la entrada por trozos (`next`) y
+    /// emitiendo la salida por trozos (`sink`). Los adaptadores en memoria / fichero cuelgan de aquí.
+    public static func compress(level: CompressionLevel = .default,
+                                next: () throws -> Data?, sink: (Data) throws -> Void) throws {
+        try Lzma.encode(preset: level.xzPreset, next: next, sink: sink)
     }
 
     /// Comprime `data` a un flujo `.xz` (en memoria).
-    public static func compress(_ data: Data) -> Data {
+    public static func compress(_ data: Data, level: CompressionLevel = .default) -> Data {
         var out = Data()
-        do { try compress(next: CompressionStream.once(data), sink: { out.append($0) }) } catch { return Data() }
+        do { try compress(level: level, next: CompressionStream.once(data), sink: { out.append($0) }) }
+        catch { return Data() }
         return out
     }
 
     /// Comprime de `input` a `output` en **streaming** (memoria constante): produce el
     /// mismo flujo `.xz` que `compress(_:)` pero sin cargar el fichero entero en RAM.
-    public static func compress(from input: FileHandle, to output: FileHandle) throws {
-        try compress(next: CompressionStream.reader(input), sink: { try output.write(contentsOf: $0) })
+    public static func compress(from input: FileHandle, to output: FileHandle,
+                                level: CompressionLevel = .default) throws {
+        try compress(level: level, next: CompressionStream.reader(input),
+                     sink: { try output.write(contentsOf: $0) })
     }
 
     /// Descomprime un flujo `.xz` a memoria.

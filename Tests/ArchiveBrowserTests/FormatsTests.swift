@@ -129,6 +129,28 @@ final class FormatsTests: XCTestCase {
         XCTAssertEqual(try Xz.decompress(Xz.compress(Data())), Data())
     }
 
+    func testXzCompressionLevelAffectsSizeAndRoundTrips() throws {
+        // Texto con redundancia real (solo 50 líneas distintas, muy repetidas) para que el
+        // preset máximo sí encuentre más que el rápido y la diferencia de tamaño sea estable.
+        var text = ""
+        for i in 0..<3000 { text += "línea \(i % 50) de prueba xz con repetición áéí; " }
+        let payload = Data(text.utf8)
+
+        let fast = Xz.compress(payload, level: .fast)
+        let maximum = Xz.compress(payload, level: .maximum)
+
+        // Salida .xz válida; ambos comprimen y round-trip correctamente (liblzma escribe con
+        // preset, el framework de Apple lee).
+        for data in [fast, maximum] {
+            XCTAssertEqual(Array(data.prefix(6)), [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00])
+            XCTAssertLessThan(data.count, payload.count)
+            XCTAssertEqual(try Xz.decompress(data), payload)
+        }
+        // El preset es efectivo: cambia la salida y máximo no es mayor que rápido.
+        XCTAssertNotEqual(fast, maximum)
+        XCTAssertLessThanOrEqual(maximum.count, fast.count)
+    }
+
     func testPythonReadsOurXz() throws {
         let python = "/usr/bin/python3"
         try XCTSkipUnless(FileManager.default.isExecutableFile(atPath: python))

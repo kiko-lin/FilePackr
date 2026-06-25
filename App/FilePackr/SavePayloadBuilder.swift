@@ -80,7 +80,8 @@ nonisolated struct SavePayloadBuilder: Sendable {
         case .tarXz:
             let items = tarItems()
             return .stream { handle in
-                try Xz.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) })
+                try Xz.compress(level: level, next: Tar.reader(items),
+                                sink: { try handle.write(contentsOf: $0) })
             }
         case .tarBzip2:
             let items = tarItems()
@@ -96,8 +97,8 @@ nonisolated struct SavePayloadBuilder: Sendable {
                 memory: { Gzip.compress($0, filename: name, level: level) })
         case .xz:
             guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
-            return try singleFilePayload(node, stream: { try Xz.compress(from: $0, to: $1) },
-                                         memory: { Xz.compress($0) })
+            return try singleFilePayload(node, stream: { try Xz.compress(from: $0, to: $1, level: level) },
+                                         memory: { Xz.compress($0, level: level) })
         case .bzip2:
             guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
             let blockSize = level.bzip2BlockSize

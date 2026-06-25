@@ -36,4 +36,13 @@ public enum CompressionLevel: String, Sendable, CaseIterable, Hashable {
         case .maximum: return 9
         }
     }
+
+    /// liblzma: preset 0–9 para `.xz`/`.tar.xz`. `normal` usa 6, el preset por defecto de xz.
+    public var xzPreset: UInt32 {
+        switch self {
+        case .fast: return 1
+        case .normal: return 6
+        case .maximum: return 9
+        }
+    }
 }
