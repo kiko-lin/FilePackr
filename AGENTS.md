@@ -126,6 +126,8 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     FilePackr» y «Descomprimir aquí» (extracción headless reusando `ExportPlan.writeContents`).
     Helpers `archiveBaseName`/`localizedErrorMessage` extraídos a `AppHelpers.swift`. Ver TODO
     para la verificación en GUI pendiente (registro de Servicios + títulos en inglés).
+  - **Título de ventana**: `.navigationTitle(documentDisplayName)` en `ContentView`; el menú Ventana
+    de macOS lista las ventanas por el nombre del archivo, o «Sin título N» (`UntitledNumbering`).
 
 - **Tercera auditoría (2026-06-22, rama `refactor/auditoria-2026-06-22`)** — informe en
   `docs/auditoria-2026-06-22.md`. Sin hallazgos críticos; 4 MEDIO + 4 BAJO resueltos en 5 commits:
@@ -410,23 +412,15 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   - Reusa `SaveCoordinator`/hoja de opciones existentes, solo parametrizar el punto
     de entrada (formato preseleccionado).
   - Esfuerzo bajo (< 1h por icono), sin bloqueos arquitectónicos.
-- [ ] **Título de ventana = nombre del archivo (y numerar los nuevos)** · análisis hecho
-      2026-06-28: hoy el menú **Ventana** de macOS lista todas las ventanas igual porque **no se
-      fija ningún `title`** (`WindowGroup` + `.windowStyle(.hiddenTitleBar)` en `FilePackrApp.swift`;
-      la barra de título está oculta pero el `title` sigue alimentando el menú Ventana y Mission
-      Control). Además los documentos nuevos no se numeran: `ArchiveDocument.documentName` queda
-      vacío y la vista lo muestra como «Sin título» (`ContentView.documentDisplayName`,
-      `ContentView.swift:230`), así que dos ventanas nuevas se verían ambas como «Sin título».
-  - **Fijar el título**: `.navigationTitle(documentDisplayName)` en `ContentView` (funciona con
-    `hiddenTitleBar`: pone el `NSWindow.title` aunque no se dibuje). Un archivo abierto → su nombre
-    (`doc.documentName`); uno nuevo → «Sin título N».
-  - **Numerar los nuevos**: hace falta coordinación entre ventanas (cada `WindowGroup` tiene su
-    propio `ArchiveDocument`). Pequeño registro `@MainActor` que **vende** el menor número libre al
-    crear un documento sin guardar y lo **devuelve** al cerrar la ventana o al pasar a tener nombre
-    real (abrir/guardar). El número vive en la vista (el modelo deja `documentName` vacío, item 4 de
-    la auditoría); `documentDisplayName` pasaría a «Sin título N». Decidir: reusar el menor libre
-    (como TextEdit) vs. contador siempre creciente (más simple, deja huecos).
-  - Esfuerzo bajo-medio, sin tocar el motor.
+- [x] ~~**Título de ventana = nombre del archivo (y numerar los nuevos)**~~ (HECHO 2026-06-28,
+      pendiente verificación en GUI): `.navigationTitle(documentDisplayName)` en `ContentView` fija
+      el `NSWindow.title` (la barra sigue oculta con `hiddenTitleBar`, pero el menú **Ventana** y
+      Mission Control lo usan). Archivo abierto → su nombre (`doc.documentName`); nuevo sin guardar →
+      «Sin título N». La numeración la reparte `UntitledNumbering` (`UntitledNumbering.swift`, registro
+      `@MainActor` que vende el menor número libre y lo reutiliza al cerrarse/guardarse, estilo
+      TextEdit); cada ventana pide/devuelve su número en `onAppear`/`onChange(sourceURL)`/`onDisappear`.
+      Compila. **Verificar en GUI**: varias ventanas nuevas → «Sin título 1/2/3»; abrir/guardar cambia
+      el título al nombre real; el menú Ventana las distingue.
 - [ ] **Limpieza de extracciones parciales al cancelar un lote** · análisis hecho
       2026-06-26: la cancelación (`CancelToken` en `ExportPlan.swift`) y el cierre con
       confirmación (`WindowGuard`) ya existen; cada archivo individual es atómico

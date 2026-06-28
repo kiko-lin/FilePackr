@@ -30,6 +30,9 @@ struct ContentView: View {
     /// con un token para que un auto-descarte antiguo no borre un aviso más reciente.
     @State private var exclusionNotice: String?
     @State private var exclusionNoticeToken = 0
+    /// Número de esta ventana mientras es un documento sin guardar («Sin título N»). Lo reparte
+    /// `UntitledNumbering` entre ventanas; `nil` cuando hay un archivo con nombre real.
+    @State private var untitledNumber: Int?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -142,12 +145,34 @@ struct ContentView: View {
             openingExternalFile = true
             handleOpen([url])
         }
-        .onAppear { promptDefaultCompressorIfNeeded() }
+        .onAppear {
+            promptDefaultCompressorIfNeeded()
+            syncUntitledNumber(sourceURL: doc.sourceURL)
+        }
+        .onChange(of: doc.sourceURL) { _, url in syncUntitledNumber(sourceURL: url) }
         .onDisappear {
             // Al cerrar la ventana, no dejar la descompresión corriendo de fondo.
             doc.cancelExtraction()
             extractCoord.cancelBatch()
+            releaseUntitledNumber()
         }
+        // El menú Ventana de macOS y Mission Control listan las ventanas por este título
+        // (la barra está oculta con `hiddenTitleBar`, pero el título sigue alimentándolos).
+        .navigationTitle(documentDisplayName)
+    }
+
+    /// Reserva un «Sin título N» cuando la ventana es un documento sin guardar y lo libera en
+    /// cuanto pasa a tener un archivo con nombre real (al abrir o guardar).
+    private func syncUntitledNumber(sourceURL: URL?) {
+        if sourceURL == nil {
+            if untitledNumber == nil { untitledNumber = UntitledNumbering.claim() }
+        } else {
+            releaseUntitledNumber()
+        }
+    }
+
+    private func releaseUntitledNumber() {
+        if let n = untitledNumber { UntitledNumbering.release(n); untitledNumber = nil }
     }
 
     /// Primer arranque: ofrece (una sola vez) hacer de FilePackr el compresor por defecto.
@@ -225,10 +250,13 @@ struct ContentView: View {
         }
     }
 
-    /// Nombre a mostrar del documento: el del fichero guardado, o "Sin título" (en el
+    /// Nombre a mostrar del documento: el del fichero guardado, o "Sin título N" (en el
     /// idioma actual) mientras no se haya guardado. La i18n vive en la vista, no en el modelo.
+    /// Se usa como título de ventana (lo lista el menú Ventana de macOS) y en la cabecera.
     private var documentDisplayName: String {
-        doc.sourceURL == nil ? loc("doc.untitled") : doc.documentName
+        guard doc.sourceURL == nil else { return doc.documentName }
+        let base = loc("doc.untitled")
+        return untitledNumber.map { "\(base) \($0)" } ?? base
     }
 
     /// Título del diálogo de Guardar/Exportar según el contexto: exportar a otro formato,
