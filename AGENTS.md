@@ -303,29 +303,32 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 - **Icono de app**: único, generado desde un SVG (diamante) a `AppIcon.appiconset`
   (todos los tamaños). Ya **no** hay selector de icono ni cambio en caliente (se
   retiraron `AppIconOption` y los 5 image sets de color).
-- **i18n** (`Localization.swift`): `Localizer` (@MainActor, ObservableObject) con
-  catálogo EN/ES en memoria y cambio de idioma **en caliente** (recordado en
-  UserDefaults). **Inglés por defecto**. El selector de idioma vive en la ventana de
-  **Ajustes** (⌘,). Uso: en vistas `@EnvironmentObject var loc` y `loc("clave")`/
-  `loc("clave", arg)`. **El modelo ya NO usa `Localizer`** (auditoría item 4): emite
-  tokens (`ProgressKind`) y las vistas traducen; los nombres por defecto (carpeta nueva,
-  "Sin título") los inyecta la vista. `ArchiveOutlineView` (coordinator) sí usa
-  `Localizer.shared` (es vista AppKit). Para añadir texto: nueva clave en `en`/`es`.
-  Nota: los nombres de "Clase" vienen de `UTType.localizedDescription` (siguen el idioma
-  del SO, no el de la app), y el **menú de la app** tampoco sigue aún el idioma interno
-  (ver TODO).
+- **i18n** (`Localization.swift` + `Localizable.xcstrings`): **sigue el idioma del sistema**
+  (lo idiomático en macOS; reescrito 2026-06-28, antes había un `Localizer` con selector interno
+  y cambio en caliente). Los textos viven en un **String Catalog** (`Localizable.xcstrings`, EN+ES);
+  el proyecto declara `es` en `knownRegions`, así que macOS elige el idioma y **AppKit localiza
+  gratis** la barra de menús, los paneles del sistema y la columna **«Clase»** (`UTType`) — ya no
+  hace falta código propio para el menú. Uso en vistas/AppKit: `loc("clave")` / `loc("clave", arg)`,
+  ahora **funciones globales** (en `Localization.swift`) sobre `NSLocalizedString` (sin
+  `ObservableObject`/`@EnvironmentObject`, porque el idioma no cambia en caliente). El modelo no usa
+  i18n (auditoría item 4): emite tokens (`ProgressKind`) y las vistas traducen. **Para añadir texto**:
+  nueva entrada en `Localizable.xcstrings` (Xcode) con EN+ES. **No hay selector de idioma en Ajustes.**
 
 ## TODO (objetivos pendientes, ordenados por importancia — revisión 2026-06-26)
 
 > **Criterio de orden:** impacto en todos los usuarios × esfuerzo × riesgo de dejarlo sin hacer.
-> Lo de mayor valor es **traducir el menú de macOS** (afecta a todos los usuarios). Los items de
-> formato/streaming de pura completitud van al final, en este orden: **DMG ≈ 7z-cifrado (baja)
-> > tar-open (muy baja) > multinúcleo (solo si el rendimiento duele)**.
+> Los items de formato/streaming de pura completitud van al final, en este orden:
+> **DMG ≈ 7z-cifrado (baja) > tar-open (muy baja) > multinúcleo (solo si el rendimiento duele)**.
 
-- [ ] **Traducir el menú de la app** (barra de menús de macOS: menú con el nombre de la
-      app, Archivo, Edición…) según el idioma **interno** de la app (`Localizer`), no el
-      del SO. Hoy el `WindowGroup` usa los menús por defecto y no siguen el selector de idioma.
-      Mayor valor pendiente: único punto de UI visible para todos los usuarios que falta.
+- [x] ~~**Traducir el menú de la app**~~ (HECHO 2026-06-28, pendiente verificación en GUI):
+      resuelto de raíz **pasando a lo idiomático en macOS**: la app **sigue el idioma del sistema**
+      en vez de tener selector interno. Migración: textos a **String Catalog** (`Localizable.xcstrings`,
+      EN+ES), `es` añadido a `knownRegions`, `Localizer`/`Language`/selector de idioma retirados y
+      `loc(...)` convertido en función global sobre `NSLocalizedString`. Así **AppKit localiza gratis**
+      la barra de menús completa, los paneles del sistema y la columna «Clase» (`UTType`) según el SO —
+      sin el parche `MainMenuLocalizer` (eliminado). Compila; el build genera `en.lproj` + `es.lproj`.
+      **Verificar en GUI**: poner el Mac (o la app, en Ajustes → Idioma y región → Apps) en español y
+      ver toda la app + el menú en español; en inglés, en inglés.
 - [ ] **Verificar en GUI los flujos del refactor de auditoría (rama `refactor/auditoria-2026-06-21`)**
       · el agente solo compila/test del modelo, no ejecuta la GUI. Probar en Xcode (⌘R) y reportar:
   - **Añadir con conflicto** de nombre → Sobrescribir / Conservar ambos / Cancelar (H-2b).
@@ -467,8 +470,9 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       entradas ZIP (incl. ZipCrypto/AES) se extraen a disco sin materializar la salida en RAM.
 - [x] ~~**Streaming en libarchive (7z/iso/xar)**~~ (hecho — ver "Hecho"): escritura desde
       ficheros de disco al vuelo y extracción a `sink`, sin acumular el contenido en RAM.
-- [x] ~~Localización~~ (hecho: EN/ES con selector de idioma — ver "Hecho"). Pendiente
-      menor: más idiomas, y que "Clase" use el idioma de la app y no el del SO.
+- [x] ~~Localización~~ (hecho: EN/ES vía **String Catalog**, sigue el idioma del **sistema** —
+      ver "Hecho" e i18n). «Clase» y el menú ya los localiza AppKit. Pendiente menor: más idiomas
+      (añadir columnas al `.xcstrings`).
 
 ## Notas de formato/cifrado (para no re-investigar)
 

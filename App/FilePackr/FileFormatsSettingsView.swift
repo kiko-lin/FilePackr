@@ -5,7 +5,6 @@ import ArchiveBrowser
 /// Pestaña "Archivos" de Ajustes: lista de formatos que FilePackr puede abrir, cada uno
 /// con su icono y un check para hacerse app por defecto en el Finder (vía `DefaultHandler`).
 struct FileFormatsSettingsView: View {
-    @EnvironmentObject var loc: Localizer
     @EnvironmentObject var settings: AppSettings
 
     private let formats = ArchiveFormat.allCases

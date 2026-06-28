@@ -26,7 +26,6 @@ enum VolumeUnit: String, CaseIterable, Identifiable {
 /// aparece, transitorio, al pulsar "Elegir…" (`onChooseFolder`), así esta hoja nunca se deforma.
 /// Si el destino ya existe, pide confirmación antes de sobrescribir.
 struct SaveOptionsSheet: View {
-    @EnvironmentObject var loc: Localizer
     @ObservedObject var coord: SaveCoordinator
     /// Los formatos de un solo fichero (gz/xz) solo se ofrecen si el documento es un fichero.
     let allowSingleFileFormats: Bool
@@ -132,7 +131,6 @@ struct SaveOptionsSheet: View {
 /// de carpetas aparece al pulsar "Elegir…". La contraseña, si el archivo está cifrado, se pide
 /// **antes** (al desbloquear), así que aquí ya no hace falta.
 struct ExtractOptionsSheet: View {
-    @EnvironmentObject var loc: Localizer
     let title: String
     @Binding var destination: URL
     var onChooseFolder: () -> Void
@@ -164,7 +162,6 @@ struct ExtractOptionsSheet: View {
 
 /// Hoja de introducción de contraseña.
 struct PasswordSheet: View {
-    @EnvironmentObject var loc: Localizer
     let title: String
     let confirmLabel: String
     @Binding var password: String

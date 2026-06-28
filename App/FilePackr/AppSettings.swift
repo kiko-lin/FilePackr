@@ -60,7 +60,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var systemImage: String { self == .general ? "gearshape" : "doc.zipper" }
 }
 
-/// Preferencias de la app (aparte del idioma, que gestiona `Localizer`). Se guardan
+/// Preferencias de la app (el idioma lo gobierna el sistema, no la app). Se guardan
 /// en `UserDefaults` y se aplican en caliente.
 @MainActor
 final class AppSettings: ObservableObject {

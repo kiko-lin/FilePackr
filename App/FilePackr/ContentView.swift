@@ -6,7 +6,6 @@ import ArchiveBrowser
 /// Gestor de archivos comprimidos: barra superior + barra de documento + cuerpo
 /// central (zona de arrastre cuando está vacío, o el navegador `NSOutlineView`).
 struct ContentView: View {
-    @EnvironmentObject private var loc: Localizer
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.openSettings) private var openSettings
     @StateObject private var doc = ArchiveDocument()
@@ -313,7 +312,6 @@ struct ContentView: View {
                 }
         } else {
             ArchiveOutlineView(doc: doc,
-                               language: loc.language,
                                onExtract: { extract($0) },
                                onNeedPassword: { promptEntryPassword() },
                                onAddFiles: { urls, folder in addDropped(urls, into: folder) })
@@ -684,6 +682,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .environmentObject(Localizer.shared)
         .environmentObject(AppSettings.shared)
 }

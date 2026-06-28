@@ -13,13 +13,13 @@ enum UnsavedChangesAlert {
     @MainActor
     static func present(on window: NSWindow?, completion: @escaping (Choice) -> Void) {
         let alert = NSAlert()
-        alert.messageText = Localizer.shared("unsaved.title")
-        alert.informativeText = Localizer.shared("unsaved.message")
+        alert.messageText = loc("unsaved.title")
+        alert.informativeText = loc("unsaved.message")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: Localizer.shared("button.save"))        // 1º → por defecto (Intro)
-        let cancel = alert.addButton(withTitle: Localizer.shared("button.cancel"))      // 2º
+        alert.addButton(withTitle: loc("button.save"))        // 1º → por defecto (Intro)
+        let cancel = alert.addButton(withTitle: loc("button.cancel"))      // 2º
         cancel.keyEquivalent = "\u{1b}"                                    //   Escape cancela
-        let discard = alert.addButton(withTitle: Localizer.shared("unsaved.dontSave"))  // 3º → a la izquierda
+        let discard = alert.addButton(withTitle: loc("unsaved.dontSave"))  // 3º → a la izquierda
         discard.hasDestructiveAction = true
 
         func choice(for response: NSApplication.ModalResponse) -> Choice {
@@ -101,12 +101,12 @@ struct WindowGuard: NSViewRepresentable {
             // Extracción en curso: cerrar la cancelaría → pedir confirmación.
             if extracting {
                 let alert = NSAlert()
-                alert.messageText = Localizer.shared("extract.close.title")
-                alert.informativeText = Localizer.shared("extract.close.message")
+                alert.messageText = loc("extract.close.title")
+                alert.informativeText = loc("extract.close.message")
                 alert.alertStyle = .warning
-                let cancel = alert.addButton(withTitle: Localizer.shared("button.cancel"))  // 1º = Intro: NO cerrar
+                let cancel = alert.addButton(withTitle: loc("button.cancel"))  // 1º = Intro: NO cerrar
                 cancel.keyEquivalent = "\u{1b}"                                              //   Escape también
-                let cont = alert.addButton(withTitle: Localizer.shared("extract.close.continue"))  // 2º: cerrar+cancelar
+                let cont = alert.addButton(withTitle: loc("extract.close.continue"))  // 2º: cerrar+cancelar
                 cont.hasDestructiveAction = true
                 alert.beginSheetModal(for: sender) { [weak self] response in
                     if response == .alertSecondButtonReturn {

@@ -6,7 +6,6 @@ import ArchiveBrowser
 /// Ajustes de la app. Se presenta como ventana propia desde el menú (⌘,), con pestañas
 /// General (preferencias) y Archivos (asociación de formatos en el Finder).
 struct SettingsView: View {
-    @EnvironmentObject var loc: Localizer
     @EnvironmentObject var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
 
@@ -37,13 +36,11 @@ struct SettingsView: View {
         .frame(width: 480, height: 460)
     }
 
-    /// Pestaña General: idioma, apariencia, formato/cifrado por defecto y destino de extracción.
+    /// Pestaña General: apariencia, formato/cifrado por defecto y destino de extracción.
+    /// El idioma lo gobierna el sistema (Ajustes → Idioma y región), no la app.
     private var general: some View {
         Form {
             Section {
-                Picker(loc("settings.language"), selection: $loc.language) {
-                    ForEach(Language.allCases) { Text($0.displayName).tag($0) }
-                }
                 Picker(loc("settings.appearance"), selection: $settings.theme) {
                     ForEach(AppTheme.allCases) { Text(loc($0.nameKey)).tag($0) }
                 }

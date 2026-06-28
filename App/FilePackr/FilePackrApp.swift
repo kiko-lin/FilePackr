@@ -9,7 +9,6 @@ struct FilePackrApp: App {
         WindowGroup {
             ContentView()
                 .frame(minWidth: 760, minHeight: 480)
-                .environmentObject(Localizer.shared)
                 .environmentObject(AppSettings.shared)
         }
         .windowStyle(.hiddenTitleBar)   // sin barra de título "FilePackr"; el contenido sube
@@ -17,7 +16,6 @@ struct FilePackrApp: App {
         // Ajustes en el menú de la app (⌘,), accesible siempre (también con la app vacía).
         Settings {
             SettingsView()
-                .environmentObject(Localizer.shared)
                 .environmentObject(AppSettings.shared)
         }
     }
