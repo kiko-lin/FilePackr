@@ -410,6 +410,23 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   - Reusa `SaveCoordinator`/hoja de opciones existentes, solo parametrizar el punto
     de entrada (formato preseleccionado).
   - Esfuerzo bajo (< 1h por icono), sin bloqueos arquitectónicos.
+- [ ] **Título de ventana = nombre del archivo (y numerar los nuevos)** · análisis hecho
+      2026-06-28: hoy el menú **Ventana** de macOS lista todas las ventanas igual porque **no se
+      fija ningún `title`** (`WindowGroup` + `.windowStyle(.hiddenTitleBar)` en `FilePackrApp.swift`;
+      la barra de título está oculta pero el `title` sigue alimentando el menú Ventana y Mission
+      Control). Además los documentos nuevos no se numeran: `ArchiveDocument.documentName` queda
+      vacío y la vista lo muestra como «Sin título» (`ContentView.documentDisplayName`,
+      `ContentView.swift:230`), así que dos ventanas nuevas se verían ambas como «Sin título».
+  - **Fijar el título**: `.navigationTitle(documentDisplayName)` en `ContentView` (funciona con
+    `hiddenTitleBar`: pone el `NSWindow.title` aunque no se dibuje). Un archivo abierto → su nombre
+    (`doc.documentName`); uno nuevo → «Sin título N».
+  - **Numerar los nuevos**: hace falta coordinación entre ventanas (cada `WindowGroup` tiene su
+    propio `ArchiveDocument`). Pequeño registro `@MainActor` que **vende** el menor número libre al
+    crear un documento sin guardar y lo **devuelve** al cerrar la ventana o al pasar a tener nombre
+    real (abrir/guardar). El número vive en la vista (el modelo deja `documentName` vacío, item 4 de
+    la auditoría); `documentDisplayName` pasaría a «Sin título N». Decidir: reusar el menor libre
+    (como TextEdit) vs. contador siempre creciente (más simple, deja huecos).
+  - Esfuerzo bajo-medio, sin tocar el motor.
 - [ ] **Limpieza de extracciones parciales al cancelar un lote** · análisis hecho
       2026-06-26: la cancelación (`CancelToken` en `ExportPlan.swift`) y el cierre con
       confirmación (`WindowGuard`) ya existen; cada archivo individual es atómico
