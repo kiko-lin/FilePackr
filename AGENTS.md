@@ -141,6 +141,11 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     evita guardados solapados; `cleanStaleWorkFiles` barre `.work` huérfanos al abrir. La extracción
     en lote rastrea `extractedURLs` y, al cancelar con la X, ofrece **Conservar/Eliminar** (tarjeta
     «Limpiando…»). Tests: `CompressionCancellationTests` (91 del motor verdes).
+  - **Progreso de compresión + "Último usado"**: la barra de compresión es determinada con nombre de
+    fichero (`WriteProgress`). En Ajustes, **Formato/Cifrado/Nivel** ganan la opción **"Último usado"**
+    (`AppSettings.default*` pasan a opcionales; `nil` = último usado, resuelto vía `lastUsed*`, que el
+    flujo de guardar/exportar actualiza en `SaveCoordinator.confirm`). Mismo patrón que el destino de
+    extracción («Última carpeta usada»). La contraseña no se recuerda.
 
 - **Tercera auditoría (2026-06-22, rama `refactor/auditoria-2026-06-22`)** — informe en
   `docs/auditoria-2026-06-22.md`. Sin hallazgos críticos; 4 MEDIO + 4 BAJO resueltos en 5 commits:

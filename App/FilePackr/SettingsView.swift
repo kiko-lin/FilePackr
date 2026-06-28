@@ -48,15 +48,18 @@ struct SettingsView: View {
 
             Section {
                 Picker(loc("settings.defaultFormat"), selection: $settings.defaultFormat) {
-                    ForEach(defaultFormats, id: \.self) { Text(loc($0.nameKey)).tag($0) }
+                    Text(loc("settings.lastUsed")).tag(ArchiveFormat?.none)
+                    ForEach(defaultFormats, id: \.self) { Text(loc($0.nameKey)).tag(ArchiveFormat?.some($0)) }
                 }
                 Picker(loc("settings.defaultEncryption"), selection: $settings.defaultEncryption) {
-                    Text(loc("save.encryption.none")).tag(ZipEncryption.none)
-                    Text(loc("save.encryption.weak")).tag(ZipEncryption.zipCrypto)
-                    Text(loc("save.encryption.strong")).tag(ZipEncryption.aes256)
+                    Text(loc("settings.lastUsed")).tag(ZipEncryption?.none)
+                    Text(loc("save.encryption.none")).tag(ZipEncryption?.some(.none))
+                    Text(loc("save.encryption.weak")).tag(ZipEncryption?.some(.zipCrypto))
+                    Text(loc("save.encryption.strong")).tag(ZipEncryption?.some(.aes256))
                 }
                 Picker(loc("settings.defaultLevel"), selection: $settings.defaultCompressionLevel) {
-                    ForEach(CompressionLevel.allCases, id: \.self) { Text(loc($0.nameKey)).tag($0) }
+                    Text(loc("settings.lastUsed")).tag(CompressionLevel?.none)
+                    ForEach(CompressionLevel.allCases, id: \.self) { Text(loc($0.nameKey)).tag(CompressionLevel?.some($0)) }
                 }
             }
 

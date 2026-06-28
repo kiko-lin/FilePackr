@@ -73,15 +73,33 @@ final class AppSettings: ObservableObject {
     @Published var theme: AppTheme {
         didSet { defaults.set(theme.rawValue, forKey: "theme") }
     }
-    @Published var defaultFormat: ArchiveFormat {
-        didSet { defaults.set(defaultFormat.rawValue, forKey: "defaultFormat") }
+    // Formato/cifrado/nivel por defecto para Guardar/Exportar. `nil` = **"Último usado"** (la
+    // primera opción del Picker): se resuelve al último valor realmente usado (`lastUsed*`).
+    @Published var defaultFormat: ArchiveFormat? {
+        didSet { defaults.set(defaultFormat?.rawValue, forKey: "defaultFormat") }
     }
-    @Published var defaultEncryption: ZipEncryption {
-        didSet { defaults.set(defaultEncryption.persistID, forKey: "defaultEncryption") }
+    @Published var defaultEncryption: ZipEncryption? {
+        didSet { defaults.set(defaultEncryption?.persistID, forKey: "defaultEncryption") }
     }
-    @Published var defaultCompressionLevel: CompressionLevel {
-        didSet { defaults.set(defaultCompressionLevel.rawValue, forKey: "defaultCompressionLevel") }
+    @Published var defaultCompressionLevel: CompressionLevel? {
+        didSet { defaults.set(defaultCompressionLevel?.rawValue, forKey: "defaultCompressionLevel") }
     }
+
+    // Últimos valores realmente usados al guardar/exportar; alimentan la opción "Último usado".
+    @Published var lastUsedFormat: ArchiveFormat {
+        didSet { defaults.set(lastUsedFormat.rawValue, forKey: "lastUsedFormat") }
+    }
+    @Published var lastUsedEncryption: ZipEncryption {
+        didSet { defaults.set(lastUsedEncryption.persistID, forKey: "lastUsedEncryption") }
+    }
+    @Published var lastUsedLevel: CompressionLevel {
+        didSet { defaults.set(lastUsedLevel.rawValue, forKey: "lastUsedLevel") }
+    }
+
+    /// Valor resuelto para prerrellenar la hoja: el fijo elegido, o el último usado si es "Último usado".
+    var resolvedFormat: ArchiveFormat { defaultFormat ?? lastUsedFormat }
+    var resolvedEncryption: ZipEncryption { defaultEncryption ?? lastUsedEncryption }
+    var resolvedLevel: CompressionLevel { defaultCompressionLevel ?? lastUsedLevel }
     @Published var extractMode: ExtractDestinationMode {
         didSet { defaults.set(extractMode.rawValue, forKey: "extractMode") }
     }
@@ -121,9 +139,13 @@ final class AppSettings: ObservableObject {
 
     private init() {
         theme = AppTheme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .system
-        defaultFormat = ArchiveFormat(rawValue: defaults.string(forKey: "defaultFormat") ?? "") ?? .zip
-        defaultEncryption = ZipEncryption(persistID: defaults.string(forKey: "defaultEncryption") ?? "") ?? .none
-        defaultCompressionLevel = CompressionLevel(rawValue: defaults.string(forKey: "defaultCompressionLevel") ?? "") ?? .default
+        // Sin clave guardada → `nil` = "Último usado" (por defecto en instalación nueva).
+        defaultFormat = defaults.string(forKey: "defaultFormat").flatMap(ArchiveFormat.init(rawValue:))
+        defaultEncryption = defaults.string(forKey: "defaultEncryption").flatMap(ZipEncryption.init(persistID:))
+        defaultCompressionLevel = defaults.string(forKey: "defaultCompressionLevel").flatMap(CompressionLevel.init(rawValue:))
+        lastUsedFormat = ArchiveFormat(rawValue: defaults.string(forKey: "lastUsedFormat") ?? "") ?? .zip
+        lastUsedEncryption = ZipEncryption(persistID: defaults.string(forKey: "lastUsedEncryption") ?? "") ?? .none
+        lastUsedLevel = CompressionLevel(rawValue: defaults.string(forKey: "lastUsedLevel") ?? "") ?? .default
         extractMode = ExtractDestinationMode(rawValue: defaults.string(forKey: "extractMode") ?? "") ?? .archiveFolder
         fixedExtractFolder = defaults.string(forKey: "fixedExtractFolder").map { URL(fileURLWithPath: $0) }
         lastUsedExtractFolder = defaults.string(forKey: "lastUsedExtractFolder").map { URL(fileURLWithPath: $0) }

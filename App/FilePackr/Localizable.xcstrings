@@ -1,2644 +1,2658 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "" : {
-
+  "sourceLanguage": "en",
+  "strings": {
+    "": {},
+    "add.conflict.keepBoth": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep both"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conservar ambos"
+          }
+        }
+      }
     },
-    "add.conflict.keepBoth" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keep both"
+    "add.conflict.message": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An item named “%@” already exists in this location. Do you want to overwrite it or keep both?"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conservar ambos"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya hay un elemento llamado «%@» en esta ubicación. ¿Quieres sobrescribirlo o conservar ambos?"
           }
         }
       }
     },
-    "add.conflict.message" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "An item named “%@” already exists in this location. Do you want to overwrite it or keep both?"
+    "add.conflict.overwrite": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overwrite"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ya hay un elemento llamado «%@» en esta ubicación. ¿Quieres sobrescribirlo o conservar ambos?"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sobrescribir"
           }
         }
       }
     },
-    "add.conflict.overwrite" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Overwrite"
+    "add.conflict.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” already exists"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sobrescribir"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya existe «%@»"
           }
         }
       }
     },
-    "add.conflict.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” already exists"
+    "button.cancel": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ya existe «%@»"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
           }
         }
       }
     },
-    "button.cancel" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancel"
+    "button.close": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancelar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerrar"
           }
         }
       }
     },
-    "button.close" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close"
+    "button.done": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cerrar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hecho"
           }
         }
       }
     },
-    "button.done" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
+    "button.export": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hecho"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportar"
           }
         }
       }
     },
-    "button.export" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export"
+    "button.export.help": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save a separate copy with a chosen format, encryption and password (the open document is unchanged)."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda una copia aparte con el formato, cifrado y contraseña que elijas (el documento abierto no cambia)."
           }
         }
       }
     },
-    "button.export.help" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save a separate copy with a chosen format, encryption and password (the open document is unchanged)."
+    "button.extract": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guarda una copia aparte con el formato, cifrado y contraseña que elijas (el documento abierto no cambia)."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraer"
           }
         }
       }
     },
-    "button.extract" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extract"
+    "button.extractAll": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract all"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extraer"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraer todo"
           }
         }
       }
     },
-    "button.extractAll" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extract all"
+    "button.ok": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extraer todo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aceptar"
           }
         }
       }
     },
-    "button.ok" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "OK"
+    "button.save": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aceptar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         }
       }
     },
-    "button.save" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save"
+    "button.saveEllipsis": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save…"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guardar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar…"
           }
         }
       }
     },
-    "button.saveEllipsis" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save…"
+    "cleanup.delete": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guardar…"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar"
           }
         }
       }
     },
-    "cleanup.delete" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete"
+    "cleanup.keep": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conservar"
           }
         }
       }
     },
-    "cleanup.keep" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keep"
+    "cleanup.message": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The extraction was cancelled, but some files were already extracted. Do you want to keep them or delete them?"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conservar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se canceló la extracción, pero algunos archivos ya se extrajeron. ¿Quieres conservarlos o eliminarlos?"
           }
         }
       }
     },
-    "cleanup.message" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The extraction was cancelled, but some files were already extracted. Do you want to keep them or delete them?"
+    "cleanup.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep the extracted files?"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se canceló la extracción, pero algunos archivos ya se extrajeron. ¿Quieres conservarlos o eliminarlos?"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Conservar los archivos extraídos?"
           }
         }
       }
     },
-    "cleanup.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keep the extracted files?"
+    "column.compressed": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compressed"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "¿Conservar los archivos extraídos?"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprimido"
           }
         }
       }
     },
-    "column.compressed" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compressed"
+    "column.date": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprimido"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fecha"
           }
         }
       }
     },
-    "column.date" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Date"
+    "column.kind": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kind"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fecha"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clase"
           }
         }
       }
     },
-    "column.kind" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kind"
+    "column.name": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clase"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre"
           }
         }
       }
     },
-    "column.name" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Name"
+    "column.size": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Size"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nombre"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tamaño"
           }
         }
       }
     },
-    "column.size" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Size"
+    "conflict.keepBoth": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep both"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tamaño"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conservar ambos"
           }
         }
       }
     },
-    "conflict.keepBoth" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keep both"
+    "conflict.message": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An item named “%@” already exists in the destination. Do you want to overwrite it or keep both?"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conservar ambos"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya hay un elemento llamado «%@» en el destino. ¿Quieres sobrescribirlo o conservar ambos?"
           }
         }
       }
     },
-    "conflict.message" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "An item named “%@” already exists in the destination. Do you want to overwrite it or keep both?"
+    "conflict.overwrite": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overwrite"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ya hay un elemento llamado «%@» en el destino. ¿Quieres sobrescribirlo o conservar ambos?"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sobrescribir"
           }
         }
       }
     },
-    "conflict.overwrite" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Overwrite"
+    "conflict.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” already exists in the destination"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sobrescribir"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya existe «%@» en el destino"
           }
         }
       }
     },
-    "conflict.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” already exists in the destination"
+    "doc.encrypted.help": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encrypted archive"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ya existe «%@» en el destino"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivo cifrado"
           }
         }
       }
     },
-    "doc.encrypted.help" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Encrypted archive"
+    "doc.newFolder": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New folder"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Archivo cifrado"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nueva carpeta"
           }
         }
       }
     },
-    "doc.newFolder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New folder"
+    "doc.unsaved": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "— unsaved"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nueva carpeta"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "— sin guardar"
           }
         }
       }
     },
-    "doc.unsaved" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "— unsaved"
+    "doc.untitled": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "— sin guardar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin título"
           }
         }
       }
     },
-    "doc.untitled" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Untitled"
+    "doc.volumes.help": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved in volumes"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sin título"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardado en volúmenes"
           }
         }
       }
     },
-    "doc.volumes.help" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saved in volumes"
+    "drop.subtitle": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A .zip, .7z, .rar, .tar(.gz/.xz/.bz2), .gz, .xz or .bz2 opens for editing; other files create a new one."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guardado en volúmenes"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un .zip, .7z, .rar, .tar(.gz/.xz/.bz2), .gz, .xz o .bz2 se abrirá para editarlo; otros archivos crearán uno nuevo."
           }
         }
       }
     },
-    "drop.subtitle" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A .zip, .7z, .rar, .tar(.gz/.xz/.bz2), .gz, .xz or .bz2 opens for editing; other files create a new one."
+    "drop.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag files here or click to choose"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Un .zip, .7z, .rar, .tar(.gz/.xz/.bz2), .gz, .xz o .bz2 se abrirá para editarlo; otros archivos crearán uno nuevo."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrastra archivos aquí o haz clic para elegir"
           }
         }
       }
     },
-    "drop.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Drag files here or click to choose"
+    "error.corrupt": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file is damaged or isn’t a valid archive."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Arrastra archivos aquí o haz clic para elegir"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El fichero está dañado o no es un archivo válido."
           }
         }
       }
     },
-    "error.corrupt" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The file is damaged or isn’t a valid archive."
+    "error.needsPassword": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This archive is password-protected. Enter the password to continue."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "El fichero está dañado o no es un archivo válido."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este archivo está protegido con contraseña. Introdúcela para continuar."
           }
         }
       }
     },
-    "error.needsPassword" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This archive is password-protected. Enter the password to continue."
+    "error.readFailed": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The archive could not be read."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este archivo está protegido con contraseña. Introdúcela para continuar."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo leer el archivo."
           }
         }
       }
     },
-    "error.readFailed" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The archive could not be read."
+    "error.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The operation could not be completed"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se pudo leer el archivo."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo completar la operación"
           }
         }
       }
     },
-    "error.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The operation could not be completed"
+    "error.unsupportedEncryption": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This archive uses an encryption method that isn’t supported."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se pudo completar la operación"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este archivo usa un cifrado que no se admite."
           }
         }
       }
     },
-    "error.unsupportedEncryption" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This archive uses an encryption method that isn’t supported."
+    "error.unsupportedMethod": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This archive uses a compression method that isn’t supported."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este archivo usa un cifrado que no se admite."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este archivo usa un método de compresión que no se admite."
           }
         }
       }
     },
-    "error.unsupportedMethod" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This archive uses a compression method that isn’t supported."
+    "error.writeFailed": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The archive could not be written."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este archivo usa un método de compresión que no se admite."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo escribir el archivo."
           }
         }
       }
     },
-    "error.writeFailed" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The archive could not be written."
+    "error.wrongPassword": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The password is incorrect."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se pudo escribir el archivo."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La contraseña no es correcta."
           }
         }
       }
     },
-    "error.wrongPassword" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The password is incorrect."
+    "export.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export to another format"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La contraseña no es correcta."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportar a otro formato"
           }
         }
       }
     },
-    "export.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export to another format"
+    "extract.choose": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose…"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportar a otro formato"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir…"
           }
         }
       }
     },
-    "extract.choose" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose…"
+    "extract.close.continue": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Elegir…"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuar"
           }
         }
       }
     },
-    "extract.close.continue" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continue"
+    "extract.close.message": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you close this window, the extraction in progress will be cancelled."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continuar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si cierras esta ventana se cancelará la extracción en curso."
           }
         }
       }
     },
-    "extract.close.message" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "If you close this window, the extraction in progress will be cancelled."
+    "extract.close.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close the window?"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Si cierras esta ventana se cancelará la extracción en curso."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Cerrar la ventana?"
           }
         }
       }
     },
-    "extract.close.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close the window?"
+    "extract.dest.archiveFolder": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The archive's folder"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "¿Cerrar la ventana?"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La carpeta del archivo"
           }
         }
       }
     },
-    "extract.dest.archiveFolder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The archive's folder"
+    "extract.dest.fixedFolder": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A fixed folder"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La carpeta del archivo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una carpeta fija"
           }
         }
       }
     },
-    "extract.dest.fixedFolder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A fixed folder"
+    "extract.dest.lastUsedFolder": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The last used folder"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Una carpeta fija"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La última carpeta usada"
           }
         }
       }
     },
-    "extract.dest.lastUsedFolder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The last used folder"
+    "extract.in": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In:"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "La última carpeta usada"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En:"
           }
         }
       }
     },
-    "extract.in" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In:"
+    "extract.title.all": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract all"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "En:"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraer todo"
           }
         }
       }
     },
-    "extract.title.all" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extract all"
+    "extract.title.many": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract selected files"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extraer todo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraer archivos seleccionados"
           }
         }
       }
     },
-    "extract.title.many" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extract selected files"
+    "extract.title.one": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract selected file"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extraer archivos seleccionados"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraer archivo seleccionado"
           }
         }
       }
     },
-    "extract.title.one" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extract selected file"
+    "firstrun.later": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not now"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extraer archivo seleccionado"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ahora no"
           }
         }
       }
     },
-    "firstrun.later" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not now"
+    "firstrun.message": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Would you like FilePackr to open compressed files by default? You can choose which formats next."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ahora no"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Quieres que FilePackr abra los archivos comprimidos por defecto? Después podrás elegir qué formatos."
           }
         }
       }
     },
-    "firstrun.message" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Would you like FilePackr to open compressed files by default? You can choose which formats next."
+    "firstrun.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make FilePackr your default compressor?"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "¿Quieres que FilePackr abra los archivos comprimidos por defecto? Después podrás elegir qué formatos."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Hacer de FilePackr tu compresor por defecto?"
           }
         }
       }
     },
-    "firstrun.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Make FilePackr your default compressor?"
+    "firstrun.yes": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "¿Hacer de FilePackr tu compresor por defecto?"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sí"
           }
         }
       }
     },
-    "firstrun.yes" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Yes"
+    "format.bzip2": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "BZIP2 (single file)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sí"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "BZIP2 (un fichero)"
           }
         }
       }
     },
-    "format.bzip2" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "BZIP2 (single file)"
+    "format.cab": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CAB (read only)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "BZIP2 (un fichero)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CAB (solo lectura)"
           }
         }
       }
     },
-    "format.cab" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CAB (read only)"
+    "format.cpio": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CPIO (read only)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CAB (solo lectura)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CPIO (solo lectura)"
           }
         }
       }
     },
-    "format.cpio" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CPIO (read only)"
+    "format.gzip": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GZIP (single file)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CPIO (solo lectura)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GZIP (un fichero)"
           }
         }
       }
     },
-    "format.gzip" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GZIP (single file)"
+    "format.iso": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ISO (disc image)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GZIP (un fichero)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ISO (imagen de disco)"
           }
         }
       }
     },
-    "format.iso" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ISO (disc image)"
+    "format.lha": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LHA (read only)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ISO (imagen de disco)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LHA (solo lectura)"
           }
         }
       }
     },
-    "format.lha" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "LHA (read only)"
+    "format.rar": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RAR (read only)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "LHA (solo lectura)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RAR (solo lectura)"
           }
         }
       }
     },
-    "format.rar" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RAR (read only)"
+    "format.sevenZip": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7z"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "RAR (solo lectura)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7z"
           }
         }
       }
     },
-    "format.sevenZip" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "7z"
+    "format.tar": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAR"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "7z"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAR"
           }
         }
       }
     },
-    "format.tar" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TAR"
+    "format.tarBzip2": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAR.BZ2 (compressed)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TAR"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAR.BZ2 (comprimido)"
           }
         }
       }
     },
-    "format.tarBzip2" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TAR.BZ2 (compressed)"
+    "format.tarGzip": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAR.GZ (compressed)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TAR.BZ2 (comprimido)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAR.GZ (comprimido)"
           }
         }
       }
     },
-    "format.tarGzip" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TAR.GZ (compressed)"
+    "format.tarXz": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAR.XZ (compressed)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TAR.GZ (comprimido)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TAR.XZ (comprimido)"
           }
         }
       }
     },
-    "format.tarXz" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TAR.XZ (compressed)"
+    "format.xar": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XAR"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TAR.XZ (comprimido)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XAR"
           }
         }
       }
     },
-    "format.xar" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "XAR"
+    "format.xz": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XZ (single file)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "XAR"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XZ (un fichero)"
           }
         }
       }
     },
-    "format.xz" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "XZ (single file)"
+    "format.zip": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ZIP"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "XZ (un fichero)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ZIP"
           }
         }
       }
     },
-    "format.zip" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ZIP"
+    "kind.document": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Document"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ZIP"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Documento"
           }
         }
       }
     },
-    "kind.document" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Document"
+    "kind.documentExt": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Document"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Documento"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Documento %@"
           }
         }
       }
     },
-    "kind.documentExt" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ Document"
+    "kind.folder": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folder"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Documento %@"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carpeta"
           }
         }
       }
     },
-    "kind.folder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Folder"
+    "level.fast": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fast"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Carpeta"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rápido"
           }
         }
       }
     },
-    "level.fast" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fast"
+    "level.maximum": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maximum"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rápido"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Máximo"
           }
         }
       }
     },
-    "level.maximum" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Maximum"
+    "level.normal": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Máximo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal"
           }
         }
       }
     },
-    "level.normal" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Normal"
+    "menu.delete": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Normal"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar"
           }
         }
       }
     },
-    "menu.delete" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete"
+    "menu.extract": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract…"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraer…"
           }
         }
       }
     },
-    "menu.extract" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extract…"
+    "menu.rename": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extraer…"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renombrar"
           }
         }
       }
     },
-    "menu.rename" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rename"
+    "panel.add": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Renombrar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir"
           }
         }
       }
     },
-    "panel.add" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add"
+    "panel.choose": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Añadir"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir"
           }
         }
       }
     },
-    "panel.choose" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose"
+    "password.continue": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Elegir"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuar"
           }
         }
       }
     },
-    "password.continue" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continue"
+    "password.entryTitle": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive password"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continuar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña del archivo"
           }
         }
       }
     },
-    "password.entryTitle" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Archive password"
+    "password.field": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contraseña del archivo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña"
           }
         }
       }
     },
-    "password.field" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Password"
+    "password.open": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contraseña"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir"
           }
         }
       }
     },
-    "password.open" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open"
+    "password.openTitle": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password to open the archive"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abrir"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña para abrir el archivo"
           }
         }
       }
     },
-    "password.openTitle" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Password to open the archive"
+    "password.wrong": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong password."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contraseña para abrir el archivo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña incorrecta."
           }
         }
       }
     },
-    "password.wrong" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wrong password."
+    "progress.cleaning": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cleaning up…"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contraseña incorrecta."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpiando…"
           }
         }
       }
     },
-    "progress.cleaning" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cleaning up…"
+    "progress.compressing": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compressing %@…"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Limpiando…"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprimiendo %@…"
           }
         }
       }
     },
-    "progress.compressing" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compressing %@…"
+    "progress.encrypting": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encrypting %@…"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprimiendo %@…"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cifrando %@…"
           }
         }
       }
     },
-    "progress.encrypting" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Encrypting %@…"
+    "progress.extracting": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extracting…"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cifrando %@…"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extrayendo…"
           }
         }
       }
     },
-    "progress.extracting" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extracting…"
+    "progress.opening": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening %@…"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extrayendo…"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abriendo %@…"
           }
         }
       }
     },
-    "progress.opening" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Opening %@…"
+    "progress.splitting": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Splitting into volumes…"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abriendo %@…"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dividiendo en volúmenes…"
           }
         }
       }
     },
-    "progress.splitting" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Splitting into volumes…"
+    "promise.fallback": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "file"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dividiendo en volúmenes…"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "archivo"
           }
         }
       }
     },
-    "promise.fallback" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "file"
+    "save.close.message": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you close this window, the save in progress will be cancelled."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "archivo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si cierras esta ventana se cancelará el guardado en curso."
           }
         }
       }
     },
-    "save.close.message" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "If you close this window, the save in progress will be cancelled."
+    "save.close.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close the window?"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Si cierras esta ventana se cancelará el guardado en curso."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Cerrar la ventana?"
           }
         }
       }
     },
-    "save.close.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close the window?"
+    "save.encryption": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encryption"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "¿Cerrar la ventana?"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cifrado"
           }
         }
       }
     },
-    "save.encryption" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Encryption"
+    "save.encryption.none": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not encrypted"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cifrado"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No cifrado"
           }
         }
       }
     },
-    "save.encryption.none" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not encrypted"
+    "save.encryption.strong": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strong (AES-256)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No cifrado"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fuerte (AES-256)"
           }
         }
       }
     },
-    "save.encryption.strong" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Strong (AES-256)"
+    "save.encryption.weak": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weak (PKZip2 compatible)"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fuerte (AES-256)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Débil (PKZip2 compatible)"
           }
         }
       }
     },
-    "save.encryption.weak" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Weak (PKZip2 compatible)"
+    "save.format": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Débil (PKZip2 compatible)"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formato"
           }
         }
       }
     },
-    "save.format" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Format"
+    "save.level": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compression level"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Formato"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nivel de compresión"
           }
         }
       }
     },
-    "save.level" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compression level"
+    "save.name": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nivel de compresión"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre"
           }
         }
       }
     },
-    "save.name" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Name"
+    "save.noEncryption": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This format doesn't support encryption."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nombre"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este formato no admite cifrado."
           }
         }
       }
     },
-    "save.noEncryption" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This format doesn't support encryption."
+    "save.overwrite.confirm": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Este formato no admite cifrado."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reemplazar"
           }
         }
       }
     },
-    "save.overwrite.confirm" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Replace"
+    "save.overwrite.message": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A file named “%@” already exists in this folder. Replace it?"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reemplazar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya hay un archivo llamado «%@» en esta carpeta. ¿Reemplazarlo?"
           }
         }
       }
     },
-    "save.overwrite.message" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A file named “%@” already exists in this folder. Replace it?"
+    "save.overwrite.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” already exists"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ya hay un archivo llamado «%@» en esta carpeta. ¿Reemplazarlo?"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya existe «%@»"
           }
         }
       }
     },
-    "save.overwrite.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” already exists"
+    "save.password": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ya existe «%@»"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña"
           }
         }
       }
     },
-    "save.password" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Password"
+    "save.split": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split into volumes"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contraseña"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dividir en volúmenes"
           }
         }
       }
     },
-    "save.split" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Split into volumes"
+    "save.split.hint": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«name.%@», «name_001.%@»… will be created. To open it, select any of the parts."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dividir en volúmenes"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se generarán «nombre.%@», «nombre_001.%@»… Para abrirlo, selecciona cualquiera de las partes."
           }
         }
       }
     },
-    "save.split.hint" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "«name.%@», «name_001.%@»… will be created. To open it, select any of the parts."
+    "save.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save file"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se generarán «nombre.%@», «nombre_001.%@»… Para abrirlo, selecciona cualquiera de las partes."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar archivo"
           }
         }
       }
     },
-    "save.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save file"
+    "save.title.changes": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save changes"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guardar archivo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar cambios"
           }
         }
       }
     },
-    "save.title.changes" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save changes"
+    "save.volumeSize": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Size of each volume"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Guardar cambios"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tamaño de cada volumen"
           }
         }
       }
     },
-    "save.volumeSize" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Size of each volume"
+    "save.where": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tamaño de cada volumen"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lugar"
           }
         }
       }
     },
-    "save.where" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Where"
+    "settings.addHidden": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When adding files"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lugar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Al añadir archivos"
           }
         }
       }
     },
-    "settings.addHidden" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "When adding files"
+    "settings.addHidden.note": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies when expanding dragged or added folders. The contents of an open archive are always shown in full."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Al añadir archivos"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se aplica al expandir las carpetas que arrastres o añadas. El contenido de un archivo ya abierto se muestra siempre íntegro."
           }
         }
       }
     },
-    "settings.addHidden.note" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Applies when expanding dragged or added folders. The contents of an open archive are always shown in full."
+    "settings.appearance": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appearance"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se aplica al expandir las carpetas que arrastres o añadas. El contenido de un archivo ya abierto se muestra siempre íntegro."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apariencia"
           }
         }
       }
     },
-    "settings.appearance" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Appearance"
+    "settings.defaultEncryption": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default encryption"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apariencia"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cifrado por defecto"
           }
         }
       }
     },
-    "settings.defaultEncryption" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Default encryption"
+    "settings.defaultFormat": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default format"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cifrado por defecto"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formato por defecto"
           }
         }
       }
     },
-    "settings.defaultFormat" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Default format"
+    "settings.defaultLevel": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compression level"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Formato por defecto"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nivel de compresión"
           }
         }
       }
     },
-    "settings.defaultLevel" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Compression level"
+    "settings.extractTo": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract to"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nivel de compresión"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraer en"
           }
         }
       }
     },
-    "settings.extractTo" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extract to"
+    "settings.files.deselectAll": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deselect all"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extraer en"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desmarcar todos"
           }
         }
       }
     },
-    "settings.files.deselectAll" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deselect all"
+    "settings.files.header": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open these archives with FilePackr by default"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Desmarcar todos"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir estos archivos con FilePackr por defecto"
           }
         }
       }
     },
-    "settings.files.header" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open these archives with FilePackr by default"
+    "settings.files.note": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unchecking a format doesn't hand it back to another app; change “Open with → Change All” in Finder to pick a different default."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abrir estos archivos con FilePackr por defecto"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desmarcar un formato no se lo devuelve a otra app; usa «Abrir con → Cambiar todos» en el Finder para elegir otra app por defecto."
           }
         }
       }
     },
-    "settings.files.note" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unchecking a format doesn't hand it back to another app; change “Open with → Change All” in Finder to pick a different default."
+    "settings.files.selectAll": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select all"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Desmarcar un formato no se lo devuelve a otra app; usa «Abrir con → Cambiar todos» en el Finder para elegir otra app por defecto."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marcar todos"
           }
         }
       }
     },
-    "settings.files.selectAll" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select all"
+    "settings.hidden.excludeAllHidden": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exclude all hidden files"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Marcar todos"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Excluir todos los ocultos"
           }
         }
       }
     },
-    "settings.hidden.excludeAllHidden" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exclude all hidden files"
+    "settings.hidden.excludeSystemFiles": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exclude system files"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Excluir todos los ocultos"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Excluir archivos de sistema"
           }
         }
       }
     },
-    "settings.hidden.excludeSystemFiles" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exclude system files"
+    "settings.hidden.includeAll": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include everything"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Excluir archivos de sistema"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incluir todo"
           }
         }
       }
     },
-    "settings.hidden.includeAll" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Include everything"
+    "settings.lastUsed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last used"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Incluir todo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Último usado"
           }
         }
       }
     },
-    "settings.noFolder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No folder chosen"
+    "settings.noFolder": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No folder chosen"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ninguna carpeta elegida"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna carpeta elegida"
           }
         }
       }
     },
-    "settings.tab.files" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Files"
+    "settings.tab.files": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Files"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Archivos"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivos"
           }
         }
       }
     },
-    "settings.tab.general" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "General"
+    "settings.tab.general": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "General"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General"
           }
         }
       }
     },
-    "settings.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Settings"
+    "settings.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ajustes"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustes"
           }
         }
       }
     },
-    "status.compressed" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "compressed"
+    "status.compressed": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "compressed"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "comprimido"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "comprimido"
           }
         }
       }
     },
-    "status.excluded.many" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%d system files excluded"
+    "status.excluded.many": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d system files excluded"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se excluyeron %d archivos de sistema"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se excluyeron %d archivos de sistema"
           }
         }
       }
     },
-    "status.excluded.one" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 system file excluded"
+    "status.excluded.one": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 system file excluded"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Se excluyó 1 archivo de sistema"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se excluyó 1 archivo de sistema"
           }
         }
       }
     },
-    "status.file" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "file"
+    "status.file": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "file"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "archivo"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "archivo"
           }
         }
       }
     },
-    "status.files" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "files"
+    "status.files": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "files"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "archivos"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "archivos"
           }
         }
       }
     },
-    "theme.dark" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dark"
+    "theme.dark": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dark"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Oscuro"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oscuro"
           }
         }
       }
     },
-    "theme.light" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Light"
+    "theme.light": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Light"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Claro"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claro"
           }
         }
       }
     },
-    "theme.system" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Follow System"
+    "theme.system": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow System"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Según el sistema"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Según el sistema"
           }
         }
       }
     },
-    "toolbar.add" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add"
+    "toolbar.add": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Añadir"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir"
           }
         }
       }
     },
-    "toolbar.add.help" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add files, or open an archive if it's the first one"
+    "toolbar.add.help": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add files, or open an archive if it's the first one"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Añadir archivos, o abrir un archivo si es el primero"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir archivos, o abrir un archivo si es el primero"
           }
         }
       }
     },
-    "toolbar.delete" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete"
+    "toolbar.delete": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar"
           }
         }
       }
     },
-    "toolbar.delete.help" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete the selected item"
+    "toolbar.delete.help": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete the selected item"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eliminar el elemento seleccionado"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar el elemento seleccionado"
           }
         }
       }
     },
-    "toolbar.extract" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extract"
+    "toolbar.extract": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extraer"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraer"
           }
         }
       }
     },
-    "toolbar.extract.help" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extract the selected item to a location"
+    "toolbar.extract.help": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract the selected item to a location"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extraer el elemento seleccionado a una ubicación"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extraer el elemento seleccionado a una ubicación"
           }
         }
       }
     },
-    "toolbar.newFolder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New Folder"
+    "toolbar.newFolder": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Folder"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Crear carpeta"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crear carpeta"
           }
         }
       }
     },
-    "toolbar.newFolder.help" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Create a folder"
+    "toolbar.newFolder.help": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a folder"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Crear una carpeta"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crear una carpeta"
           }
         }
       }
     },
-    "toolbar.settings" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Settings"
+    "toolbar.settings": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ajustes"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustes"
           }
         }
       }
     },
-    "unsaved.dontSave" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close Without Saving"
+    "unsaved.dontSave": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Without Saving"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cerrar sin guardar"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerrar sin guardar"
           }
         }
       }
     },
-    "unsaved.message" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "If you don't save them, your changes will be lost."
+    "unsaved.message": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you don't save them, your changes will be lost."
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Si no los guardas, se perderán."
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si no los guardas, se perderán."
           }
         }
       }
     },
-    "unsaved.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Do you want to save your changes?"
+    "unsaved.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do you want to save your changes?"
           }
         },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "¿Quieres guardar los cambios?"
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Quieres guardar los cambios?"
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

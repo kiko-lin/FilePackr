@@ -111,7 +111,7 @@ struct ContentView: View {
                              title: saveOptionsTitle,
                              confirmLabel: saveCoord.isExport ? loc("button.export") : loc("button.saveEllipsis"),
                              onChooseFolder: { saveCoord.chooseFolder(prompt: loc("panel.choose")) },
-                             onConfirm: { saveCoord.confirm(perform: runSave) },
+                             onConfirm: { saveCoord.confirm(settings: settings, perform: runSave) },
                              onCancel: { saveCoord.cancel() })
         }
         .sheet(isPresented: $showingEntryPassword, onDismiss: { runAfterUnlock() }) {

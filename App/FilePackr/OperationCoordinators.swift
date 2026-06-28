@@ -301,12 +301,12 @@ final class SaveCoordinator: ObservableObject {
     /// defaults de Ajustes; abierto: lo que traía el archivo).
     func prefill(doc: ArchiveDocument, settings: AppSettings, baseName: String) {
         let isNew = doc.sourceURL == nil
-        var fmt = isNew ? settings.defaultFormat : doc.saveFormat
+        var fmt = isNew ? settings.resolvedFormat : doc.saveFormat
         if !fmt.isWritable { fmt = .zip }                            // rar → zip
         if fmt.isSingleFileOnly && !doc.isSingleFile { fmt = .zip }  // gz/xz/bz2 solo si es un fichero
         format = fmt
-        encryption = isNew ? settings.defaultEncryption : doc.saveEncryption
-        level = isNew ? settings.defaultCompressionLevel : doc.saveLevel
+        encryption = isNew ? settings.resolvedEncryption : doc.saveEncryption
+        level = isNew ? settings.resolvedLevel : doc.saveLevel
         password = ""
         name = baseName
         destination = doc.sourceURL?.deletingLastPathComponent()
@@ -353,8 +353,12 @@ final class SaveCoordinator: ObservableObject {
 
     /// Confirma: cierra la hoja y escribe en `resolvedURL`. Tras guardar (no exportar) ejecuta la
     /// acción pendiente solo si tuvo éxito, pero la limpia siempre.
-    func confirm(perform: @escaping Perform) {
+    func confirm(settings: AppSettings, perform: @escaping Perform) {
         guard canConfirm else { return }
+        // Recuerda la selección para la opción "Último usado" (la contraseña no se guarda).
+        settings.lastUsedFormat = format
+        settings.lastUsedEncryption = encryption
+        settings.lastUsedLevel = level
         showingOptions = false
         let exporting = isExport
         let url = resolvedURL
