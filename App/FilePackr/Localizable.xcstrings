@@ -809,13 +809,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The archive's folder"
+            "value" : "Archive's folder"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La carpeta del archivo"
+            "value" : "Carpeta del archivo"
           }
         }
       }
@@ -826,13 +826,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "A fixed folder"
+            "value" : "Fixed folder"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Una carpeta fija"
+            "value" : "Carpeta fija"
           }
         }
       }
@@ -843,13 +843,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "The last used folder"
+            "value" : "Last used"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La última carpeta usada"
+            "value" : "Última usada"
           }
         }
       }

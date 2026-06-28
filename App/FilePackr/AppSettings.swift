@@ -19,7 +19,7 @@ enum AppTheme: String, CaseIterable, Identifiable {
 
 /// A dónde extraer por defecto.
 enum ExtractDestinationMode: String, CaseIterable, Identifiable {
-    case archiveFolder, fixedFolder, lastUsedFolder
+    case lastUsedFolder, archiveFolder, fixedFolder
     var id: String { rawValue }
     var nameKey: String {
         switch self {
