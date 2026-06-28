@@ -113,10 +113,12 @@ public enum Tar {
     /// al acabar), leyendo los ficheros de disco por trozos (memoria constante). Encadenable
     /// con el `next` de un compresor para producir `.tar.gz`/`.tar.xz`/`.tar.bz2` sin
     /// montar el TAR entero en RAM.
-    public static func reader(_ items: [WriteItem]) -> () throws -> Data? {
+    public static func reader(_ items: [WriteItem],
+                              onProgress: WriteProgress = .none) -> () throws -> Data? {
         var index = 0
         var pending: [Data] = []          // bloques pequeños en cola (cabeceras, padding, ceros finales)
         var handle: FileHandle?
+        var currentPath = ""              // fichero cuyo cuerpo se está emitiendo (para el progreso)
         var bodyRemaining = 0             // bytes de cuerpo de fichero por emitir
         var bodyPadding = 0              // padding a 512 tras el cuerpo del fichero actual
         var emittedEnd = false
@@ -129,11 +131,12 @@ public enum Tar {
             guard !item.isDirectory else { return }
             switch item.source {
             case .data(let d):
-                if !d.isEmpty { pending.append(d) }
+                if !d.isEmpty { pending.append(d); onProgress(item.path, d.count) }
                 let pad = padding(d.count); if !pad.isEmpty { pending.append(pad) }
             case .file(let url):
                 if size > 0 {
                     handle = try FileHandle(forReadingFrom: url)
+                    currentPath = item.path
                     bodyRemaining = size
                     bodyPadding = (blockSize - size % blockSize) % blockSize
                 }
@@ -147,6 +150,7 @@ public enum Tar {
                     if bodyRemaining > 0, let chunk = try h.read(upToCount: min(64 * 1024, bodyRemaining)),
                        !chunk.isEmpty {
                         bodyRemaining -= chunk.count
+                        onProgress(currentPath, chunk.count)   // bytes de entrada de este fichero
                         return chunk
                     }
                     try? h.close(); handle = nil

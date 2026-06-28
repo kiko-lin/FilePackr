@@ -55,7 +55,7 @@ public struct ZipWriter: Sendable {
     public func build(_ inputs: [ZipEntryInput], encryption: ZipEncryption = .none,
                       password: String? = nil, level: CompressionLevel = .default,
                       cancellation: CancellationCheck = .none,
-                      progress: ((Double) -> Void)? = nil) throws -> Data {
+                      progress: WriteProgress = .none) throws -> Data {
         var out = Data()
         try writeStream(inputs, encryption: encryption, password: password, level: level,
                         cancellation: cancellation, progress: progress) { out.append($0) }
@@ -66,7 +66,7 @@ public struct ZipWriter: Sendable {
     public func write(_ inputs: [ZipEntryInput], to handle: FileHandle, encryption: ZipEncryption = .none,
                       password: String? = nil, level: CompressionLevel = .default,
                       cancellation: CancellationCheck = .none,
-                      progress: ((Double) -> Void)? = nil) throws {
+                      progress: WriteProgress = .none) throws {
         try writeStream(inputs, encryption: encryption, password: password, level: level,
                         cancellation: cancellation, progress: progress) {
             try handle.write(contentsOf: $0)
@@ -77,21 +77,21 @@ public struct ZipWriter: Sendable {
 
     private func writeStream(_ inputs: [ZipEntryInput], encryption: ZipEncryption, password: String?,
                              level: CompressionLevel, cancellation: CancellationCheck,
-                             progress: ((Double) -> Void)?, sink: (Data) throws -> Void) throws {
+                             progress: WriteProgress, sink: (Data) throws -> Void) throws {
         var offset: UInt64 = 0
         var central = Data()
         var count = 0
         func emit(_ data: Data) throws { try sink(data); offset += UInt64(data.count) }
 
-        for (index, input) in inputs.enumerated() {
+        for input in inputs {
             try cancellation.check()   // por entrada
             // Los ficheros de disco se comprimen (y cifran) en streaming: memoria constante
-            // sea el fichero del tamaño que sea.
+            // sea el fichero del tamaño que sea. El progreso se reporta por trozos dentro.
             if case .file(let url) = input.source {
                 let localOffset = offset
                 central.append(try emitStreamedFile(path: input.path, url: url, modifiedAt: input.modifiedAt,
                                                     encryption: encryption, password: password, level: level,
-                                                    cancellation: cancellation,
+                                                    cancellation: cancellation, progress: progress,
                                                     localOffset: localOffset, emit: emit))
             } else {
                 var record = try makeRecord(input, level: level)
@@ -106,9 +106,9 @@ public struct ZipWriter: Sendable {
                 try emit(localHeader(record))
                 try emit(record.compressed)
                 central.append(centralHeader(record, localOffset: localOffset))
+                if !record.isDirectory { progress(input.path, Int(record.uncompressedSize)) }
             }
             count += 1
-            if !inputs.isEmpty { progress?(Double(index + 1) / Double(inputs.count)) }
         }
 
         let cdOffset = offset
@@ -146,7 +146,7 @@ public struct ZipWriter: Sendable {
     /// cabecera central de la entrada.
     private func emitStreamedFile(path: String, url: URL, modifiedAt: Date?,
                                   encryption: ZipEncryption, password: String?, level: CompressionLevel,
-                                  cancellation: CancellationCheck,
+                                  cancellation: CancellationCheck, progress: WriteProgress,
                                   localOffset: UInt64, emit: (Data) throws -> Void) throws -> Data {
         let (time, date) = Self.dosDateTime(modifiedAt)
         let nameBytes = Data(path.utf8)
@@ -188,6 +188,7 @@ public struct ZipWriter: Sendable {
                 guard let chunk = try readNext() else { return nil }
                 crc.update(chunk)
                 uncompressed += UInt64(chunk.count)
+                progress(path, chunk.count)   // bytes de entrada procesados de este fichero
                 return chunk
             },
             sink: { chunk in
