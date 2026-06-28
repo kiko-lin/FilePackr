@@ -1,11 +1,15 @@
 # Tests pendientes — verificación en GUI
 
-Lista de pruebas **aún por realizar** sobre el trabajo reciente. El agente solo compila y corre
-los tests del **motor** (`swift test`, 93 verdes) y los del **modelo** (`FilePackrTests`, ⌘U); la
-parte de **GUI / Finder / sistema** la verificas tú en Xcode (**⌘R**) y marcas aquí.
+Checklist para una **prueba final de toda la app**. El agente solo compila y corre los tests del
+**motor** (`swift test`, 93 verdes) y los del **modelo** (`FilePackrTests`, ⌘U); la parte de
+**GUI / Finder / sistema** la verificas tú en Xcode (**⌘R**) y marcas aquí.
+
+- **Parte A (§1–§13)**: trabajo reciente pendiente de verificar (i18n, Servicios, cancelación,
+  «último usado», guardar/exportar, niveles…).
+- **Parte B (§14–§24)**: regresión completa de la funcionalidad de siempre.
 
 > Relanza siempre con **⌘R** tras compilar: una instancia vieja muestra el comportamiento anterior.
-> La lista general (no específica de esta tanda) está en [`pruebas-manuales.md`](pruebas-manuales.md).
+> Sustituye a la lista antigua [`pruebas-manuales.md`](pruebas-manuales.md) (más corta y algo desfasada).
 
 ## 0. Preparación de datos
 
@@ -166,3 +170,102 @@ touch -t 202001010000 ~/Desktop/.viejo.filepackr.work   # simula un resto de cie
       React 2 / React 3» con «conservar ambos» no deja dos ficheros con el mismo nombre.
 - [ ] **Guardar/Exportar** en cada formato (zip, tar.gz, 7z, gz…) produce el archivo correcto (ábrelo).
 - [ ] Una vez validado todo → `git push` (lo hace el usuario; el agente no tiene red).
+
+---
+
+# Parte B — Funcionalidad base (regresión completa de toda la app)
+
+> Pasada completa de las funciones de siempre, para una verificación final de extremo a extremo.
+
+## 14. Apertura y navegación (todos los formatos)
+
+- [ ] **Abrir y navegar sin descomprimir** cada formato (el árbol se ve al instante, sin copiar el fichero):
+      **ZIP, TAR, TAR.GZ, TAR.XZ, TAR.BZ2, GZ, XZ, BZ2, 7z, RAR, ISO, CPIO, XAR, LHA, CAB**.
+- [ ] **ZIP64**: abrir un zip con **muchas** entradas (miles) → lista completa, sin errores.
+- [ ] **Iconos por tipo** y columna **«Clase»** correctos según extensión.
+- [ ] Abrir desde el **Finder** (doble clic en un archivo asociado) y arrastrándolo al **icono** del Dock.
+- [ ] Abrir un archivo **multivolumen** (`nombre.zip` + `nombre_001.zip`…) por cualquiera de sus partes → se reúne.
+
+## 15. Edición del contenido
+
+- [ ] **Añadir** ficheros/carpetas (botón **Añadir** y **arrastrando** desde el Finder) → se revela y **enfoca** lo añadido.
+- [ ] **Crear carpeta** (dentro de otra también) → se despliega y revela la nueva.
+- [ ] **Renombrar** en línea (Intro) y por **menú contextual**.
+- [ ] **Mover** arrastrando filas a otra carpeta del árbol.
+- [ ] **Borrar**: botón Eliminar y tecla **Supr**.
+- [ ] **Selección múltiple**: arrastre múltiple, **borrado en lote**, Extraer múltiple.
+- [ ] Tras editar, la marca de **«sin guardar»** aparece en la cabecera y el punto del semáforo rojo.
+
+## 16. Conflicto al añadir
+
+- [ ] Añadir un elemento cuyo **nombre ya existe** en el destino → diálogo **Sobrescribir / Conservar ambos / Cancelar**.
+- [ ] **Conservar ambos** → el nuevo entra como «nombre 2.ext» (conserva extensión).
+- [ ] Arrastrar sobre un archivo **bloqueado** (cifrado sin clave) → pide la **contraseña** antes de añadir.
+
+## 17. Arrastrar al Finder (extracción por arrastre) 🔴
+
+- [ ] Arrastrar un fichero de varios cientos de MB de un zip abierto al **Escritorio** → la app **responde**
+      (sin bola de colores), la imagen de arrastre se suelta enseguida y aparece la **tarjeta de progreso**.
+- [ ] La **imagen de arrastre** es **solo el icono** (estilo Finder), no la fila entera con columnas.
+- [ ] Arrastre **múltiple** de varias filas a la vez.
+- [ ] Cancelar / cerrar la ventana durante el arrastre-extracción → no deja ficheros a medias (ver §8/§9).
+
+## 18. Quick Look
+
+- [ ] Seleccionar un fichero y pulsar **barra espaciadora** → vista previa.
+- [ ] Fichero **grande** → no congela la app; la vista aparece cuando está lista. Los pequeños, al instante.
+
+## 19. Navegador: columnas y plegado
+
+- [ ] **Ordenar sin cuelgue** 🔴: con una carpeta de **muchos** ficheros del mismo tipo, clic repetido en
+      **«Clase»** (asc/desc) **no** cuelga. Probar también Nombre, Fecha, Tamaño, Comprimido.
+- [ ] **Doble clic en una carpeta** → la pliega/despliega.
+- [ ] Columnas **ordenables** en ambos sentidos y anchos ajustables.
+
+## 20. Cifrado de lectura y bloqueo de solo lectura
+
+- [ ] Abrir un **ZIP cifrado** creado por otra app → **pide la contraseña al abrir**, la valida y la recuerda
+      (extraer/previsualizar/arrastrar funcionan sin volver a pedirla).
+- [ ] **Contraseña incorrecta** → aviso, no abre.
+- [ ] **7z con cabeceras cifradas** → pide contraseña para abrir.
+- [ ] **Bloqueo solo-lectura**: un cifrado **sin** contraseña no se puede editar (renombrar/borrar/mover/crear/añadir);
+      al intentarlo, **pide la clave** y, al desbloquear, **ejecuta la acción pendiente**.
+
+## 21. Cambios sin guardar (3 caminos)
+
+- [ ] **Botón Cerrar** con cambios → aviso de **3 botones**: Guardar / Cerrar sin guardar / Cancelar.
+- [ ] **Cerrar la ventana** (X / ⌘W) con cambios → mismo aviso.
+- [ ] **Salir (⌘Q)** con cambios → mismo aviso unificado.
+- [ ] En los tres, **«Guardar»** ejecuta el flujo real (incl. la hoja si es documento nuevo) y **luego** cierra/sale.
+
+## 22. Barra de estado y tarjeta de progreso
+
+- [ ] Con archivo abierto, la **barra de estado** inferior muestra **nº de ficheros · tamaño · comprimido**,
+      y se actualiza al editar.
+- [ ] La **tarjeta de progreso** es flotante y centrada, con la app atenuada detrás (no tapa toda la ventana);
+      no crece al aparecer el nombre; botón rojo con borde; semáforos visibles.
+
+## 23. Archivos ocultos al añadir (políticas)
+
+Con una carpeta que tenga `.DS_Store`, `._recurso`, `.gitignore`, `sub/.DS_Store`, `visible.txt`:
+
+- [ ] **Excluir archivos de sistema** (por defecto): entran `visible.txt`, `.gitignore`, `sub`; **no** `.DS_Store`/`._*`.
+      Aviso en la barra de estado «Se excluyeron N…» (~5 s, no se queda pegado).
+- [ ] **Incluir todo**: entran también los `.DS_Store`/`._*`, sin aviso.
+- [ ] **Excluir todos los ocultos**: no entra ningún nombre que empiece por `.`.
+- [ ] **Override explícito**: arrastrar **directamente** un `.DS_Store` suelto → entra (la elección explícita gana).
+
+## 24. Ajustes y asociación de formatos
+
+- [ ] **Tema**: Sistema / Claro / Oscuro → se aplica en caliente.
+- [ ] **Primer arranque** (build limpia / prefs borradas): sale el diálogo «compresor por defecto»; «Sí» abre
+      Ajustes › Archivos.
+- [ ] **Pestaña Archivos**: marcar/desmarcar formatos y comprobar en el Finder («Abrir con») que FilePackr
+      aparece para los marcados. El checkbox se pulsa bien, separado del icono/nombre.
+- [ ] Ajustes se abre desde el **menú (⌘,)**, no desde la interfaz.
+
+---
+
+> **Prioridad si vas con poco tiempo**: §7 (niveles, núcleo de compresión), §6 (guardar/exportar +
+> interop), §8–§9 (cancelar compresión + cerrar mientras guarda), §17/§19.1 (arrastre y ordenar sin
+> cuelgue). El resto es UI de menor riesgo.
