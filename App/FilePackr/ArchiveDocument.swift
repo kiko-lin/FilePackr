@@ -143,6 +143,8 @@ final class ArchiveDocument: ObservableObject {
 
         // Si venía troceado, limpiamos cualquier temporal de una apertura anterior.
         discardJoinedVolumesTemp()
+        // Red defensiva: restos de un guardado interrumpido por un cierre forzado anterior.
+        Self.cleanStaleWorkFiles(in: baseURL.deletingLastPathComponent())
         let fallbackName = baseURL.deletingPathExtension().lastPathComponent
         let report = makeProgressReporter()
         let result: ArchiveReadResult
@@ -434,15 +436,20 @@ final class ArchiveDocument: ObservableObject {
     /// opcionalmente sobrescribiendo.
     /// `true` mientras hay una extracción cancelable en curso (botón Extraer **o** arrastre al
     /// Finder). La vista lo usa para mostrar la (X) del overlay.
-    @Published private(set) var extractionCancellable = false
-    /// Token de la extracción activa; lo comparte la ruta de fondo que descomprime.
+    /// Hay una operación larga **cancelable** en curso (extracción o guardado/exportación): la
+    /// vista muestra el botón Cancelar y el cierre de ventana avisa antes de abortarla.
+    @Published private(set) var cancellable = false
+    /// Guardado/exportación en curso (subconjunto de `cancellable`): además de avisar al cerrar,
+    /// impide lanzar un segundo guardado encima.
+    @Published private(set) var isWriting = false
+    /// Token de la operación activa; lo comparte la ruta de fondo (descompresión o compresión).
     private var cancelToken: CancelToken?
 
     /// Registra una extracción cancelable y prepara el progreso. Lo llaman ambas rutas (el
     /// botón aquí mismo; el arrastre al Finder desde el delegado de promesas). Hilo principal.
     func registerExtraction(token: CancelToken, total: Int64) {
         cancelToken = token
-        extractionCancellable = true
+        cancellable = true
         // Determinado si conocemos el tamaño total; si no (entradas sin tamaño), indeterminado.
         progress = ProgressState(kind: .extracting, fraction: total > 0 ? 0 : nil)
     }
@@ -450,13 +457,48 @@ final class ArchiveDocument: ObservableObject {
     /// Fin de la extracción: limpia progreso, flag y token.
     func endExtraction() {
         progress = nil
-        extractionCancellable = false
+        cancellable = false
         cancelToken = nil
     }
 
-    /// Cancela la extracción en curso (X del overlay o cierre de la ventana): la descompresión
-    /// aborta en el siguiente trozo y `writeFileAtomically` descarta el temporal a medias.
-    func cancelExtraction() { cancelToken?.cancel() }
+    /// Cancela la operación larga en curso (X del overlay, cierre de ventana o salir): la
+    /// descompresión/compresión aborta en el siguiente trozo y se descarta el temporal a medias.
+    func cancelCurrentOperation() { cancelToken?.cancel() }
+
+    /// Borra las rutas ya extraídas de un lote cancelado (cuando el usuario elige "Eliminar"),
+    /// mostrando la tarjeta "Limpiando…" con barra determinada por número de elementos.
+    func cleanUpExtracted(_ urls: [URL]) async {
+        guard !urls.isEmpty else { return }
+        progress = ProgressState(kind: .cleaningUp, fraction: 0)
+        defer { progress = nil }
+        let total = urls.count
+        await Task.detached(priority: .userInitiated) {
+            for (index, url) in urls.enumerated() {
+                try? FileManager.default.removeItem(at: url)
+                let fraction = Double(index + 1) / Double(total)
+                await MainActor.run { self.progress?.fraction = fraction }
+            }
+        }.value
+    }
+
+    /// Sufijo de los temporales de guardado (`.<uuid>.filepackr.work`), ocultos y en la carpeta
+    /// del destino para que el movimiento final sea atómico (mismo volumen).
+    static let workFileSuffix = ".filepackr.work"
+
+    /// Borra restos de un guardado interrumpido por un cierre forzado anterior en `folder`.
+    /// **Conservador**: solo los de más de una hora, para no tocar un guardado concurrente en
+    /// curso en la misma carpeta (que tendría segundos de antigüedad).
+    static func cleanStaleWorkFiles(in folder: URL) {
+        let fm = FileManager.default
+        guard let items = try? fm.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
+        let cutoff = Date().addingTimeInterval(-3600)
+        for url in items where url.lastPathComponent.hasSuffix(workFileSuffix) {
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
+                .contentModificationDate) ?? .distantPast
+            if modified < cutoff { try? fm.removeItem(at: url) }
+        }
+    }
 
     func performExtraction(of plan: ExportPlan, to destination: URL, overwrite: Bool) async throws {
         if overwrite, FileManager.default.fileExists(atPath: destination.path) {
@@ -526,7 +568,13 @@ final class ArchiveDocument: ObservableObject {
         // y la barra pasa a determinada; los demás formatos siguen indeterminados.
         progress = ProgressState(kind: cipher == .none ? .compressing(documentName) : .encrypting(documentName),
                                  fraction: nil)
-        defer { progress = nil }
+        // La escritura es cancelable: el usuario puede pulsar Cancelar (overlay) o cerrar la
+        // ventana; el motor aborta en el siguiente trozo y abajo se descarta el `work` a medias.
+        let token = CancelToken()
+        cancelToken = token
+        cancellable = true
+        isWriting = true
+        defer { progress = nil; cancellable = false; isWriting = false; cancelToken = nil }
 
         // 1) Producir el archivo completo en un fichero temporal. El documento decide
         // *qué* escribir y el ArchiveSaver decide *cómo* (codifica a disco). El ensamblado del
@@ -541,9 +589,11 @@ final class ArchiveDocument: ObservableObject {
             try builder.payload(for: outputFormat, encryption: cipher, password: pwd, level: level)
         }.value
         let work = url.deletingLastPathComponent()
-            .appendingPathComponent(".\(UUID().uuidString).filepackr.work")
+            .appendingPathComponent(".\(UUID().uuidString)\(Self.workFileSuffix)")
         do {
-            try await ArchiveSaver.encode(payload, to: work, progress: makeProgressReporter())
+            try await ArchiveSaver.encode(payload, to: work,
+                                          cancellation: CancellationCheck { token.isCancelled },
+                                          progress: makeProgressReporter())
             // 2) Colocar el resultado: un solo fichero o dividido en volúmenes.
             if let volumes {
                 progress = ProgressState(kind: .splitting, fraction: nil)

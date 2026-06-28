@@ -141,9 +141,13 @@ final class ExtractCoordinator: ObservableObject {
     /// Rutas ya comprometidas en este lote (extraídas o decididas), para que dos elementos
     /// del mismo lote no acaben en el mismo fichero aunque su nombre aún no esté en disco.
     private var claimed: Set<String> = []
+    /// Rutas **realmente escritas** en este lote (cada ítem completado con éxito). Si se cancela
+    /// a media tanda, son las que quedan en disco y sobre las que se ofrece conservar/eliminar.
+    private var extractedURLs: [URL] = []
 
     /// Ejecuta la extracción de un plan; la implementa la vista (envuelve el manejo de error).
-    typealias Perform = (ExportPlan, URL, Bool) async -> Void
+    /// Devuelve `true` si el ítem se escribió con éxito (no cancelado/erróneo).
+    typealias Perform = (ExportPlan, URL, Bool) async -> Bool
 
     /// Fija el destino por defecto (carpeta del archivo o fija, según ajustes) antes de abrir
     /// la hoja. La contraseña, si el archivo está cifrado, se pide antes (al desbloquear).
@@ -174,6 +178,7 @@ final class ExtractCoordinator: ObservableObject {
         request = nil
         queue = req.makePlans()
         claimed = []
+        extractedURLs = []
         processNext(doc: doc, perform: perform)
     }
 
@@ -206,7 +211,7 @@ final class ExtractCoordinator: ObservableObject {
                          doc: ArchiveDocument, perform: @escaping Perform) {
         claimed.insert(dest.path)
         Task {
-            await perform(plan, dest, overwrite)
+            if await perform(plan, dest, overwrite) { extractedURLs.append(dest) }
             processNext(doc: doc, perform: perform)
         }
     }
@@ -232,16 +237,25 @@ final class ExtractCoordinator: ObservableObject {
         }
     }
 
-    /// Cancela el lote desde el diálogo de conflicto.
-    func cancelConflict() {
+    /// Cancela el lote desde el diálogo de conflicto y devuelve las rutas ya extraídas (igual
+    /// que `cancelBatch`, para ofrecer conservar/eliminar).
+    @discardableResult
+    func cancelConflict() -> [URL] {
         conflict = nil
         queue = []
+        defer { extractedURLs = [] }
+        return extractedURLs
     }
 
-    /// Vacía la cola pendiente: tras cancelar la extracción en curso, el lote no sigue con
-    /// los elementos restantes (el `processNext` de la tarea actual encontrará la cola vacía).
-    func cancelBatch() {
+    /// Vacía la cola pendiente y **devuelve las rutas ya extraídas** del lote (para ofrecer
+    /// conservar/eliminar). Tras cancelar la extracción en curso, el lote no sigue con los
+    /// elementos restantes (el `processNext` de la tarea actual encontrará la cola vacía); el
+    /// ítem en vuelo, al cancelarse, no se cuenta como extraído (su temporal se descarta).
+    @discardableResult
+    func cancelBatch() -> [URL] {
         queue = []
+        defer { extractedURLs = [] }
+        return extractedURLs
     }
 
     /// "Elegir…": abre el navegador de carpetas para cambiar el destino.

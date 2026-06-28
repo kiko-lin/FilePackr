@@ -66,44 +66,46 @@ nonisolated struct SavePayloadBuilder: Sendable {
             return .zip(inputs: zipInputs(), encryption: encryption, password: password, level: level)
         case .tar:
             let items = tarItems()
-            return .stream { handle in
+            return .stream { handle, cancel in
                 let next = Tar.reader(items)
-                while let chunk = try next() { try handle.write(contentsOf: chunk) }
+                while let chunk = try next() { try cancel.check(); try handle.write(contentsOf: chunk) }
             }
         case .tarGzip:
             let items = tarItems()
             let name = documentName.isEmpty ? nil : documentName
-            return .stream { handle in
-                try Gzip.compress(next: Tar.reader(items), sink: { try handle.write(contentsOf: $0) },
-                                  filename: name, level: level)
+            return .stream { handle, cancel in
+                try Gzip.compress(next: cancellable(Tar.reader(items), cancel),
+                                  sink: { try handle.write(contentsOf: $0) }, filename: name, level: level)
             }
         case .tarXz:
             let items = tarItems()
-            return .stream { handle in
-                try Xz.compress(level: level, next: Tar.reader(items),
+            return .stream { handle, cancel in
+                try Xz.compress(level: level, next: cancellable(Tar.reader(items), cancel),
                                 sink: { try handle.write(contentsOf: $0) })
             }
         case .tarBzip2:
             let items = tarItems()
-            return .stream { handle in
-                try Bzip2.compress(blockSize: level.bzip2BlockSize, next: Tar.reader(items),
+            return .stream { handle, cancel in
+                try Bzip2.compress(blockSize: level.bzip2BlockSize, next: cancellable(Tar.reader(items), cancel),
                                    sink: { try handle.write(contentsOf: $0) })
             }
         case .gzip:
             guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
             let name = node.name
             return try singleFilePayload(node,
-                stream: { try Gzip.compress(from: $0, to: $1, filename: name, level: level) },
+                compress: { next, sink in try Gzip.compress(next: next, sink: sink, filename: name, level: level) },
                 memory: { Gzip.compress($0, filename: name, level: level) })
         case .xz:
             guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
-            return try singleFilePayload(node, stream: { try Xz.compress(from: $0, to: $1, level: level) },
-                                         memory: { Xz.compress($0, level: level) })
+            return try singleFilePayload(node,
+                compress: { next, sink in try Xz.compress(level: level, next: next, sink: sink) },
+                memory: { Xz.compress($0, level: level) })
         case .bzip2:
             guard let node = roots.first(where: { !$0.isDirectory }) else { throw CocoaError(.fileWriteUnknown) }
             let blockSize = level.bzip2BlockSize
-            return try singleFilePayload(node, stream: { try Bzip2.compress(from: $0, to: $1, blockSize: blockSize) },
-                                         memory: { Bzip2.compress($0, blockSize: blockSize) })
+            return try singleFilePayload(node,
+                compress: { next, sink in try Bzip2.compress(blockSize: blockSize, next: next, sink: sink) },
+                memory: { Bzip2.compress($0, blockSize: blockSize) })
         case .sevenZip, .iso, .xar:
             guard let writeFormat = outputFormat.libArchiveWriteFormat else {
                 throw CocoaError(.fileWriteUnsupportedScheme)
@@ -141,17 +143,19 @@ nonisolated struct SavePayloadBuilder: Sendable {
 
     // MARK: - Constructores de items por familia de formato
 
-    /// Payload para formatos de un solo fichero (gz/xz/bz2). Si el contenido es un
-    /// fichero de disco, comprime en **streaming** (memoria constante); si ya está en
-    /// RAM (entrada de un archivo abierto), usa la ruta en memoria.
+    /// Payload para formatos de un solo fichero (gz/xz/bz2). Si el contenido es un fichero de
+    /// disco, comprime en **streaming** (memoria constante) leyéndolo por trozos como `next`
+    /// —que es por donde entra la cancelación—; si ya está en RAM (entrada de un archivo
+    /// abierto), usa la ruta en memoria (no cancelable: el dato ya está cargado).
     private func singleFilePayload(_ node: NodeSnapshot,
-                                   stream: @escaping @Sendable (FileHandle, FileHandle) throws -> Void,
+                                   compress: @escaping @Sendable (_ next: () throws -> Data?,
+                                                                  _ sink: (Data) throws -> Void) throws -> Void,
                                    memory: @escaping @Sendable (Data) -> Data) throws -> SavePayload {
         if case .diskFile(let url) = node.source {
-            return .stream { out in
+            return .stream { out, cancel in
                 let input = try FileHandle(forReadingFrom: url)
                 defer { try? input.close() }
-                try stream(input, out)
+                try compress(fileReader(input, cancel), { try out.write(contentsOf: $0) })
             }
         }
         guard let data = nodeData(node) else { throw CocoaError(.fileWriteUnknown) }
@@ -227,5 +231,25 @@ nonisolated struct SavePayloadBuilder: Sendable {
             }
         }
         return items
+    }
+}
+
+// MARK: - Inyección de cancelación en los compresores (rutas en streaming)
+
+/// Envuelve un generador `next` para que **consulte la cancelación antes de cada trozo**. Como
+/// los compresores (gz/xz/bz2) tiran de `next` en su bucle y propagan lo que lance, este es el
+/// punto natural por el que entra la cancelación sin tocar el motor. `nonisolated`: corre dentro
+/// del `Task.detached` del `ArchiveSaver`, no en el hilo principal.
+private nonisolated func cancellable(_ next: @escaping () throws -> Data?,
+                                     _ cancel: CancellationCheck) -> () throws -> Data? {
+    { try cancel.check(); return try next() }
+}
+
+/// Lee `handle` por trozos como un `next` cancelable (para la compresión de un único fichero).
+private nonisolated func fileReader(_ handle: FileHandle, _ cancel: CancellationCheck) -> () throws -> Data? {
+    {
+        try cancel.check()
+        let chunk = try handle.read(upToCount: 64 * 1024) ?? Data()
+        return chunk.isEmpty ? nil : chunk
     }
 }

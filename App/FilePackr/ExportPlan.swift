@@ -87,6 +87,7 @@ enum ProgressKind: Equatable {
     case compressing(String)   // nombre del documento ("" si aún sin guardar)
     case encrypting(String)    // nombre del documento ("" si aún sin guardar)
     case splitting
+    case cleaningUp            // borrando extracciones parciales tras cancelar un lote
 }
 
 /// Estado de una operación larga (comprimir/extraer) para la barra de progreso.

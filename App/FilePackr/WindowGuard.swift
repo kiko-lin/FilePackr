@@ -56,18 +56,21 @@ struct WindowGuard: NSViewRepresentable {
     var edited: Bool
     /// Hay una extracción en curso: cerrar la ventana debe pedir confirmación (la cancelaría).
     var extracting: Bool
+    /// Hay un guardado/exportación en curso: cerrar la ventana debe pedir confirmación.
+    var writing: Bool
     /// Ejecuta el flujo de guardado de la vista; llama a la continuación al guardar con éxito.
     var onSave: (@escaping () -> Void) -> Void
-    /// Cancela la extracción en curso (al confirmar el cierre).
-    var onCancelExtraction: () -> Void
+    /// Cancela la operación larga en curso (al confirmar el cierre).
+    var onCancel: () -> Void
 
     func makeNSView(context: Context) -> NSView { NSView() }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         context.coordinator.edited = edited
         context.coordinator.extracting = extracting
+        context.coordinator.writing = writing
         context.coordinator.onSave = onSave
-        context.coordinator.onCancelExtraction = onCancelExtraction
+        context.coordinator.onCancel = onCancel
         DispatchQueue.main.async { context.coordinator.attach(to: nsView.window) }
     }
 
@@ -76,8 +79,9 @@ struct WindowGuard: NSViewRepresentable {
     final class Coordinator: NSObject, NSWindowDelegate {
         var edited = false { didSet { window?.isDocumentEdited = edited } }
         var extracting = false
+        var writing = false
         var onSave: ((@escaping () -> Void) -> Void)?
-        var onCancelExtraction: (() -> Void)?
+        var onCancel: (() -> Void)?
         private weak var window: NSWindow?
         private weak var previousDelegate: NSWindowDelegate?
 
@@ -98,22 +102,15 @@ struct WindowGuard: NSViewRepresentable {
         }
 
         func windowShouldClose(_ sender: NSWindow) -> Bool {
-            // Extracción en curso: cerrar la cancelaría → pedir confirmación.
+            // Operación larga en curso: cerrar la cancelaría → pedir confirmación. El guardado
+            // tiene prioridad sobre el aviso de "cambios sin guardar" (durante la escritura el
+            // documento sigue marcado como editado, pero ya se está guardando).
+            if writing {
+                confirmCancelClose(sender, title: "save.close.title", message: "save.close.message")
+                return false
+            }
             if extracting {
-                let alert = NSAlert()
-                alert.messageText = loc("extract.close.title")
-                alert.informativeText = loc("extract.close.message")
-                alert.alertStyle = .warning
-                let cancel = alert.addButton(withTitle: loc("button.cancel"))  // 1º = Intro: NO cerrar
-                cancel.keyEquivalent = "\u{1b}"                                              //   Escape también
-                let cont = alert.addButton(withTitle: loc("extract.close.continue"))  // 2º: cerrar+cancelar
-                cont.hasDestructiveAction = true
-                alert.beginSheetModal(for: sender) { [weak self] response in
-                    if response == .alertSecondButtonReturn {
-                        self?.onCancelExtraction?()
-                        self?.forceClose(sender)
-                    }
-                }
+                confirmCancelClose(sender, title: "extract.close.title", message: "extract.close.message")
                 return false
             }
             guard edited else { return true }
@@ -125,6 +122,25 @@ struct WindowGuard: NSViewRepresentable {
                 }
             }
             return false   // no cerrar todavía: decide la hoja
+        }
+
+        /// Aviso "operación en curso": Cancelar (no cerrar, por defecto) / Continuar (cancela la
+        /// operación y cierra). Compartido por extracción y guardado, solo cambia el texto.
+        private func confirmCancelClose(_ sender: NSWindow, title: String, message: String) {
+            let alert = NSAlert()
+            alert.messageText = loc(title)
+            alert.informativeText = loc(message)
+            alert.alertStyle = .warning
+            let cancel = alert.addButton(withTitle: loc("button.cancel"))   // 1º = Intro: NO cerrar
+            cancel.keyEquivalent = "\u{1b}"                                  //   Escape también
+            let cont = alert.addButton(withTitle: loc("extract.close.continue"))  // 2º: cerrar+cancelar
+            cont.hasDestructiveAction = true
+            alert.beginSheetModal(for: sender) { [weak self] response in
+                if response == .alertSecondButtonReturn {
+                    self?.onCancel?()
+                    self?.forceClose(sender)
+                }
+            }
         }
 
         /// Cierra la ventana saltándose el aviso (ya resuelto): quita la marca de editada.

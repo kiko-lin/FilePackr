@@ -13,8 +13,9 @@ enum SavePayload: Sendable {
     case data(@Sendable () throws -> Data)
     /// Compresión en **streaming** a disco: el cierre escribe el resultado en el
     /// `FileHandle` por trozos, sin cargar el fichero entero en memoria (gz/xz/bz2 de
-    /// un fichero de disco).
-    case stream(write: @Sendable (FileHandle) throws -> Void)
+    /// un fichero de disco). Recibe la `CancellationCheck` para consultarla en su bucle
+    /// (la inyecta en el `next` de los compresores).
+    case stream(write: @Sendable (FileHandle, CancellationCheck) throws -> Void)
     /// Formatos de libarchive (7z/iso/xar): se escriben directamente a un fichero.
     case libArchive(items: [LibArchive.WriteItem], format: LibArchive.WriteFormat, level: CompressionLevel)
 }
@@ -25,22 +26,26 @@ enum SavePayload: Sendable {
 /// directo, sin un segundo temporal: si algo falla, el documento borra `work`.
 enum ArchiveSaver {
 
-    /// Escribe `payload` en `work`. `progress` (fracción 0…1) solo lo emite ZIP.
+    /// Escribe `payload` en `work`. `progress` (fracción 0…1) solo lo emite ZIP. `cancellation`
+    /// se consulta en los bucles de escritura (por entrada y por trozo): al cancelar, el escritor
+    /// lanza `CancellationError` y el documento descarta el temporal `work`.
     static func encode(_ payload: SavePayload, to work: URL,
+                       cancellation: CancellationCheck = .none,
                        progress: @escaping @Sendable (Double) -> Void) async throws {
         try await Task.detached(priority: .userInitiated) {
             switch payload {
             case .zip(let inputs, let encryption, let password, let level):
                 try writeToFile(work) { handle in
                     try ZipWriter().write(inputs, to: handle, encryption: encryption,
-                                          password: password, level: level, progress: progress)
+                                          password: password, level: level,
+                                          cancellation: cancellation, progress: progress)
                 }
             case .data(let make):
                 try make().write(to: work)
             case .stream(let write):
-                try writeToFile(work, write)
+                try writeToFile(work) { try write($0, cancellation) }
             case .libArchive(let items, let format, let level):
-                try LibArchive.write(items, to: work, format: format, level: level)
+                try LibArchive.write(items, to: work, format: format, level: level, cancellation: cancellation)
             }
         }.value
     }

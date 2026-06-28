@@ -242,6 +242,74 @@
         }
       }
     },
+    "cleanup.delete" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar"
+          }
+        }
+      }
+    },
+    "cleanup.keep" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conservar"
+          }
+        }
+      }
+    },
+    "cleanup.message" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The extraction was cancelled, but some files were already extracted. Do you want to keep them or delete them?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se canceló la extracción, pero algunos archivos ya se extrajeron. ¿Quieres conservarlos o eliminarlos?"
+          }
+        }
+      }
+    },
+    "cleanup.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep the extracted files?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Conservar los archivos extraídos?"
+          }
+        }
+      }
+    },
     "column.compressed" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1466,6 +1534,23 @@
         }
       }
     },
+    "progress.cleaning" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cleaning up…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limpiando…"
+          }
+        }
+      }
+    },
     "progress.compressing" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1564,6 +1649,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "archivo"
+          }
+        }
+      }
+    },
+    "save.close.message" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If you close this window, the save in progress will be cancelled."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si cierras esta ventana se cancelará el guardado en curso."
+          }
+        }
+      }
+    },
+    "save.close.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close the window?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Cerrar la ventana?"
           }
         }
       }

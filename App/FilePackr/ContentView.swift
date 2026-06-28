@@ -55,9 +55,13 @@ struct ContentView: View {
         .ignoresSafeArea(.container, edges: .top)   // el contenido sube a la zona del título
         .preferredColorScheme(settings.theme.colorScheme)
         .background(WindowGuard(edited: doc.hasUnsavedChanges,
-                                extracting: doc.extractionCancellable,
+                                extracting: doc.cancellable && !doc.isWriting,
+                                writing: doc.isWriting,
                                 onSave: { proceed in saveDocument(then: proceed) },
-                                onCancelExtraction: { cancelExtraction() }))
+                                // Al cerrar la ventana cancelamos sin preguntar por la limpieza
+                                // (la ventana se va): el aviso conservar/eliminar es para la X del
+                                // overlay, que mantiene la ventana abierta.
+                                onCancel: { doc.cancelCurrentOperation(); extractCoord.cancelBatch() }))
         .alert(loc("error.title"),
                isPresented: Binding(get: { errorMessage != nil },
                                     set: { if !$0 { errorMessage = nil } }),
@@ -76,7 +80,9 @@ struct ContentView: View {
             Button(loc("conflict.keepBoth")) {
                 extractCoord.resolveConflict(item, overwrite: false, doc: doc, perform: runExtraction)
             }
-            Button(loc("button.cancel"), role: .cancel) { extractCoord.cancelConflict() }
+            Button(loc("button.cancel"), role: .cancel) {
+                promptExtractionCleanup(extractCoord.cancelConflict())
+            }
         } message: { item in
             Text(loc("conflict.message", item.destination.lastPathComponent))
         }
@@ -151,8 +157,8 @@ struct ContentView: View {
         }
         .onChange(of: doc.sourceURL) { _, url in syncUntitledNumber(sourceURL: url) }
         .onDisappear {
-            // Al cerrar la ventana, no dejar la descompresión corriendo de fondo.
-            doc.cancelExtraction()
+            // Al cerrar la ventana, no dejar una operación larga corriendo de fondo.
+            doc.cancelCurrentOperation()
             extractCoord.cancelBatch()
             releaseUntitledNumber()
         }
@@ -275,6 +281,7 @@ struct ContentView: View {
         case .compressing(let name): return loc("progress.compressing", name.isEmpty ? loc("doc.untitled") : name)
         case .encrypting(let name): return loc("progress.encrypting", name.isEmpty ? loc("doc.untitled") : name)
         case .splitting: return loc("progress.splitting")
+        case .cleaningUp: return loc("progress.cleaning")
         }
     }
 
@@ -307,9 +314,10 @@ struct ContentView: View {
                         ProgressView()
                             .controlSize(.small)
                     }
-                    // Botón "Cancelar" rojo con borde (destructivo), solo en extracción cancelable.
-                    if doc.extractionCancellable {
-                        Button(loc("button.cancel"), role: .destructive, action: cancelExtraction)
+                    // Botón "Cancelar" rojo con borde (destructivo), en cualquier operación
+                    // larga cancelable: extracción o guardado/exportación.
+                    if doc.cancellable {
+                        Button(loc("button.cancel"), role: .destructive, action: cancelCurrentOperation)
                             .buttonStyle(.bordered)
                     }
                 }
@@ -322,10 +330,29 @@ struct ContentView: View {
         }
     }
 
-    /// Cancela la extracción en curso y vacía la cola pendiente del lote.
-    private func cancelExtraction() {
-        doc.cancelExtraction()
-        extractCoord.cancelBatch()
+    /// Cancela la operación larga en curso (extracción o guardado) y, si era una extracción en
+    /// lote con elementos ya extraídos, ofrece conservarlos o eliminarlos.
+    private func cancelCurrentOperation() {
+        doc.cancelCurrentOperation()
+        promptExtractionCleanup(extractCoord.cancelBatch())
+    }
+
+    /// Si quedaron extracciones a medias del lote cancelado, pregunta conservar/eliminar. Al
+    /// eliminar, borra en segundo plano mostrando la tarjeta "Limpiando…".
+    private func promptExtractionCleanup(_ extracted: [URL]) {
+        guard !extracted.isEmpty else { return }
+        let alert = NSAlert()
+        alert.messageText = loc("cleanup.title")
+        alert.informativeText = loc("cleanup.message")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: loc("cleanup.keep"))                 // 1º = Intro: conservar
+        let del = alert.addButton(withTitle: loc("cleanup.delete"))     // 2º: eliminar (destructivo)
+        del.hasDestructiveAction = true
+        let act: (NSApplication.ModalResponse) -> Void = { resp in
+            if resp == .alertSecondButtonReturn { Task { await doc.cleanUpExtracted(extracted) } }
+        }
+        if let window = NSApp.keyWindow { alert.beginSheetModal(for: window, completionHandler: act) }
+        else { act(alert.runModal()) }
     }
 
     // MARK: - Cuerpo central
@@ -588,16 +615,27 @@ struct ContentView: View {
         }
     }
 
-    /// Ejecuta la extracción de un plan (la inyecta el coordinador); canaliza el error a la
-    /// alerta de la vista.
-    private func runExtraction(_ plan: ExportPlan, to destination: URL, overwrite: Bool) async {
-        await runAsync { try await doc.performExtraction(of: plan, to: destination, overwrite: overwrite) }
+    /// Ejecuta la extracción de un plan (la inyecta el coordinador). Devuelve `true` si se
+    /// escribió con éxito; en cancelación para limpio (sin alerta) y en error lo muestra.
+    private func runExtraction(_ plan: ExportPlan, to destination: URL, overwrite: Bool) async -> Bool {
+        do {
+            try await doc.performExtraction(of: plan, to: destination, overwrite: overwrite)
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            errorMessage = localizedErrorMessage(error)
+            return false
+        }
     }
 
     /// Guarda: si ya tiene fichero escribible, re-guarda con los ajustes; si no, abre la hoja
     /// propia de opciones. `completion` se ejecuta solo tras un guardado con éxito (lo usa
     /// "Guardar" del aviso de cambios sin guardar).
     private func saveDocument(then completion: (() -> Void)? = nil) {
+        // No lanzar un segundo guardado encima de uno en curso (p. ej. "Guardar" del aviso de
+        // cierre mientras ya se está escribiendo).
+        guard !doc.isWriting else { return }
         // Si está cifrado y bloqueado, pide la clave y **reanuda** el guardado al desbloquear
         // (necesita la clave para leer las entradas cifradas); no descartar la acción.
         editGuarded {
