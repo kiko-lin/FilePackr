@@ -340,15 +340,6 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 > Los items de formato/streaming de pura completitud van al final, en este orden:
 > **DMG ≈ 7z-cifrado (baja) > tar-open (muy baja) > multinúcleo (solo si el rendimiento duele)**.
 
-- [x] ~~**Traducir el menú de la app**~~ (HECHO 2026-06-28, pendiente verificación en GUI):
-      resuelto de raíz **pasando a lo idiomático en macOS**: la app **sigue el idioma del sistema**
-      en vez de tener selector interno. Migración: textos a **String Catalog** (`Localizable.xcstrings`,
-      EN+ES), `es` añadido a `knownRegions`, `Localizer`/`Language`/selector de idioma retirados y
-      `loc(...)` convertido en función global sobre `NSLocalizedString`. Así **AppKit localiza gratis**
-      la barra de menús completa, los paneles del sistema y la columna «Clase» (`UTType`) según el SO —
-      sin el parche `MainMenuLocalizer` (eliminado). Compila; el build genera `en.lproj` + `es.lproj`.
-      **Verificar en GUI**: poner el Mac (o la app, en Ajustes → Idioma y región → Apps) en español y
-      ver toda la app + el menú en español; en inglés, en inglés.
 - [ ] **Verificar en GUI los flujos del refactor de auditoría (rama `refactor/auditoria-2026-06-21`)**
       · el agente solo compila/test del modelo, no ejecuta la GUI. Probar en Xcode (⌘R) y reportar:
   - **Añadir con conflicto** de nombre → Sobrescribir / Conservar ambos / Cancelar (H-2b).
@@ -372,32 +363,6 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   - Exponer el Picker en `SettingsView`.
   - Esfuerzo bajo: no toca `CFBundleDocumentTypes` ni `AppDelegate`, el flujo de
     apertura ya es robusto y centralizado. Uso diario frecuente.
-- [x] ~~**Carpeta de extracción por defecto: opción "Última usada"**~~ (HECHO 2026-06-28):
-      nuevo case `lastUsedFolder` en `ExtractDestinationMode`; `AppSettings.lastUsedExtractFolder:
-      URL?` persistida igual que `fixedExtractFolder`. `ExtractCoordinator.confirm` la fija al
-      confirmar cada extracción (recibe `settings`), y `prepareDestination` la usa cuando el modo
-      es `.lastUsedFolder` (cae a la carpeta del archivo / home si aún no hay). En Ajustes el Picker
-      la incluye solo (CaseIterable) y muestra la carpeta recordada (informativa, sin "Elegir…").
-      Clave `extract.dest.lastUsedFolder` EN/ES. Compila; build genera la clave en en/es.lproj.
-- [x] ~~**Menú contextual de Finder** ("Abrir en FilePackr", "Descomprimir aquí")~~
-      (HECHO 2026-06-28, pendiente verificación en GUI): vía **NSServices** (sin sandbox, sin
-      target aparte). `FinderServicesProvider` (`FinderServices.swift`) con dos `@objc` que casan
-      con `NSMessage`; registrado en `AppDelegate` (`NSApp.servicesProvider` + `NSUpdateDynamicServices`).
-      `NSServices` declarado en `Info.plist` (`NSSendFileTypes` = los mismos UTIs que abrimos).
-  - **Abrir en FilePackr**: entrega las rutas a la app por la vía normal (`NSWorkspace.open`
-    con nuestro bundle), igual que el doble clic.
-  - **Descomprimir aquí**: extracción **headless** reusando `openArchive` + `exportPlanForAll` +
-    `ExportPlan.writeContents` (a una carpeta hermana libre `<nombre>`/`<nombre> 2`); revela lo
-    extraído en el Finder. Si el archivo pide contraseña (`isLocked`/`requiresOpenPassword`), cae a
-    abrirlo en la app. Errores → `NSAlert` (mensajes vía `localizedErrorMessage`, extraído a
-    `AppHelpers.swift` junto con `archiveBaseName`, antes privados de `ContentView`).
-  - **Títulos localizados**: `InfoPlist.xcstrings` traduce los títulos de los Servicios (AppKit
-    los busca en `InfoPlist.strings` por su título inglés). El build genera `en/es.lproj/InfoPlist.strings`;
-    falta confirmar en GUI que el menú los muestra traducidos.
-  - **PENDIENTE de verificar en GUI**: el Servicio solo aparece tras registrar el `.app` con
-    Launch Services (`pbs`): instalar en /Applications o `/System/Library/CoreServices/pbs -update`
-    y, si hace falta, reiniciar sesión. Probar «Abrir» y «Descomprimir aquí» (incl. uno cifrado →
-    debe abrir la app para pedir clave) y que los títulos salgan en el idioma del sistema.
 - [ ] **Convertir un icono de la barra superior en menú con opciones rápidas**
       (`documentBar`, `ContentView.swift:324`, botones a la derecha: Extraer todo ·
       Cerrar · Exportar · Guardar) · análisis hecho 2026-06-26: hoy son `Button`
@@ -412,15 +377,6 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   - Reusa `SaveCoordinator`/hoja de opciones existentes, solo parametrizar el punto
     de entrada (formato preseleccionado).
   - Esfuerzo bajo (< 1h por icono), sin bloqueos arquitectónicos.
-- [x] ~~**Título de ventana = nombre del archivo (y numerar los nuevos)**~~ (HECHO 2026-06-28,
-      pendiente verificación en GUI): `.navigationTitle(documentDisplayName)` en `ContentView` fija
-      el `NSWindow.title` (la barra sigue oculta con `hiddenTitleBar`, pero el menú **Ventana** y
-      Mission Control lo usan). Archivo abierto → su nombre (`doc.documentName`); nuevo sin guardar →
-      «Sin título N». La numeración la reparte `UntitledNumbering` (`UntitledNumbering.swift`, registro
-      `@MainActor` que vende el menor número libre y lo reutiliza al cerrarse/guardarse, estilo
-      TextEdit); cada ventana pide/devuelve su número en `onAppear`/`onChange(sourceURL)`/`onDisappear`.
-      Compila. **Verificar en GUI**: varias ventanas nuevas → «Sin título 1/2/3»; abrir/guardar cambia
-      el título al nombre real; el menú Ventana las distingue.
 - [ ] **Limpieza de extracciones parciales al cancelar un lote** · análisis hecho
       2026-06-26: la cancelación (`CancelToken` en `ExportPlan.swift`) y el cierre con
       confirmación (`WindowGuard`) ya existen; cada archivo individual es atómico
@@ -477,35 +433,8 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
       notarización, `.dmg`. Aplazado a propósito, no por bajo valor.
 
-### Hecho (referencia, no reordenado)
-
-- [x] ~~**Verificar interop AES-256**~~ (hecho 2026-06-20): **verificado bidireccional**
-      contra `pyzipper` — ambos sentidos pasan. Test automático en `ZipCryptoTests`
-      (`testPyzipperReadsOurAES256` / `testReadsAES256FromPyzipper`), que se **salta** si
-      falta la librería. Reejecutar: `pip3 install pyzipper && swift test`. Si alguna vez
-      fallara, revisar `ZipAES` (PBKDF2/CTR/HMAC, campo extra 0x9901, AE-2 CRC=0).
-- [x] ~~tar/gz/tar.gz en Swift puro~~ (Tier 1, hecho — ver "Hecho").
-- [x] ~~xz/tar.xz~~ (Tier 2, hecho — `Compression` LZMA, ver "Hecho").
-- [x] ~~bzip2/tar.bz2~~ (Tier 3, hecho — `libbz2` del sistema, ver "Hecho").
-- [x] ~~7z/rar~~ (Tier 4, hecho — `libarchive` del sistema SIN vendorizar, ver "Hecho").
-- [x] ~~iso/cpio/xar/lha/cab~~ (hecho — misma libarchive; lectura todos, escritura iso/xar).
-- [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
-      `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
-- [x] ~~**Cambiar cifrado/contraseña al re-guardar**~~ (hecho — vía **Exportar…**): botón
-      "Exportar…" en la barra de documento abre la hoja de opciones (formato/cifrado/
-      contraseña/volúmenes) y escribe una **copia aparte** SIN cambiar el documento activo
-      (`ArchiveDocument.export` reusa `writeArchive`; no llama a `markSaved` ni muta los
-      ajustes recordados, a diferencia de `save`). Test de app `testExportDoesNotChangeDocument`.
-- [x] ~~**Streaming de compresión** de un único fichero enorme~~ (hecho — ver "Hecho").
-      gz/xz/bz2 (de un fichero de disco), cada entrada ZIP de un fichero (cifrada o no) y
-      **tar/tar.gz/tar.xz/tar.bz2** se comprimen al vuelo, con memoria constante.
-- [x] ~~**Streaming de descompresión/extracción**~~ (hecho — ver "Hecho"): gz/xz/bz2 y las
-      entradas ZIP (incl. ZipCrypto/AES) se extraen a disco sin materializar la salida en RAM.
-- [x] ~~**Streaming en libarchive (7z/iso/xar)**~~ (hecho — ver "Hecho"): escritura desde
-      ficheros de disco al vuelo y extracción a `sink`, sin acumular el contenido en RAM.
-- [x] ~~Localización~~ (hecho: EN/ES vía **String Catalog**, sigue el idioma del **sistema** —
-      ver "Hecho" e i18n). «Clase» y el menú ya los localiza AppKit. Pendiente menor: más idiomas
-      (añadir columnas al `.xcstrings`).
+> Lo ya realizado vive en la sección **Hecho** (arriba) y en el historial de git; aquí solo
+> quedan objetivos **pendientes**.
 
 ## Notas de formato/cifrado (para no re-investigar)
 
