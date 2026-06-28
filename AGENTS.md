@@ -315,13 +315,17 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   del SO, no el de la app), y el **menú de la app** tampoco sigue aún el idioma interno
   (ver TODO).
 
-## TODO (objetivos pendientes, en orden lógico)
+## TODO (objetivos pendientes, ordenados por importancia — revisión 2026-06-26)
 
-> **Prioridad recomendada (revisión 2026-06-21):** lo de mayor valor pendiente es de UI —
-> **traducir el menú de macOS** al idioma interno (afecta a todos los usuarios). Los items de
-> formato/streaming que quedan son de *completitud*, en este orden: **DMG ≈ 7z-cifrado (baja)
+> **Criterio de orden:** impacto en todos los usuarios × esfuerzo × riesgo de dejarlo sin hacer.
+> Lo de mayor valor es **traducir el menú de macOS** (afecta a todos los usuarios). Los items de
+> formato/streaming de pura completitud van al final, en este orden: **DMG ≈ 7z-cifrado (baja)
 > > tar-open (muy baja) > multinúcleo (solo si el rendimiento duele)**.
 
+- [ ] **Traducir el menú de la app** (barra de menús de macOS: menú con el nombre de la
+      app, Archivo, Edición…) según el idioma **interno** de la app (`Localizer`), no el
+      del SO. Hoy el `WindowGroup` usa los menús por defecto y no siguen el selector de idioma.
+      Mayor valor pendiente: único punto de UI visible para todos los usuarios que falta.
 - [ ] **Verificar en GUI los flujos del refactor de auditoría (rama `refactor/auditoria-2026-06-21`)**
       · el agente solo compila/test del modelo, no ejecuta la GUI. Probar en Xcode (⌘R) y reportar:
   - **Añadir con conflicto** de nombre → Sobrescribir / Conservar ambos / Cancelar (H-2b).
@@ -332,35 +336,93 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     el alternativo evita disco ∪ lo ya extraído del lote ∪ los nombres literales pendientes).
   - **Guardar/Exportar** en cada formato (zip, tar.gz, 7z, gz…) sigue produciendo el archivo correcto.
   - Una vez validado, el usuario hace el `git push` (el agente no tiene red).
-- [x] ~~**Verificar interop AES-256**~~ (hecho 2026-06-20): **verificado bidireccional**
-      contra `pyzipper` — ambos sentidos pasan. Test automático en `ZipCryptoTests`
-      (`testPyzipperReadsOurAES256` / `testReadsAES256FromPyzipper`), que se **salta** si
-      falta la librería. Reejecutar: `pip3 install pyzipper && swift test`. Si alguna vez
-      fallara, revisar `ZipAES` (PBKDF2/CTR/HMAC, campo extra 0x9901, AE-2 CRC=0).
-- [x] ~~tar/gz/tar.gz en Swift puro~~ (Tier 1, hecho — ver "Hecho").
-- [x] ~~xz/tar.xz~~ (Tier 2, hecho — `Compression` LZMA, ver "Hecho").
-- [x] ~~bzip2/tar.bz2~~ (Tier 3, hecho — `libbz2` del sistema, ver "Hecho").
-- [x] ~~7z/rar~~ (Tier 4, hecho — `libarchive` del sistema SIN vendorizar, ver "Hecho").
-- [x] ~~iso/cpio/xar/lha/cab~~ (hecho — misma libarchive; lectura todos, escritura iso/xar).
-- [ ] **7z cifrado al escribir** · **prioridad BAJA**: libarchive no lo soporta (escribe 7z
-      en claro). Haría falta el **LZMA SDK** de Igor Pavlov (cifra contenido y nombres; además
-      comprime multihilo, ver "valorar" abajo) → vendorizar dependencia, rompe el principio de
-      cero-deps. ZIP+AES-256 ya cubre "archivo seguro". Confirmado en revisión externa (2026-06-21).
-- [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
-      `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
-- [x] ~~**Cambiar cifrado/contraseña al re-guardar**~~ (hecho — vía **Exportar…**): botón
-      "Exportar…" en la barra de documento abre la hoja de opciones (formato/cifrado/
-      contraseña/volúmenes) y escribe una **copia aparte** SIN cambiar el documento activo
-      (`ArchiveDocument.export` reusa `writeArchive`; no llama a `markSaved` ni muta los
-      ajustes recordados, a diferencia de `save`). Test de app `testExportDoesNotChangeDocument`.
-- [ ] **Opciones de fuerza AES** (128/192) además de 256; ZipCrypto ya está.
-- [x] ~~**Streaming de compresión** de un único fichero enorme~~ (hecho — ver "Hecho").
-      gz/xz/bz2 (de un fichero de disco), cada entrada ZIP de un fichero (cifrada o no) y
-      **tar/tar.gz/tar.xz/tar.bz2** se comprimen al vuelo, con memoria constante.
-- [x] ~~**Streaming de descompresión/extracción**~~ (hecho — ver "Hecho"): gz/xz/bz2 y las
-      entradas ZIP (incl. ZipCrypto/AES) se extraen a disco sin materializar la salida en RAM.
-- [x] ~~**Streaming en libarchive (7z/iso/xar)**~~ (hecho — ver "Hecho"): escritura desde
-      ficheros de disco al vuelo y extracción a `sink`, sin acumular el contenido en RAM.
+  - Deuda de validación pendiente sobre código ya mergeado: bloquea confianza en el refactor.
+- [ ] **Comportamiento configurable al arrastrar un archivo al icono de la app**
+      (Dock/Finder) · análisis hecho 2026-06-26: hoy `.onOpenURL` (`ContentView.swift:142`)
+      → `handleOpen()` siempre abre y muestra contenido (`doc.openArchive()`), sin
+      opción. No existe preferencia alguna en `AppSettings` para esto.
+  - Nuevo enum `FileOpenAction` (`.open` / `.extract` / `.ask`) en `AppSettings`,
+    persistido igual que `extractMode`.
+  - `handleOpen()` consulta la preferencia: si `.extract`, salta `openArchive()` y va
+    directo a extracción (reusa `extractMode`/`fixedExtractFolder` ya existentes para
+    el destino); si `.ask`, alerta "¿Abrir o extraer?" antes de decidir.
+  - Exponer el Picker en `SettingsView`.
+  - Esfuerzo bajo: no toca `CFBundleDocumentTypes` ni `AppDelegate`, el flujo de
+    apertura ya es robusto y centralizado. Uso diario frecuente.
+- [ ] **Carpeta de extracción por defecto: opción "Última usada"** · análisis hecho
+      2026-06-26: hoy `ExtractDestinationMode` (`AppSettings.swift`) solo tiene
+      `archiveFolder`/`fixedFolder`; no existe tracking de última carpeta usada.
+  - Añadir case `lastUsedFolder` al enum.
+  - Nueva `@Published var lastUsedFolder: URL?` en `AppSettings`, persistida igual
+    que `fixedExtractFolder`; guardarla al confirmar una extracción (en
+    `OperationCoordinators`).
+  - Usarla en `prepareDestination()` y exponer la opción en el Picker de
+    `SettingsView`.
+  - Esfuerzo muy bajo (~30 líneas), sin cambios arquitectónicos. Quality-of-life diario.
+- [ ] **Menú contextual de Finder** ("Abrir en FilePackr", "Descomprimir aquí") ·
+      análisis hecho 2026-06-26: la app **no** tiene App Sandbox activo hoy (ver
+      "Distribución" abajo) → usar **NSServices** (menú "Servicios" de Finder), NO
+      Finder Sync Extension (exigiría sandbox + entitlements + target separado).
+  - Declarar servicios en `Info.plist` + handler en `AppDelegate` que reciba la(s)
+    ruta(s) seleccionadas.
+  - "Abrir en FilePackr": ya funciona vía tipos de documento registrados
+    (`CFBundleDocumentTypes` en `Info.plist`) — solo falta la entrada de servicio.
+  - "Descomprimir aquí": reusa `OperationCoordinators.prepareDestination()`
+    (caso `.archiveFolder` = carpeta del archivo origen) sin mostrar la hoja de
+    opciones — extraer directo.
+  - Esfuerzo bajo-medio, sin bloqueos arquitectónicos. Punto de entrada muy usado.
+- [ ] **Convertir un icono de la barra superior en menú con opciones rápidas**
+      (`documentBar`, `ContentView.swift:324`, botones a la derecha: Extraer todo ·
+      Cerrar · Exportar · Guardar) · análisis hecho 2026-06-26: hoy son `Button`
+      simples en un `HStack` custom (no hay `NSToolbar` nativo), cambiar a `Menu` de
+      SwiftUI es directo.
+  - **Candidato principal: Exportar** (`ContentView.swift:350`) — hoy abre siempre la
+    hoja completa de opciones; menú propuesto: accesos directos a formatos usados
+    ("Exportar a ZIP", "Exportar a TAR.GZ"…) + separador + "Exportar como…" (hoja
+    completa, comportamiento actual).
+  - Candidato secundario: **Extraer todo** — "Extraer aquí" / "Extraer en…" /
+    "Extraer a escritorio".
+  - Reusa `SaveCoordinator`/hoja de opciones existentes, solo parametrizar el punto
+    de entrada (formato preseleccionado).
+  - Esfuerzo bajo (< 1h por icono), sin bloqueos arquitectónicos.
+- [ ] **Limpieza de extracciones parciales al cancelar un lote** · análisis hecho
+      2026-06-26: la cancelación (`CancelToken` en `ExportPlan.swift`) y el cierre con
+      confirmación (`WindowGuard`) ya existen; cada archivo individual es atómico
+      (`writeFileAtomically` en `AtomicWrite.swift` autolimpia su `.tmp`). Falta solo
+      el caso de **lote** (varios elementos): los ya completados antes de cancelar
+      quedan en disco sin aviso. Hacer:
+  - Trackear `extractedURLs: [URL]` en `ExtractCoordinator`/documento, rellenado en
+    `processNext` tras cada elemento completado con éxito.
+  - Al cancelar (botón X, cerrar ventana, arrastrar a Finder), si `extractedURLs` no
+    está vacío, mostrar alerta "¿Conservar los archivos ya extraídos o eliminarlos?".
+  - Si elige eliminar: tarjeta flotante "Limpiando…" (reusar `progressOverlay`, nuevo
+    `ProgressKind.cleaningUp`) con barra determinada por nº de archivos, que se cierra
+    sola al terminar.
+  - Esfuerzo bajo-medio: extiende mecanismos existentes, no requiere tocar el motor.
+    Afecta integridad de datos, pero es un caso de borde (cancelar a mitad de lote).
+- [ ] **UI de compresión equivalente a la de extracción** (barra + nombre de archivo +
+      cancelar) · análisis hecho 2026-06-26, dividir en dos pasos:
+  - **Paso 1 (bajo esfuerzo)**: para **ZIP**, que ya reporta fracción de progreso
+    (`ZipWriter.writeStream`, callback `Double`), ampliar el callback a
+    `(fraction, currentFile)` y generalizar `progressOverlay`/`extractionCancellable`
+    → flag neutro reusado por ambas operaciones. tar/gz/xz/bz2 y libarchive (7z/iso/xar)
+    siguen con spinner indeterminado por ahora.
+  - **Paso 2 (esfuerzo alto, motor)**: no existe hoy cancelación de compresión —
+    requiere propagar un `CancelToken` por `ArchiveDocument.writeArchive` →
+    `ArchiveSaver.encode` → `ZipWriter`/escritores libarchive, con chequeos en cada
+    bucle de escritura. Añadir progreso por archivo a los formatos que hoy no
+    reportan nada (tar.*, libarchive) si la librería lo permite.
+  - Tratar el paso 2 como ítem separado del paso 1 al planificar trabajo. Paso 1 tiene
+    valor inmediato; paso 2 es caro y puede ir después.
+- [ ] **Opciones de fuerza AES** (128/192) además de 256; ZipCrypto ya está. Nicho de
+      seguridad — ZIP+AES-256 ya cubre el caso principal.
+- [ ] **(VALORAR) Compresión multinúcleo** · **solo si el rendimiento es queja real**: hoy
+      comprimimos **secuencialmente** (un escritor
+      en streaming por archivo). En Apple Silicon, comprimir entradas en paralelo y ensamblar
+      aceleraría ZIP/7z con muchos ficheros. **Trade-off**: choca con el modelo actual de
+      streaming a un único fichero secuencial (habría que comprimir a temporales en paralelo y
+      concatenar, o usar el LZMA SDK multihilo para 7z). Decidido priorizar memoria > velocidad;
+      reevaluar si el rendimiento se vuelve un problema real. (revisión externa 2026-06-21)
 - [ ] **Streaming en la apertura de tar comprimido** · **prioridad MUY BAJA** (casi descartado):
       abrir un `.tar.gz`/`.xz`/`.bz2` aún
       descomprime el tar entero en RAM (su `container`). Haría falta un **índice de tar
@@ -371,21 +433,42 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       no la maneja; sería vía `hdiutil` (montar/adjuntar) o parseo propio. Único formato Mac
       relevante que no leemos, pero es *scope creep* (imagen de disco, no archivo comprimido).
       Señalado en revisión externa (2026-06-21).
-- [ ] **(VALORAR) Compresión multinúcleo** · **solo si el rendimiento es queja real**: hoy
-      comprimimos **secuencialmente** (un escritor
-      en streaming por archivo). En Apple Silicon, comprimir entradas en paralelo y ensamblar
-      aceleraría ZIP/7z con muchos ficheros. **Trade-off**: choca con el modelo actual de
-      streaming a un único fichero secuencial (habría que comprimir a temporales en paralelo y
-      concatenar, o usar el LZMA SDK multihilo para 7z). Decidido priorizar memoria > velocidad;
-      reevaluar si el rendimiento se vuelve un problema real. (revisión externa 2026-06-21)
-- [x] ~~Localización~~ (hecho: EN/ES con selector de idioma — ver "Hecho"). Pendiente
-      menor: más idiomas, y que "Clase" use el idioma de la app y no el del SO.
-- [ ] **Traducir el menú de la app** (barra de menús de macOS: menú con el nombre de la
-      app, Archivo, Edición…) según el idioma **interno** de la app (`Localizer`), no el
-      del SO. Hoy el `WindowGroup` usa los menús por defecto y no siguen el selector de idioma.
+- [ ] **7z cifrado al escribir** · **prioridad BAJA**: libarchive no lo soporta (escribe 7z
+      en claro). Haría falta el **LZMA SDK** de Igor Pavlov (cifra contenido y nombres; además
+      comprime multihilo, ver "valorar" arriba) → vendorizar dependencia, rompe el principio de
+      cero-deps. ZIP+AES-256 ya cubre "archivo seguro". Confirmado en revisión externa (2026-06-21).
 - [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
-      notarización, `.dmg`.
+      notarización, `.dmg`. Aplazado a propósito, no por bajo valor.
+
+### Hecho (referencia, no reordenado)
+
+- [x] ~~**Verificar interop AES-256**~~ (hecho 2026-06-20): **verificado bidireccional**
+      contra `pyzipper` — ambos sentidos pasan. Test automático en `ZipCryptoTests`
+      (`testPyzipperReadsOurAES256` / `testReadsAES256FromPyzipper`), que se **salta** si
+      falta la librería. Reejecutar: `pip3 install pyzipper && swift test`. Si alguna vez
+      fallara, revisar `ZipAES` (PBKDF2/CTR/HMAC, campo extra 0x9901, AE-2 CRC=0).
+- [x] ~~tar/gz/tar.gz en Swift puro~~ (Tier 1, hecho — ver "Hecho").
+- [x] ~~xz/tar.xz~~ (Tier 2, hecho — `Compression` LZMA, ver "Hecho").
+- [x] ~~bzip2/tar.bz2~~ (Tier 3, hecho — `libbz2` del sistema, ver "Hecho").
+- [x] ~~7z/rar~~ (Tier 4, hecho — `libarchive` del sistema SIN vendorizar, ver "Hecho").
+- [x] ~~iso/cpio/xar/lha/cab~~ (hecho — misma libarchive; lectura todos, escritura iso/xar).
+- [x] ~~Limpieza legacy~~ (hecho 2026-06-14): retirados `.fpkz`, librería `CryptoCore`,
+      `CipherView.swift` y `ArchiveTree.swift`. El cifrado es solo ZIP estándar.
+- [x] ~~**Cambiar cifrado/contraseña al re-guardar**~~ (hecho — vía **Exportar…**): botón
+      "Exportar…" en la barra de documento abre la hoja de opciones (formato/cifrado/
+      contraseña/volúmenes) y escribe una **copia aparte** SIN cambiar el documento activo
+      (`ArchiveDocument.export` reusa `writeArchive`; no llama a `markSaved` ni muta los
+      ajustes recordados, a diferencia de `save`). Test de app `testExportDoesNotChangeDocument`.
+- [x] ~~**Streaming de compresión** de un único fichero enorme~~ (hecho — ver "Hecho").
+      gz/xz/bz2 (de un fichero de disco), cada entrada ZIP de un fichero (cifrada o no) y
+      **tar/tar.gz/tar.xz/tar.bz2** se comprimen al vuelo, con memoria constante.
+- [x] ~~**Streaming de descompresión/extracción**~~ (hecho — ver "Hecho"): gz/xz/bz2 y las
+      entradas ZIP (incl. ZipCrypto/AES) se extraen a disco sin materializar la salida en RAM.
+- [x] ~~**Streaming en libarchive (7z/iso/xar)**~~ (hecho — ver "Hecho"): escritura desde
+      ficheros de disco al vuelo y extracción a `sink`, sin acumular el contenido en RAM.
+- [x] ~~Localización~~ (hecho: EN/ES con selector de idioma — ver "Hecho"). Pendiente
+      menor: más idiomas, y que "Clase" use el idioma de la app y no el del SO.
 
 ## Notas de formato/cifrado (para no re-investigar)
 
