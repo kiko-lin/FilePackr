@@ -1,8 +1,15 @@
 # Arquitectura de FilePackr
 
-Dos capas: un **motor de archivos sin UI** (paquete Swift `FilePackrCore`, testeable
-por CLI) y una **app** SwiftUI/AppKit que lo consume. La línea divisoria es estricta:
-el motor no importa AppKit/SwiftUI.
+Tres capas, todas menos las vistas en el paquete Swift `FilePackrCore` (testeable por CLI
+con `swift test`):
+
+1. **Motor de archivos sin UI** — `Sources/ArchiveBrowser` (no importa AppKit/SwiftUI).
+2. **Modelo de la app** — `Sources/FilePackrModel` (documento, coordinadores, ajustes).
+   No tiene vistas, pero sí usa AppKit/SwiftUI puntualmente (panel de carpeta, `ColorScheme`).
+   Depende del motor; lo consume el target Xcode de la app. **No** contiene la i18n (`loc`):
+   emite tokens y recibe los textos por inyección.
+3. **App** — `App/FilePackr/` (target Xcode): solo las **vistas** SwiftUI/AppKit, la i18n
+   (`loc` + `Localizable.xcstrings`) y los Servicios del Finder. Consume `FilePackrModel`.
 
 ## Motor — `Sources/` (paquete `FilePackrCore`)
 
@@ -55,11 +62,21 @@ Lectores/escritores por formato:
   (volúmenes sobre disco: descubrir partes, trocear un fichero ya escrito, y
   `joinToTemporaryFile` —concatena las partes a un temporal mapeado sin cargarlas en RAM).
 
-Tests en `Tests/` (engine + codec + formatos + volúmenes + metadatos + detección + cifrado),
-con interop **opcional** (se salta si la herramienta no está): `zip`/`unzip` para
-ZipCrypto, `pyzipper` para AES‑256.
+Tests en `Tests/`: `ArchiveBrowserTests` (engine + codec + formatos + volúmenes + metadatos +
+detección + cifrado), con interop **opcional** (se salta si la herramienta no está): `zip`/`unzip`
+para ZipCrypto, `pyzipper` para AES‑256. Y `FilePackrModelTests` (documento + coordinadores de
+añadir/extraer/guardar). **Todo corre con un solo `swift test`** (125 tests).
 
-## App — `App/FilePackr/`
+## Modelo — `Sources/FilePackrModel/`
+
+La capa de modelo de la app, en el paquete (sin vistas), para que se pueda testear por CLI. Aquí
+viven `ArchiveDocument`, los coordinadores (`AddCoordinator`/`ExtractCoordinator`/`SaveCoordinator`),
+`FileNode`, `ExportPlan`, `SavePayloadBuilder`, `ArchiveSaver`, `AppSettings`, `VolumeUnit`, la
+construcción del árbol (`ArchiveTreeBuilder`: de entradas o de disco) y los helpers de E/S
+(`AtomicWrite`, `FolderPanel`, `UntitledNumbering`, `WorkFile` —ciclo de vida de los temporales
+`.work`). La describe el resto de esta sección («App»). Las vistas la consumen vía `import FilePackrModel`.
+
+## App (vistas) — `App/FilePackr/`
 
 - **`ArchiveDocument`** (`@MainActor ObservableObject`) — el modelo: árbol editable de
   `FileNode` (`folder` / `diskFile(url)` / `zipEntry(entry)`). Abrir (`openArchive`
@@ -109,5 +126,6 @@ ZipCrypto, `pyzipper` para AES‑256.
   escribible, su rama en `makeSavePayload`/`ArchiveSaver`.
 - **Nuevo cifrado**: añadir un caso a `ZipEncryption` y su rama en
   `ZipWriter`/`ZipExtractor` (+ campo extra si el formato lo requiere).
-- **Convenciones**: motor sin UI; nada de código muerto; verificar con `swift test`
-  (motor) y `xcodebuild` + ⌘U (app); el agente no ejecuta la GUI.
+- **Convenciones**: motor sin UI; modelo sin vistas ni i18n; nada de código muerto; verificar
+  con `swift test` (motor + modelo) y `xcodebuild build` (la app compila); el agente no ejecuta
+  la GUI. Tipo nuevo del modelo que use una vista → marcarlo `public`.

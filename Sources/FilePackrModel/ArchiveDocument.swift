@@ -5,7 +5,7 @@ import ArchiveBrowser
 
 /// Estado de cifrado de un documento. Un único valor hace imposible representar estados
 /// contradictorios (p. ej. pedir a la vez contraseña de apertura y de entrada).
-enum LockState: Equatable {
+public enum LockState: Equatable {
     /// Sin cifrado pendiente: el documento es editable/extraíble.
     case unlocked
     /// Un 7z con cabeceras cifradas necesita contraseña para **abrirse**; `url` es el archivo
@@ -19,47 +19,49 @@ enum LockState: Equatable {
 /// Mantiene, si se abrió un ZIP existente, sus bytes originales para poder
 /// extraer o copiar entradas sin recomprimir.
 @MainActor
-final class ArchiveDocument: ObservableObject {
+public final class ArchiveDocument: ObservableObject {
 
-    @Published var roots: [FileNode] = []
+    public init() {}
+
+    @Published public var roots: [FileNode] = []
     /// Selección actual (varios elementos): para arrastrar, extraer o eliminar en lote.
-    @Published var selectedIDs: Set<FileNode.ID> = []
+    @Published public var selectedIDs: Set<FileNode.ID> = []
 
     /// Nombre mostrado en la barra de documento (fichero abierto o "Sin título").
-    @Published private(set) var documentName: String = ""
+    @Published public private(set) var documentName: String = ""
     /// Hay modificaciones sin guardar desde la última apertura/guardado.
-    @Published private(set) var hasUnsavedChanges: Bool = false
+    @Published public private(set) var hasUnsavedChanges: Bool = false
     /// Fichero de origen, si se abrió/guardó uno (para "Guardar" sin volver a preguntar).
-    @Published private(set) var sourceURL: URL?
+    @Published public private(set) var sourceURL: URL?
     /// Se incrementa con cada cambio estructural (no al seleccionar). La vista de
     /// lista lo usa para recargar solo cuando hace falta.
-    @Published private(set) var revision = 0
+    @Published public private(set) var revision = 0
     /// Operación larga en curso (comprimir/extraer): muestra la barra de progreso.
-    @Published var progress: ProgressState?
+    @Published public var progress: ProgressState?
     /// Cifrado elegido al guardar (se recuerda para el botón Guardar).
-    @Published private(set) var saveEncryption: ZipEncryption = .none
+    @Published public private(set) var saveEncryption: ZipEncryption = .none
     private var savePassword: String?
     /// Formato del contenedor abierto (para leer las entradas de los nodos).
-    @Published private(set) var format: ArchiveFormat = .zip
+    @Published public private(set) var format: ArchiveFormat = .zip
     /// Formato por defecto del diálogo Guardar (se recuerda tras guardar).
-    @Published private(set) var saveFormat: ArchiveFormat = .zip
+    @Published public private(set) var saveFormat: ArchiveFormat = .zip
     /// Tamaño de volumen en bytes si el documento se guarda dividido (nil = un fichero).
-    @Published private(set) var saveVolumeSize: Int?
+    @Published public private(set) var saveVolumeSize: Int?
     /// Nivel de compresión elegido al guardar (se recuerda para el botón Guardar).
-    @Published private(set) var saveLevel: CompressionLevel = .default
+    @Published public private(set) var saveLevel: CompressionLevel = .default
     /// Estado de cifrado del documento (única fuente de verdad: estados imposibles de
     /// contradecir). La vista observa los derivados `requiresEntryPassword`/`requiresOpenPassword`.
-    @Published private(set) var lockState: LockState = .unlocked
+    @Published public private(set) var lockState: LockState = .unlocked
     /// Necesitamos la contraseña de las **entradas** cifradas del archivo abierto (para
     /// extraer/editar). Derivado de `lockState`.
-    var requiresEntryPassword: Bool { lockState == .needsEntryPassword }
+    public var requiresEntryPassword: Bool { lockState == .needsEntryPassword }
     /// Un 7z con cabeceras cifradas necesita contraseña para **abrirse** (no solo extraer).
     /// Derivado de `lockState`.
-    var requiresOpenPassword: Bool { if case .needsOpenPassword = lockState { return true }; return false }
+    public var requiresOpenPassword: Bool { if case .needsOpenPassword = lockState { return true }; return false }
     /// Contraseña para descifrar las entradas del archivo abierto.
     private var entryPassword: String?
 
-    private(set) var sourceArchiveData: Data?
+    public private(set) var sourceArchiveData: Data?
 
     /// Temporal con las partes de un multivolumen concatenadas, mapeado en
     /// `sourceArchiveData`. Se borra al cerrar o al abrir otro archivo.
@@ -69,14 +71,14 @@ final class ArchiveDocument: ObservableObject {
     /// el estado al añadir/crear sobre un documento ya en marcha.
     private var hasActiveDocument = false
 
-    var isEmpty: Bool { roots.isEmpty }
+    public var isEmpty: Bool { roots.isEmpty }
 
     // MARK: - Entrada de elementos (arrastre o botón Añadir)
 
     /// Si lo que llega es un único archivo abrible con el documento vacío, devuelve su URL
     /// (para abrirlo como base); si no, `nil` (hay que añadirlo al documento actual). La vista
     /// usa esto para decidir y, en el caso de añadir, resolver conflictos de nombre.
-    func archiveToOpen(from urls: [URL]) -> URL? {
+    public func archiveToOpen(from urls: [URL]) -> URL? {
         let cleaned = urls.filter { $0.isFileURL }
         guard isEmpty, cleaned.count == 1,
               !isDirectory(cleaned[0]), isOpenableArchive(cleaned[0]) else { return nil }
@@ -85,27 +87,18 @@ final class ArchiveDocument: ObservableObject {
 
     /// Carpeta destino para Añadir (según la selección), expuesta para que la vista detecte
     /// conflictos de nombre antes de insertar.
-    func addTargetFolder() -> FileNode? { destinationFolderForAdding() }
+    public func addTargetFolder() -> FileNode? { insertionTargetFolder() }
 
     /// Hijo existente con ese nombre dentro de `target` (o en la raíz), si lo hay.
-    func child(named name: String, in target: FileNode?) -> FileNode? {
+    public func child(named name: String, in target: FileNode?) -> FileNode? {
         (target?.children ?? roots).first { $0.name == name }
     }
 
     /// Nombre de fichero libre dentro de `target` («nombre 2.ext», «nombre 3.ext»…),
     /// conservando la extensión.
-    func uniqueChildName(_ name: String, in target: FileNode?) -> String {
+    public func uniqueChildName(_ name: String, in target: FileNode?) -> String {
         let taken = Set((target?.children ?? roots).map(\.name))
-        guard taken.contains(name) else { return name }
-        let ns = name as NSString
-        let ext = ns.pathExtension
-        let base = ns.deletingPathExtension
-        var n = 2
-        while true {
-            let candidate = ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)"
-            if !taken.contains(candidate) { return candidate }
-            n += 1
-        }
+        return UniqueName.next(for: name) { taken.contains($0) }
     }
 
     /// Añade un único fichero/carpeta del disco dentro de `target` y devuelve el nodo creado.
@@ -113,13 +106,13 @@ final class ArchiveDocument: ObservableObject {
     /// nombre libre (conservar ambos). No toca la selección: la fija la vista al acabar el lote.
     /// Devuelve el nodo añadido y cuántos elementos omitió la política al expandir las carpetas.
     @discardableResult
-    func addFile(_ url: URL, into target: FileNode?, replacing existing: FileNode? = nil,
+    public func addFile(_ url: URL, into target: FileNode?, replacing existing: FileNode? = nil,
                  renameTo newName: String? = nil,
                  hiddenPolicy: AddHiddenPolicy = .excludeSystemFiles) -> (node: FileNode?, excluded: Int) {
         guard !isLocked else { return (nil, 0) }
         if !hasActiveDocument { beginNewDocument() }
         if let existing { remove(existing) }
-        let imported = importFromDisk(url, hiddenPolicy: hiddenPolicy)
+        let imported = ArchiveTreeBuilder.importFromDisk(url, hiddenPolicy: hiddenPolicy)
         if let newName { imported.node.name = newName }
         insert(imported.node, into: target)
         markChanged()
@@ -128,7 +121,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
-    func openArchive(_ url: URL, passphrase: String? = nil) async throws {
+    public func openArchive(_ url: URL, passphrase: String? = nil) async throws {
         // Si forma parte de un juego de volúmenes, reunimos las partes en orden;
         // la primera (nombre.zip) da el nombre base y el formato.
         let parts = VolumeStore.parts(for: url)
@@ -144,7 +137,7 @@ final class ArchiveDocument: ObservableObject {
         // Si venía troceado, limpiamos cualquier temporal de una apertura anterior.
         discardJoinedVolumesTemp()
         // Red defensiva: restos de un guardado interrumpido por un cierre forzado anterior.
-        Self.cleanStaleWorkFiles(in: baseURL.deletingLastPathComponent())
+        WorkFile.cleanStale(in: baseURL.deletingLastPathComponent())
         let fallbackName = baseURL.deletingPathExtension().lastPathComponent
         let report = makeProgressReporter()
         let result: ArchiveReadResult
@@ -155,14 +148,11 @@ final class ArchiveDocument: ObservableObject {
                 // de cargar todas las partes en RAM (Volumes.join). Mono-volumen: mapear directo.
                 let temp = parts.count == 1 ? nil : try VolumeStore.joinToTemporaryFile(parts)
                 let data = try Data(contentsOf: temp ?? parts[0], options: .mappedIfSafe)
-                // Solo ZIP reporta progreso por fracción; limitamos los saltos a la UI
+                // Solo ZIP reporta progreso por fracción; el throttle limita los saltos a la UI
                 // (cada ~1%) para no inundar el hilo principal.
-                var lastReported = 0.0
+                var throttle = ProgressThrottle()
                 let progress: ((Double) -> Void)? = detected == .zip ? { fraction in
-                    if fraction - lastReported >= 0.01 || fraction >= 1 {
-                        lastReported = fraction
-                        report(fraction)
-                    }
+                    if throttle.shouldReport(fraction) { report(fraction) }
                 } : nil
                 do {
                     let r = try detected.codec.open(data, fallbackName: fallbackName,
@@ -184,7 +174,7 @@ final class ArchiveDocument: ObservableObject {
         joinedVolumesTemp = joinedTemp
         format = result.format
         sourceArchiveData = result.container
-        roots = buildTree(from: result.entries)
+        roots = ArchiveTreeBuilder.build(from: result.entries)
         selectedIDs = []
         sourceURL = baseURL
         documentName = baseURL.lastPathComponent
@@ -219,7 +209,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Da la contraseña para las entradas cifradas del archivo abierto. La valida
     /// extrayendo la primera entrada cifrada; devuelve `false` si es incorrecta.
-    func provideEntryPassword(_ password: String) -> Bool {
+    public func provideEntryPassword(_ password: String) -> Bool {
         // Si hay una entrada cifrada, validar la contraseña extrayéndola; si no la hay,
         // aceptarla sin más. En ambos casos se aplican los mismos efectos (una sola vez).
         if let archive = sourceArchiveData,
@@ -240,7 +230,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Da la contraseña para **abrir** un 7z con cabeceras cifradas. Reintenta la
     /// apertura; devuelve `false` si es incorrecta (sigue pidiéndola).
-    func provideOpenPassword(_ password: String) async -> Bool {
+    public func provideOpenPassword(_ password: String) async -> Bool {
         guard case .needsOpenPassword(let url) = lockState else { return false }
         do {
             try await openArchive(url, passphrase: password)
@@ -263,7 +253,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Empieza un documento nuevo, aún sin guardar. El nombre mostrado ("Sin título")
     /// lo resuelve la vista; el modelo deja `documentName` vacío hasta que se guarde.
-    func beginNewDocument() {
+    public func beginNewDocument() {
         sourceURL = nil
         documentName = ""
         hasActiveDocument = true
@@ -278,21 +268,21 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Añade ficheros/carpetas del disco dentro de la carpeta destino actual.
-    func addFiles(_ urls: [URL]) {
-        addFiles(urls, into: destinationFolderForAdding())
+    public func addFiles(_ urls: [URL]) {
+        addFiles(urls, into: insertionTargetFolder())
     }
 
     /// Añade ficheros/carpetas del disco dentro de `target` (o la raíz si es `nil`).
     /// Deja seleccionados los elementos añadidos para que la vista los revele
     /// (desplegando la carpeta destino) y les dé el foco, como al crear una carpeta.
     @discardableResult
-    func addFiles(_ urls: [URL], into target: FileNode?,
+    public func addFiles(_ urls: [URL], into target: FileNode?,
                   hiddenPolicy: AddHiddenPolicy = .excludeSystemFiles) -> [FileNode] {
         guard !isLocked else { return [] }
         if !hasActiveDocument { beginNewDocument() }
         var added: [FileNode] = []
         for url in urls {
-            let node = importFromDisk(url, hiddenPolicy: hiddenPolicy).node
+            let node = ArchiveTreeBuilder.importFromDisk(url, hiddenPolicy: hiddenPolicy).node
             insert(node, into: target)
             added.append(node)
         }
@@ -304,16 +294,16 @@ final class ArchiveDocument: ObservableObject {
     // MARK: - Acciones de la barra superior
 
     /// El archivo está cifrado y bloqueado (sin contraseña): no se puede editar.
-    var isLocked: Bool { requiresEntryPassword }
+    public var isLocked: Bool { requiresEntryPassword }
 
     /// Crea una carpeta. El nombre por defecto ("Nueva carpeta") lo inyecta la vista,
     /// ya localizado, para que el modelo no dependa de la i18n.
-    func createFolder(defaultName: String) {
+    public func createFolder(defaultName: String) {
         guard !isLocked else { return }
         if !hasActiveDocument { beginNewDocument() }
-        let parent = folderForNewFolder()
-        let siblings = parent?.children ?? roots
-        let name = uniqueName(defaultName, among: siblings)
+        let parent = insertionTargetFolder()
+        let taken = Set((parent?.children ?? roots).map(\.name))
+        let name = UniqueName.next(for: defaultName) { taken.contains($0) }
         let node = FileNode(name: name, isDirectory: true, source: .folder)
         insert(node, into: parent)
         selectedIDs = [node.id]
@@ -321,7 +311,7 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Elimina todos los elementos seleccionados (borrado en lote).
-    func removeSelected() {
+    public func removeSelected() {
         guard !isLocked else { return }
         let nodes = selectedNodes()
         guard !nodes.isEmpty else { return }
@@ -331,7 +321,7 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Elimina un nodo concreto (el del menú contextual, por ejemplo).
-    func delete(_ node: FileNode) {
+    public func delete(_ node: FileNode) {
         guard !isLocked else { return }
         remove(node)
         selectedIDs.remove(node.id)
@@ -339,7 +329,7 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Renombra un nodo. Ignora si el nombre está vacío o ya existe entre hermanos.
-    func rename(_ node: FileNode, to newName: String) {
+    public func rename(_ node: FileNode, to newName: String) {
         guard !isLocked else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != node.name else { return }
@@ -351,7 +341,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Mueve un nodo dentro de `target` (o a la raíz si es `nil`). No permite
     /// moverlo a sí mismo, a un descendiente, ni donde ya exista ese nombre.
-    func move(_ node: FileNode, into target: FileNode?) {
+    public func move(_ node: FileNode, into target: FileNode?) {
         guard !isLocked, !isSelfOrDescendant(target, of: node) else { return }
         let destination = target?.children ?? roots
         guard !destination.contains(where: { $0.name == node.name }) else { return }
@@ -361,13 +351,13 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// `true` si `node` puede moverse a `target` (no a sí mismo ni a un descendiente).
-    func canMove(_ node: FileNode, into target: FileNode?) -> Bool {
+    public func canMove(_ node: FileNode, into target: FileNode?) -> Bool {
         !isLocked && !isSelfOrDescendant(target, of: node)
     }
 
     /// Carpetas válidas como destino para mover `node` (excluye su carpeta actual,
     /// sí mismo y sus descendientes).
-    func moveDestinations(for node: FileNode) -> [FileNode] {
+    public func moveDestinations(for node: FileNode) -> [FileNode] {
         allFolders().filter { folder in
             folder.id != node.parent?.id && !isSelfOrDescendant(folder, of: node)
         }
@@ -405,7 +395,7 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Cierra el documento y vuelve al estado vacío (zona de arrastre).
-    func close() {
+    public func close() {
         discardJoinedVolumesTemp()
         roots = []
         selectedIDs = []
@@ -425,7 +415,7 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Marca el documento como guardado en `url` (actualiza nombre y origen).
-    func markSaved(as url: URL) {
+    public func markSaved(as url: URL) {
         sourceURL = url
         documentName = url.lastPathComponent
         hasUnsavedChanges = false
@@ -438,16 +428,16 @@ final class ArchiveDocument: ObservableObject {
     /// Finder). La vista lo usa para mostrar la (X) del overlay.
     /// Hay una operación larga **cancelable** en curso (extracción o guardado/exportación): la
     /// vista muestra el botón Cancelar y el cierre de ventana avisa antes de abortarla.
-    @Published private(set) var cancellable = false
+    @Published public private(set) var cancellable = false
     /// Guardado/exportación en curso (subconjunto de `cancellable`): además de avisar al cerrar,
     /// impide lanzar un segundo guardado encima.
-    @Published private(set) var isWriting = false
+    @Published public private(set) var isWriting = false
     /// Token de la operación activa; lo comparte la ruta de fondo (descompresión o compresión).
     private var cancelToken: CancelToken?
 
     /// Registra una extracción cancelable y prepara el progreso. Lo llaman ambas rutas (el
     /// botón aquí mismo; el arrastre al Finder desde el delegado de promesas). Hilo principal.
-    func registerExtraction(token: CancelToken, total: Int64) {
+    public func registerExtraction(token: CancelToken, total: Int64) {
         cancelToken = token
         cancellable = true
         // Determinado si conocemos el tamaño total; si no (entradas sin tamaño), indeterminado.
@@ -455,7 +445,7 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Fin de la extracción: limpia progreso, flag y token.
-    func endExtraction() {
+    public func endExtraction() {
         progress = nil
         cancellable = false
         cancelToken = nil
@@ -463,11 +453,11 @@ final class ArchiveDocument: ObservableObject {
 
     /// Cancela la operación larga en curso (X del overlay, cierre de ventana o salir): la
     /// descompresión/compresión aborta en el siguiente trozo y se descarta el temporal a medias.
-    func cancelCurrentOperation() { cancelToken?.cancel() }
+    public func cancelCurrentOperation() { cancelToken?.cancel() }
 
     /// Borra las rutas ya extraídas de un lote cancelado (cuando el usuario elige "Eliminar"),
     /// mostrando la tarjeta "Limpiando…" con barra determinada por número de elementos.
-    func cleanUpExtracted(_ urls: [URL]) async {
+    public func cleanUpExtracted(_ urls: [URL]) async {
         guard !urls.isEmpty else { return }
         progress = ProgressState(kind: .cleaningUp, fraction: 0)
         defer { progress = nil }
@@ -481,37 +471,7 @@ final class ArchiveDocument: ObservableObject {
         }.value
     }
 
-    /// Sufijo de los temporales de guardado (`.<uuid>.filepackr.work`), ocultos y en la carpeta
-    /// del destino para que el movimiento final sea atómico (mismo volumen).
-    static let workFileSuffix = ".filepackr.work"
-
-    /// Temporales de guardados **en curso** (todas las ventanas). Si la app termina a mitad, el
-    /// `AppDelegate` los borra en `applicationWillTerminate` (la tarea de fondo muere antes de
-    /// limpiar su propio `.work`). En cierre/cancelación normales los limpia el `catch` de `writeArchive`.
-    static var activeWorkFiles: Set<URL> = []
-
-    /// Borra los temporales de guardados que quedaran en curso al terminar la app.
-    static func cleanUpActiveWorkFiles() {
-        for url in activeWorkFiles { try? FileManager.default.removeItem(at: url) }
-        activeWorkFiles.removeAll()
-    }
-
-    /// Borra restos de un guardado interrumpido por un cierre forzado anterior en `folder`.
-    /// **Conservador**: solo los de más de una hora, para no tocar un guardado concurrente en
-    /// curso en la misma carpeta (que tendría segundos de antigüedad).
-    static func cleanStaleWorkFiles(in folder: URL) {
-        let fm = FileManager.default
-        guard let items = try? fm.contentsOfDirectory(
-            at: folder, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
-        let cutoff = Date().addingTimeInterval(-3600)
-        for url in items where url.lastPathComponent.hasSuffix(workFileSuffix) {
-            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey])
-                .contentModificationDate) ?? .distantPast
-            if modified < cutoff { try? fm.removeItem(at: url) }
-        }
-    }
-
-    func performExtraction(of plan: ExportPlan, to destination: URL, overwrite: Bool) async throws {
+    public func performExtraction(of plan: ExportPlan, to destination: URL, overwrite: Bool) async throws {
         if overwrite, FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
@@ -528,12 +488,11 @@ final class ArchiveDocument: ObservableObject {
                 return
             }
             var done: Int64 = 0
-            var lastReported = 0.0
+            var throttle = ProgressThrottle()
             try plan.writeContents(to: destination, onProgress: { name, bytes in
                 done += bytes
                 let fraction = min(1, Double(done) / Double(total))
-                guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
-                lastReported = fraction
+                guard throttle.shouldReport(fraction) else { return }
                 Task { @MainActor in
                     self.progress?.fraction = fraction
                     self.progress?.detail = name
@@ -544,7 +503,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Crea un plan de exportación ligero (sin tocar disco) para arrastrar al
     /// Finder. La extracción real ocurre luego, en segundo plano, al soltar.
-    func exportPlan(for node: FileNode) -> ExportPlan {
+    public func exportPlan(for node: FileNode) -> ExportPlan {
         if node.isDirectory {
             return ExportPlan(name: node.name, payload: .folder(node.children.map { exportPlan(for: $0) }))
         }
@@ -561,7 +520,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Plan de exportación de **todo** el contenido, agrupado en una carpeta llamada
     /// `name` (para "Extraer todo": descomprime el archivo entero, como hace Finder).
-    func exportPlanForAll(named name: String) -> ExportPlan {
+    public func exportPlanForAll(named name: String) -> ExportPlan {
         ExportPlan(name: name, payload: .folder(roots.map { exportPlan(for: $0) }))
     }
 
@@ -600,11 +559,11 @@ final class ArchiveDocument: ObservableObject {
             try builder.payload(for: outputFormat, encryption: cipher, password: pwd, level: level)
         }.value
         let work = url.deletingLastPathComponent()
-            .appendingPathComponent(".\(UUID().uuidString)\(Self.workFileSuffix)")
+            .appendingPathComponent(".\(UUID().uuidString)\(WorkFile.suffix)")
         // Registrar el temporal en curso: si la app **termina** a mitad (cerrar la última ventana
         // o ⌘Q matan la tarea antes de que su `catch` limpie), `applicationWillTerminate` lo borra.
-        Self.activeWorkFiles.insert(work)
-        defer { Self.activeWorkFiles.remove(work) }
+        WorkFile.active.insert(work)
+        defer { WorkFile.active.remove(work) }
         do {
             // Progreso por bytes de entrada: total = tamaño descomprimido del contenido. La
             // fracción y el nombre del fichero en curso alimentan la barra del overlay.
@@ -636,7 +595,7 @@ final class ArchiveDocument: ObservableObject {
 
     /// Guarda en `url`, **adopta** el fichero como documento activo y recuerda los ajustes
     /// para re-guardar. (Primer guardado / botón Guardar.)
-    func save(to url: URL, format outputFormat: ArchiveFormat,
+    public func save(to url: URL, format outputFormat: ArchiveFormat,
               encryption: ZipEncryption, password: String?, volumeSize: Int? = nil,
               level: CompressionLevel = .default) async throws {
         saveFormat = outputFormat
@@ -652,7 +611,7 @@ final class ArchiveDocument: ObservableObject {
     }
 
     /// Re-guarda con los ajustes ya elegidos (botón Guardar de un documento existente).
-    func save(to url: URL) async throws {
+    public func save(to url: URL) async throws {
         try await save(to: url, format: saveFormat, encryption: saveEncryption,
                        password: savePassword, volumeSize: saveVolumeSize, level: saveLevel)
     }
@@ -661,7 +620,7 @@ final class ArchiveDocument: ObservableObject {
     /// cambiar el documento activo: el original sigue siendo el actual, con sus ajustes
     /// y su `sourceURL` intactos. Es la vía para cambiar cifrado/contraseña o convertir
     /// de formato escribiendo una copia aparte.
-    func export(to url: URL, format outputFormat: ArchiveFormat,
+    public func export(to url: URL, format outputFormat: ArchiveFormat,
                 encryption: ZipEncryption, password: String?, volumeSize: Int? = nil,
                 level: CompressionLevel = .default) async throws {
         try await writeArchive(to: url, format: outputFormat, encryption: encryption,
@@ -672,18 +631,18 @@ final class ArchiveDocument: ObservableObject {
 
     /// Nodo "principal" de la selección (el primero), para decidir destino de Añadir
     /// o Nueva carpeta. Con selección única equivale al elemento seleccionado.
-    func selectedNode() -> FileNode? { node(with: selectedIDs.first) }
+    public func selectedNode() -> FileNode? { node(with: selectedIDs.first) }
 
     /// Todos los nodos seleccionados (para borrado/extracción en lote).
-    func selectedNodes() -> [FileNode] { selectedIDs.compactMap { node(with: $0) } }
+    public func selectedNodes() -> [FileNode] { selectedIDs.compactMap { node(with: $0) } }
 
     /// Ficheros (no carpetas) hermanos de `node`, en orden, para navegar en Quick Look.
-    func siblingFiles(of node: FileNode) -> [FileNode] {
+    public func siblingFiles(of node: FileNode) -> [FileNode] {
         let siblings = node.parent?.children ?? roots
         return siblings.filter { !$0.isDirectory }
     }
 
-    func node(with id: FileNode.ID?) -> FileNode? {
+    public func node(with id: FileNode.ID?) -> FileNode? {
         guard let id else { return nil }
         func search(_ nodes: [FileNode]) -> FileNode? {
             for node in nodes {
@@ -694,75 +653,6 @@ final class ArchiveDocument: ObservableObject {
         }
         return search(roots)
     }
-
-    // MARK: - Implementación
-
-    private func buildTree(from entries: [ArchiveEntry]) -> [FileNode] {
-        var rootNodes: [FileNode] = []
-        var index: [String: FileNode] = [:]
-
-        for entry in entries.sorted(by: { $0.path < $1.path }) {
-            var parts = entry.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-            if parts.first == "." { parts.removeFirst() }   // tar suele prefijar "./"
-            guard !parts.isEmpty else { continue }
-
-            var accumulated = ""
-            var parent: FileNode?
-            for (i, part) in parts.enumerated() {
-                let isLast = i == parts.count - 1
-                accumulated = accumulated.isEmpty ? part : "\(accumulated)/\(part)"
-                let isDir = !isLast || entry.isDirectory
-
-                if let existing = index[accumulated] {
-                    if isLast {
-                        existing.entryDate = entry.modificationDate
-                        if !entry.isDirectory { existing.source = .entry(entry) }
-                    }
-                    parent = existing
-                    continue
-                }
-                let node = FileNode(
-                    name: part,
-                    isDirectory: isDir,
-                    source: (isLast && !entry.isDirectory) ? .entry(entry) : .folder
-                )
-                if isLast { node.entryDate = entry.modificationDate }
-                node.parent = parent
-                if let parent { parent.children.append(node) } else { rootNodes.append(node) }
-                index[accumulated] = node
-                parent = node
-            }
-        }
-        return rootNodes
-    }
-
-    /// Importa recursivamente un elemento del disco y devuelve el nodo creado junto al número
-    /// de elementos omitidos por la política. Al expandir una carpeta, omite los hijos que la
-    /// política marque como ocultos/sistema (enumeramos sin `.skipsHiddenFiles` para decidirlo
-    /// nosotros: así `.includeAll` puede de verdad incluir los ocultos), contando cada nombre
-    /// omitido como uno. El elemento raíz no se filtra aquí —se respeta la elección explícita;
-    /// el filtro lo aplica quien añade.
-    private func importFromDisk(_ url: URL, hiddenPolicy: AddHiddenPolicy) -> (node: FileNode, excluded: Int) {
-        if isDirectory(url) {
-            let folder = FileNode(name: url.lastPathComponent, isDirectory: true, source: .folder)
-            let contents = (try? FileManager.default.contentsOfDirectory(
-                at: url, includingPropertiesForKeys: nil)) ?? []
-            var excluded = 0
-            for child in contents.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                if hiddenPolicy.excludes(child.lastPathComponent) {
-                    excluded += 1
-                    continue
-                }
-                let imported = importFromDisk(child, hiddenPolicy: hiddenPolicy)
-                imported.node.parent = folder
-                folder.children.append(imported.node)
-                excluded += imported.excluded
-            }
-            return (folder, excluded)
-        }
-        return (FileNode(name: url.lastPathComponent, isDirectory: false, source: .diskFile(url)), 0)
-    }
-
 
     // MARK: - Inserción / borrado / utilidades
 
@@ -779,30 +669,15 @@ final class ArchiveDocument: ObservableObject {
         }
     }
 
-    /// Carpeta donde Añadir mete los elementos: la seleccionada si es carpeta,
+    /// Carpeta destino al insertar (Añadir o Nueva carpeta): la seleccionada si es carpeta,
     /// si no el padre del seleccionado, si no la raíz.
-    private func destinationFolderForAdding() -> FileNode? {
+    private func insertionTargetFolder() -> FileNode? {
         guard let node = selectedNode() else { return nil }
         return node.isDirectory ? node : node.parent
-    }
-
-    /// Dónde crear una carpeta nueva (decisión: dentro si hay carpeta seleccionada,
-    /// al mismo nivel si hay fichero seleccionado, en la raíz si no hay selección).
-    private func folderForNewFolder() -> FileNode? {
-        guard let node = selectedNode() else { return nil }
-        return node.isDirectory ? node : node.parent
-    }
-
-    private func uniqueName(_ base: String, among siblings: [FileNode]) -> String {
-        let taken = Set(siblings.map(\.name))
-        guard taken.contains(base) else { return base }
-        var n = 2
-        while taken.contains("\(base) \(n)") { n += 1 }
-        return "\(base) \(n)"
     }
 
     /// El documento es un único fichero (apto para guardar como `.gz`).
-    var isSingleFile: Bool { roots.count == 1 && !roots[0].isDirectory }
+    public var isSingleFile: Bool { roots.count == 1 && !roots[0].isDirectory }
 
     private func isDirectory(_ url: URL) -> Bool {
         (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
@@ -832,15 +707,15 @@ final class ArchiveDocument: ObservableObject {
 
     /// Resumen del contenido para la barra de estado (recalculado al cambiar la
     /// estructura, no en cada render): nº de ficheros y tamaño total descomprimido.
-    private(set) var contentFileCount = 0
-    private(set) var contentSize: UInt64 = 0
+    public private(set) var contentFileCount = 0
+    public private(set) var contentSize: UInt64 = 0
     /// Tamaño comprimido total. Solo lo conocen las entradas de un archivo abierto;
     /// los ficheros añadidos aún sin comprimir no tienen tamaño comprimido conocido.
-    private(set) var contentCompressedSize: UInt64 = 0
+    public private(set) var contentCompressedSize: UInt64 = 0
     /// `true` solo si **todas** las entradas tienen tamaño comprimido conocido. Si hay
     /// ficheros recién añadidos (aún sin comprimir), el total sería una mezcla engañosa
     /// de tamaños reales y ceros, así que la barra de estado oculta la cifra.
-    private(set) var contentCompressedKnown = false
+    public private(set) var contentCompressedKnown = false
 
     private func recomputeContentSummary() {
         var files = 0

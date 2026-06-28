@@ -4,11 +4,11 @@ import Combine
 import ArchiveBrowser
 
 /// Tema de apariencia de la app.
-enum AppTheme: String, CaseIterable, Identifiable {
+public enum AppTheme: String, CaseIterable, Identifiable {
     case system, light, dark
-    var id: String { rawValue }
-    var nameKey: String { "theme.\(rawValue)" }
-    var colorScheme: ColorScheme? {
+    public var id: String { rawValue }
+    public var nameKey: String { "theme.\(rawValue)" }
+    public var colorScheme: ColorScheme? {
         switch self {
         case .system: return nil
         case .light: return .light
@@ -18,10 +18,10 @@ enum AppTheme: String, CaseIterable, Identifiable {
 }
 
 /// A dónde extraer por defecto.
-enum ExtractDestinationMode: String, CaseIterable, Identifiable {
+public enum ExtractDestinationMode: String, CaseIterable, Identifiable {
     case lastUsedFolder, archiveFolder, fixedFolder
-    var id: String { rawValue }
-    var nameKey: String {
+    public var id: String { rawValue }
+    public var nameKey: String {
         switch self {
         case .archiveFolder: return "extract.dest.archiveFolder"
         case .fixedFolder: return "extract.dest.fixedFolder"
@@ -34,10 +34,10 @@ enum ExtractDestinationMode: String, CaseIterable, Identifiable {
 /// (botón Añadir o arrastre). No afecta a lo que se muestra dentro de un archivo abierto:
 /// el contenido siempre se enseña íntegro. El filtro se aplica al expandir carpetas; un
 /// elemento elegido/arrastrado de forma explícita en el primer nivel se respeta siempre.
-enum AddHiddenPolicy: String, CaseIterable, Identifiable {
+public enum AddHiddenPolicy: String, CaseIterable, Identifiable {
     case includeAll, excludeSystemFiles, excludeAllHidden
-    var id: String { rawValue }
-    var nameKey: String { "settings.hidden.\(rawValue)" }
+    public var id: String { rawValue }
+    public var nameKey: String { "settings.hidden.\(rawValue)" }
 
     /// Nombres y carpetas de sistema/metadatos que excluyen tanto `.excludeSystemFiles`
     /// como `.excludeAllHidden`.
@@ -47,7 +47,7 @@ enum AddHiddenPolicy: String, CaseIterable, Identifiable {
     ]
 
     /// `true` si un elemento con este nombre debe excluirse al añadirlo desde el disco.
-    func excludes(_ name: String) -> Bool {
+    public func excludes(_ name: String) -> Bool {
         switch self {
         case .includeAll: return false
         case .excludeSystemFiles: return name.hasPrefix("._") || Self.systemNames.contains(name)
@@ -57,83 +57,83 @@ enum AddHiddenPolicy: String, CaseIterable, Identifiable {
 }
 
 /// Pestañas de la ventana de Ajustes.
-enum SettingsTab: String, CaseIterable, Identifiable {
+public enum SettingsTab: String, CaseIterable, Identifiable {
     case general, files
-    var id: String { rawValue }
-    var nameKey: String { self == .general ? "settings.tab.general" : "settings.tab.files" }
-    var systemImage: String { self == .general ? "gearshape" : "doc.zipper" }
+    public var id: String { rawValue }
+    public var nameKey: String { self == .general ? "settings.tab.general" : "settings.tab.files" }
+    public var systemImage: String { self == .general ? "gearshape" : "doc.zipper" }
 }
 
 /// Preferencias de la app (el idioma lo gobierna el sistema, no la app). Se guardan
 /// en `UserDefaults` y se aplican en caliente.
 @MainActor
-final class AppSettings: ObservableObject {
-    static let shared = AppSettings()
+public final class AppSettings: ObservableObject {
+    public static let shared = AppSettings()
 
-    @Published var theme: AppTheme {
+    @Published public var theme: AppTheme {
         didSet { defaults.set(theme.rawValue, forKey: "theme") }
     }
     // Formato/cifrado/nivel por defecto para Guardar/Exportar. `nil` = **"Último usado"** (la
     // primera opción del Picker): se resuelve al último valor realmente usado (`lastUsed*`).
-    @Published var defaultFormat: ArchiveFormat? {
+    @Published public var defaultFormat: ArchiveFormat? {
         didSet { defaults.set(defaultFormat?.rawValue, forKey: "defaultFormat") }
     }
-    @Published var defaultEncryption: ZipEncryption? {
+    @Published public var defaultEncryption: ZipEncryption? {
         didSet { defaults.set(defaultEncryption?.persistID, forKey: "defaultEncryption") }
     }
-    @Published var defaultCompressionLevel: CompressionLevel? {
+    @Published public var defaultCompressionLevel: CompressionLevel? {
         didSet { defaults.set(defaultCompressionLevel?.rawValue, forKey: "defaultCompressionLevel") }
     }
 
     // Últimos valores realmente usados al guardar/exportar; alimentan la opción "Último usado".
-    @Published var lastUsedFormat: ArchiveFormat {
+    @Published public var lastUsedFormat: ArchiveFormat {
         didSet { defaults.set(lastUsedFormat.rawValue, forKey: "lastUsedFormat") }
     }
-    @Published var lastUsedEncryption: ZipEncryption {
+    @Published public var lastUsedEncryption: ZipEncryption {
         didSet { defaults.set(lastUsedEncryption.persistID, forKey: "lastUsedEncryption") }
     }
-    @Published var lastUsedLevel: CompressionLevel {
+    @Published public var lastUsedLevel: CompressionLevel {
         didSet { defaults.set(lastUsedLevel.rawValue, forKey: "lastUsedLevel") }
     }
 
     /// Valor resuelto para prerrellenar la hoja: el fijo elegido, o el último usado si es "Último usado".
-    var resolvedFormat: ArchiveFormat { defaultFormat ?? lastUsedFormat }
-    var resolvedEncryption: ZipEncryption { defaultEncryption ?? lastUsedEncryption }
-    var resolvedLevel: CompressionLevel { defaultCompressionLevel ?? lastUsedLevel }
-    @Published var extractMode: ExtractDestinationMode {
+    public var resolvedFormat: ArchiveFormat { defaultFormat ?? lastUsedFormat }
+    public var resolvedEncryption: ZipEncryption { defaultEncryption ?? lastUsedEncryption }
+    public var resolvedLevel: CompressionLevel { defaultCompressionLevel ?? lastUsedLevel }
+    @Published public var extractMode: ExtractDestinationMode {
         didSet { defaults.set(extractMode.rawValue, forKey: "extractMode") }
     }
     /// Carpeta fija de extracción (cuando `extractMode == .fixedFolder`).
-    @Published var fixedExtractFolder: URL? {
+    @Published public var fixedExtractFolder: URL? {
         didSet { defaults.set(fixedExtractFolder?.path, forKey: "fixedExtractFolder") }
     }
     /// Última carpeta a la que se extrajo (cuando `extractMode == .lastUsedFolder`). La fija
     /// `ExtractCoordinator.confirm` al confirmar una extracción.
-    @Published var lastUsedExtractFolder: URL? {
+    @Published public var lastUsedExtractFolder: URL? {
         didSet { defaults.set(lastUsedExtractFolder?.path, forKey: "lastUsedExtractFolder") }
     }
     /// Política de exclusión de ocultos/sistema al añadir ficheros desde el disco.
-    @Published var addHiddenPolicy: AddHiddenPolicy {
+    @Published public var addHiddenPolicy: AddHiddenPolicy {
         didSet { defaults.set(addHiddenPolicy.rawValue, forKey: "addHiddenPolicy") }
     }
 
     /// Formatos de los que FilePackr se ofrece como app por defecto en el Finder
     /// (pestaña Archivos de Ajustes). Se persisten como lista de `rawValue`.
-    @Published var associatedFormats: Set<ArchiveFormat> {
+    @Published public var associatedFormats: Set<ArchiveFormat> {
         didSet { defaults.set(associatedFormats.map(\.rawValue), forKey: "associatedFormats") }
     }
 
     /// `true` tras mostrar (una vez) el diálogo de "compresor por defecto" del primer arranque.
-    @Published var firstRunPromptShown: Bool {
+    @Published public var firstRunPromptShown: Bool {
         didSet { defaults.set(firstRunPromptShown, forKey: "firstRunPromptShown") }
     }
 
     /// Pestaña activa de la ventana de Ajustes (no se persiste; el primer arranque
     /// la fija en `.files` antes de abrir Ajustes).
-    @Published var selectedSettingsTab: SettingsTab = .general
+    @Published public var selectedSettingsTab: SettingsTab = .general
 
     /// Formatos premarcados por defecto: los más habituales (ZIP > RAR > 7Z + Unix).
-    static let defaultAssociatedFormats: Set<ArchiveFormat> = [.zip, .sevenZip, .rar, .tarGzip, .gzip, .tar]
+    public static let defaultAssociatedFormats: Set<ArchiveFormat> = [.zip, .sevenZip, .rar, .tarGzip, .gzip, .tar]
 
     private let defaults = UserDefaults.standard
 
@@ -161,19 +161,19 @@ final class AppSettings: ObservableObject {
 
 /// Clave de localización del nivel de compresión para los `Picker` de la UI.
 extension CompressionLevel {
-    var nameKey: String { "level.\(rawValue)" }
+    public var nameKey: String { "level.\(rawValue)" }
 }
 
 /// Persistencia estable del cifrado (el enum del paquete no es `RawRepresentable`).
 extension ZipEncryption {
-    var persistID: String {
+    public var persistID: String {
         switch self {
         case .none: return "none"
         case .zipCrypto: return "weak"
         case .aes256: return "strong"
         }
     }
-    init?(persistID: String) {
+    public init?(persistID: String) {
         switch persistID {
         case "none": self = .none
         case "weak": self = .zipCrypto

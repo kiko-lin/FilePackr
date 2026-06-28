@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import ArchiveBrowser
+import FilePackrModel
 
 /// Gestor de archivos comprimidos: barra superior + barra de documento + cuerpo
 /// central (zona de arrastre cuando está vacío, o el navegador `NSOutlineView`).
@@ -274,7 +275,7 @@ struct ContentView: View {
 
     /// Traduce el token de progreso del modelo. Resolver el nombre vacío a "Sin título"
     /// reproduce el antiguo `displayName` para un documento aún sin guardar.
-    private func progressLabel(_ kind: ProgressKind) -> String {
+    private func progressLabel(_ kind: FilePackrModel.ProgressKind) -> String {
         switch kind {
         case .opening(let name): return loc("progress.opening", name)
         case .extracting: return loc("progress.extracting")
@@ -694,10 +695,6 @@ struct ContentView: View {
             case .save: saveDocument(then: { doc.close() })
             }
         }
-    }
-
-    private func run(_ op: () throws -> Void) {
-        do { try op() } catch { errorMessage = localizedErrorMessage(error) }
     }
 
     private func runAsync(_ op: () async throws -> Void) async {

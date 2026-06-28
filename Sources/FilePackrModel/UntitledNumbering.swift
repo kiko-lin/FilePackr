@@ -6,11 +6,11 @@ import Foundation
 /// menor número libre cuando es un documento nuevo sin guardar y lo **devuelve** al cerrarse o al
 /// pasar a tener un nombre de archivo real, de modo que el número se reutilice (como TextEdit).
 @MainActor
-enum UntitledNumbering {
+public enum UntitledNumbering {
     private static var inUse: Set<Int> = []
 
     /// Reserva y devuelve el menor número libre (≥ 1).
-    static func claim() -> Int {
+    public static func claim() -> Int {
         var n = 1
         while inUse.contains(n) { n += 1 }
         inUse.insert(n)
@@ -18,7 +18,7 @@ enum UntitledNumbering {
     }
 
     /// Libera un número para que vuelva a estar disponible.
-    static func release(_ n: Int) {
+    public static func release(_ n: Int) {
         inUse.remove(n)
     }
 }

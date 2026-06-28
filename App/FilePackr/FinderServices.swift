@@ -1,4 +1,5 @@
 import AppKit
+import FilePackrModel
 
 /// Proveedor de los **Servicios de macOS** (visibles en el menú contextual del Finder y en el
 /// menú «Servicios»): «Abrir en FilePackr» y «Descomprimir aquí». Se usan NSServices —no una

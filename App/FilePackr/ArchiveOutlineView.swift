@@ -3,6 +3,7 @@ import AppKit
 import UniformTypeIdentifiers
 import QuickLookUI
 import ArchiveBrowser
+import FilePackrModel
 
 extension NSUserInterfaceItemIdentifier {
     static let nameColumn = NSUserInterfaceItemIdentifier("name")
@@ -580,12 +581,11 @@ extension ArchiveOutlineView {
             do {
                 if total > 0 {
                     var done: Int64 = 0
-                    var lastReported = 0.0
+                    var throttle = ProgressThrottle()
                     try plan.writeContents(to: url, onProgress: { name, bytes in
                         done += bytes
                         let fraction = min(1, Double(done) / Double(total))
-                        guard fraction - lastReported >= 0.01 || fraction >= 1 else { return }
-                        lastReported = fraction
+                        guard throttle.shouldReport(fraction) else { return }
                         Task { @MainActor in
                             doc.progress?.fraction = fraction
                             doc.progress?.detail = name

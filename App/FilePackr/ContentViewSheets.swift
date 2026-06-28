@@ -2,24 +2,12 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import ArchiveBrowser
+import FilePackrModel
 
-/// Hojas modales de `ContentView` (guardar/exportar, extraer y contraseña) y la unidad
-/// de tamaño de volumen que comparten. Son vistas autocontenidas: reciben sus datos por
-/// `@Binding` y comunican el resultado con closures `onSave`/`onExtract`/`onConfirm`, sin
-/// conocer el documento ni la cola de operaciones (eso vive en `ContentView`).
-
-/// Unidad de tamaño de volumen.
-enum VolumeUnit: String, CaseIterable, Identifiable {
-    case kilobytes = "KB", megabytes = "MB", gigabytes = "GB"
-    var id: String { rawValue }
-    var multiplier: Int {
-        switch self {
-        case .kilobytes: return 1024
-        case .megabytes: return 1024 * 1024
-        case .gigabytes: return 1024 * 1024 * 1024
-        }
-    }
-}
+/// Hojas modales de `ContentView` (guardar/exportar, extraer y contraseña). Son vistas
+/// autocontenidas: reciben sus datos por `@Binding` y comunican el resultado con closures
+/// `onSave`/`onExtract`/`onConfirm`, sin conocer el documento ni la cola de operaciones (eso
+/// vive en `ContentView`). La unidad de tamaño de volumen (`VolumeUnit`) vive en el modelo.
 
 /// Hoja **propia** (compacta y localizada) de Guardar/Exportar: nombre, carpeta destino,
 /// formato, cifrado, contraseña y división en volúmenes. El navegador de carpetas nativo solo

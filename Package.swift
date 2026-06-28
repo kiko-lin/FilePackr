@@ -6,6 +6,9 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "ArchiveBrowser", targets: ["ArchiveBrowser"]),
+        // Capa de modelo de la app (documento, coordinadores, ajustes): sin vistas, pero
+        // sí AppKit/SwiftUI puntuales (paneles de carpeta, ColorScheme). Testeable por CLI.
+        .library(name: "FilePackrModel", targets: ["FilePackrModel"]),
     ],
     targets: [
         // Acceso a la libbz2 del sistema (header en el SDK, dylib vía -lbz2).
@@ -19,10 +22,18 @@ let package = Package(
         // Lectura/escritura de archivos comprimidos (ZIP/tar/gzip/xz/bzip2 en Swift puro; 7z/rar vía libarchive).
         .target(name: "ArchiveBrowser", dependencies: ["Cbz2", "Carchive", "Cz", "Clzma"]),
 
+        // Capa de modelo de la app (la consume el target Xcode FilePackr).
+        .target(name: "FilePackrModel", dependencies: ["ArchiveBrowser"]),
+
         .testTarget(
             name: "ArchiveBrowserTests",
             dependencies: ["ArchiveBrowser"],
             resources: [.copy("Fixtures")]
+        ),
+
+        .testTarget(
+            name: "FilePackrModelTests",
+            dependencies: ["FilePackrModel"]
         ),
     ]
 )

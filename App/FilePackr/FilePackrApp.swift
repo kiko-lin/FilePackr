@@ -1,4 +1,5 @@
 import SwiftUI
+import FilePackrModel
 import AppKit
 
 @main
@@ -45,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Al salir, borra los temporales de guardados que siguieran en curso (cerrar la última
     /// ventana o ⌘Q matan la tarea de fondo antes de que limpie su `.work`).
     func applicationWillTerminate(_ notification: Notification) {
-        ArchiveDocument.cleanUpActiveWorkFiles()
+        WorkFile.cleanUpActive()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

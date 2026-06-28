@@ -3,23 +3,23 @@ import ArchiveBrowser
 
 /// Instantánea inmutable y `Sendable` de un nodo para poder extraerlo en segundo
 /// plano (al soltar en el Finder) sin acceder al documento, que es `@MainActor`.
-struct ExportPlan: Sendable {
-    let name: String
-    let payload: Payload
+public struct ExportPlan: Sendable {
+    public let name: String
+    public let payload: Payload
 
-    enum Payload: Sendable {
+    public enum Payload: Sendable {
         case folder([ExportPlan])
         case diskFile(URL)
         case archiveEntry(entry: ArchiveEntry, archive: Data, password: String?, format: ArchiveFormat)
     }
 
-    nonisolated var isDirectory: Bool {
+    nonisolated public var isDirectory: Bool {
         if case .folder = payload { return true }
         return false
     }
 
     /// Extrae el contenido a una carpeta temporal y devuelve la URL resultante.
-    nonisolated func materialize() throws -> URL {
+    nonisolated public func materialize() throws -> URL {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("FilePackrExport-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -31,7 +31,7 @@ struct ExportPlan: Sendable {
     /// Tamaño total **descomprimido** en bytes, para una barra de progreso fina (incluido el
     /// caso de un único fichero enorme). `0` si no se conoce (entradas sin tamaño declarado):
     /// el consumidor cae entonces a un indicador indeterminado.
-    nonisolated func byteCount() -> Int64 {
+    nonisolated public func byteCount() -> Int64 {
         switch payload {
         case .folder(let children): return children.reduce(0) { $0 + $1.byteCount() }
         case .diskFile(let url): return Self.fileSize(url)
@@ -48,7 +48,7 @@ struct ExportPlan: Sendable {
     /// curso** y los **bytes** de ese trozo, para una barra fina con etiqueta. Quien lo consuma
     /// debe **acumular y coalescer** (p. ej. a saltos del 1 %): aquí se llama por cada trozo,
     /// que con ficheros grandes son muchos.
-    nonisolated func writeContents(to destination: URL,
+    nonisolated public func writeContents(to destination: URL,
                                    onProgress: (_ name: String, _ bytes: Int64) -> Void = { _, _ in },
                                    isCancelled: () -> Bool = { false }) throws {
         if isCancelled() { throw CancellationError() }
@@ -81,7 +81,7 @@ struct ExportPlan: Sendable {
 /// Qué operación larga está en curso. El modelo emite el **token** (dato), no el texto;
 /// la vista lo traduce. Así la i18n no vive en el modelo y la etiqueta se re-localiza si
 /// se cambia de idioma a mitad de la operación.
-enum ProgressKind: Equatable {
+public enum ProgressKind: Equatable {
     case opening(String)       // nombre del fichero que se abre
     case extracting
     case compressing(String)   // nombre del documento ("" si aún sin guardar)
@@ -91,18 +91,19 @@ enum ProgressKind: Equatable {
 }
 
 /// Estado de una operación larga (comprimir/extraer) para la barra de progreso.
-struct ProgressState {
-    var kind: ProgressKind
-    var fraction: Double?   // nil = indeterminado
-    var detail: String?     // nombre del fichero en curso (p. ej. al extraer), opcional
+public struct ProgressState {
+    public var kind: ProgressKind
+    public var fraction: Double? // nil = indeterminado
+    public var detail: String? // nombre del fichero en curso (p. ej. al extraer), opcional
 }
 
 /// Señal de cancelación **hilo-segura**, compartida por las dos rutas de extracción (botón
 /// Extraer y arrastre al Finder): se marca desde el hilo principal (al pulsar la X o cerrar la
 /// ventana) y se consulta desde el hilo de fondo que descomprime, en cada trozo.
-nonisolated final class CancelToken: @unchecked Sendable {
+public nonisolated final class CancelToken: @unchecked Sendable {
+    public init() {}
     private let lock = NSLock()
     private var cancelled = false
-    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
-    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+    public var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    public func cancel() { lock.lock(); cancelled = true; lock.unlock() }
 }

@@ -3,7 +3,7 @@ import ArchiveBrowser
 extension ArchiveFormat {
     /// Clave de localización del nombre mostrado en el selector de formato. Vive en la
     /// app (no en el motor) porque es una preocupación de interfaz/idioma.
-    var nameKey: String {
+    public var nameKey: String {
         switch self {
         case .zip: return "format.zip"
         case .tar: return "format.tar"
@@ -25,7 +25,7 @@ extension ArchiveFormat {
 
     /// Nombre del recurso de icono (asset catalog para la UI / `.icns` para el Finder).
     /// Las tres variantes de tar comprimido reutilizan el icono de TAR.
-    var iconAssetName: String {
+    public var iconAssetName: String {
         switch self {
         case .zip: return "FormatIcon-ZIP"
         case .tar, .tarGzip, .tarXz, .tarBzip2: return "FormatIcon-TAR"
@@ -45,7 +45,7 @@ extension ArchiveFormat {
     /// Identificador de tipo (UTI) usado para registrarse como handler por defecto y
     /// declarar el `CFBundleDocumentTypes`. Se reutilizan las UTI del sistema cuando
     /// existen; el resto se declaran como tipos importados con prefijo `com.filepackr.`.
-    var contentTypeIdentifier: String {
+    public var contentTypeIdentifier: String {
         switch self {
         case .zip: return "public.zip-archive"
         case .tar: return "public.tar-archive"
@@ -66,7 +66,7 @@ extension ArchiveFormat {
     }
 
     /// Todas las extensiones que abre el formato (la principal y sus alias), sin punto.
-    var fileExtensions: [String] {
+    public var fileExtensions: [String] {
         switch self {
         case .zip: return ["zip"]
         case .tar: return ["tar"]
@@ -87,7 +87,7 @@ extension ArchiveFormat {
     }
 
     /// Extensiones formateadas para mostrar en la lista («.zip», «.tar.gz, .tgz»…).
-    var displayExtensions: String {
+    public var displayExtensions: String {
         fileExtensions.map { ".\($0)" }.joined(separator: ", ")
     }
 }

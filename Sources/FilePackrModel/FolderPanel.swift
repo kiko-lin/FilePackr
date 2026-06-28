@@ -4,7 +4,7 @@ import AppKit
 /// devuelve la URL elegida, o `nil` si se cancela. Centraliza la configuración repetida del
 /// selector de carpeta de destino (extracción) y del de la carpeta fija (Ajustes).
 @MainActor
-func chooseFolderPanel(prompt: String, startingAt: URL? = nil) -> URL? {
+public func chooseFolderPanel(prompt: String, startingAt: URL? = nil) -> URL? {
     let panel = NSOpenPanel()
     panel.canChooseFiles = false
     panel.canChooseDirectories = true

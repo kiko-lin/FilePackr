@@ -1,6 +1,7 @@
 import AppKit
 import UniformTypeIdentifiers
 import ArchiveBrowser
+import FilePackrModel
 
 /// Registro de FilePackr como aplicación por defecto en el Finder para los formatos
 /// que el usuario marca en la pestaña Archivos de Ajustes.

@@ -13,37 +13,38 @@ import ArchiveBrowser
 /// Conflicto al extraer: ya existe un fichero/carpeta con ese nombre en destino. El nombre
 /// libre alternativo ("conservar ambos") se calcula al resolver, no aquí, para que tenga en
 /// cuenta lo que se haya extraído antes en el mismo lote.
-struct ExtractionConflict: Identifiable {
-    let id = UUID()
-    let plan: ExportPlan
-    let destination: URL    // ruta que ya existe
+public struct ExtractionConflict: Identifiable {
+    public let id = UUID()
+    public let plan: ExportPlan
+    public let destination: URL // ruta que ya existe
 }
 
 /// Conflicto al añadir: ya existe un elemento con ese nombre en la carpeta destino.
-struct AddConflict: Identifiable {
-    let id = UUID()
-    let url: URL
-    let name: String
-    let target: FileNode?
+public struct AddConflict: Identifiable {
+    public let id = UUID()
+    public let url: URL
+    public let name: String
+    public let target: FileNode?
 }
 
 /// Lo que se va a extraer: uno o varios nodos, o **todo** el archivo. Los planes se
 /// construyen al confirmar (cuando ya tenemos la contraseña, si hacía falta). Con varios
 /// elementos, cada uno se extrae al destino y resuelve sus conflictos por separado.
-struct ExtractRequest: Identifiable {
-    let id = UUID()
+public struct ExtractRequest: Identifiable {
+    public let id = UUID()
     /// Título de la hoja, según la acción ("Extraer todo" / "…archivo seleccionado" / "…archivos…").
-    let title: String
-    let makePlans: () -> [ExportPlan]
+    public let title: String
+    public let makePlans: () -> [ExportPlan]
 }
 
 /// Cola de "Añadir" (arrastre o botón): procesa las URLs una a una, abriendo el diálogo
 /// de conflicto cuando un nombre ya existe y reanudando al resolverlo. Al terminar el lote
 /// selecciona lo añadido. Es lógica síncrona pura sobre el árbol del documento.
 @MainActor
-final class AddCoordinator: ObservableObject {
+public final class AddCoordinator: ObservableObject {
+    public init() {}
     /// Conflicto de nombre actual (dirige el `confirmationDialog`). `nil` = sin conflicto.
-    @Published var conflict: AddConflict?
+    @Published public var conflict: AddConflict?
     private var queue: [URL] = []
     private var target: FileNode?
     private var addedIDs: [FileNode.ID] = []
@@ -56,7 +57,7 @@ final class AddCoordinator: ObservableObject {
 
     /// Arranca un lote: filtra URLs de fichero, fija el destino y procesa la primera. `onFinish`
     /// recibe, al cerrar el lote, cuántos elementos omitió la política (para avisar al usuario).
-    func start(_ urls: [URL], into target: FileNode?, doc: ArchiveDocument,
+    public func start(_ urls: [URL], into target: FileNode?, doc: ArchiveDocument,
                hiddenPolicy: AddHiddenPolicy = .excludeSystemFiles,
                onFinish: ((Int) -> Void)? = nil) {
         let cleaned = urls.filter { $0.isFileURL }
@@ -72,7 +73,7 @@ final class AddCoordinator: ObservableObject {
 
     /// Procesa la siguiente URL: si su nombre ya existe en el destino, abre el diálogo de
     /// conflicto (que reanuda al resolverlo); si no, la añade y sigue.
-    func processNext(doc: ArchiveDocument) {
+    public func processNext(doc: ArchiveDocument) {
         guard !queue.isEmpty else { finish(doc: doc); return }
         let url = queue.removeFirst()
         let name = url.lastPathComponent
@@ -87,7 +88,7 @@ final class AddCoordinator: ObservableObject {
     }
 
     /// Resolución "Sobrescribir": reemplaza el elemento existente y sigue.
-    func overwrite(_ item: AddConflict, doc: ArchiveDocument) {
+    public func overwrite(_ item: AddConflict, doc: ArchiveDocument) {
         conflict = nil
         let existing = doc.child(named: item.name, in: item.target)
         let result = doc.addFile(item.url, into: item.target, replacing: existing, hiddenPolicy: hiddenPolicy)
@@ -97,7 +98,7 @@ final class AddCoordinator: ObservableObject {
     }
 
     /// Resolución "Conservar ambos": añade con un nombre único y sigue.
-    func keepBoth(_ item: AddConflict, doc: ArchiveDocument) {
+    public func keepBoth(_ item: AddConflict, doc: ArchiveDocument) {
         conflict = nil
         let unique = doc.uniqueChildName(item.name, in: item.target)
         let result = doc.addFile(item.url, into: item.target, renameTo: unique, hiddenPolicy: hiddenPolicy)
@@ -107,7 +108,7 @@ final class AddCoordinator: ObservableObject {
     }
 
     /// Resolución "Cancelar": aborta el lote.
-    func cancel(doc: ArchiveDocument) {
+    public func cancel(doc: ArchiveDocument) {
         conflict = nil
         queue = []
         finish(doc: doc)
@@ -128,13 +129,14 @@ final class AddCoordinator: ObservableObject {
 /// confirmar, extrae los planes uno a uno resolviendo conflictos de nombre. La ejecución
 /// real (async + manejo de error) la inyecta la vista con la closure `perform`.
 @MainActor
-final class ExtractCoordinator: ObservableObject {
+public final class ExtractCoordinator: ObservableObject {
+    public init() {}
     /// Petición activa (dirige la hoja de opciones de extracción). `nil` = sin hoja.
-    @Published var request: ExtractRequest?
+    @Published public var request: ExtractRequest?
     /// Conflicto de nombre actual (dirige el `confirmationDialog`). `nil` = sin conflicto.
-    @Published var conflict: ExtractionConflict?
+    @Published public var conflict: ExtractionConflict?
     /// Carpeta destino mostrada y editable en la hoja.
-    @Published var destination = FileManager.default.homeDirectoryForCurrentUser
+    @Published public var destination = FileManager.default.homeDirectoryForCurrentUser
     private var queue: [ExportPlan] = []
     /// Carpeta destino fijada al confirmar (común a todo el lote).
     private var destinationFolder = FileManager.default.homeDirectoryForCurrentUser
@@ -147,11 +149,11 @@ final class ExtractCoordinator: ObservableObject {
 
     /// Ejecuta la extracción de un plan; la implementa la vista (envuelve el manejo de error).
     /// Devuelve `true` si el ítem se escribió con éxito (no cancelado/erróneo).
-    typealias Perform = (ExportPlan, URL, Bool) async -> Bool
+    public typealias Perform = (ExportPlan, URL, Bool) async -> Bool
 
     /// Fija el destino por defecto (carpeta del archivo o fija, según ajustes) antes de abrir
     /// la hoja. La contraseña, si el archivo está cifrado, se pide antes (al desbloquear).
-    func prepareDestination(doc: ArchiveDocument, settings: AppSettings) {
+    public func prepareDestination(doc: ArchiveDocument, settings: AppSettings) {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let archiveFolder = doc.sourceURL?.deletingLastPathComponent()
         switch settings.extractMode {
@@ -165,13 +167,13 @@ final class ExtractCoordinator: ObservableObject {
     }
 
     /// Abre la hoja de extracción con `title`, y la fábrica de planes a usar al confirmar.
-    func begin(title: String, makePlans: @escaping () -> [ExportPlan]) {
+    public func begin(title: String, makePlans: @escaping () -> [ExportPlan]) {
         request = ExtractRequest(title: title, makePlans: makePlans)
     }
 
     /// Confirma la hoja: captura el destino, encola los planes y arranca el procesado en lote
     /// (el archivo ya está desbloqueado en este punto).
-    func confirm(doc: ArchiveDocument, settings: AppSettings, perform: @escaping Perform) {
+    public func confirm(doc: ArchiveDocument, settings: AppSettings, perform: @escaping Perform) {
         guard let req = request else { return }
         destinationFolder = destination
         settings.lastUsedExtractFolder = destination   // alimenta el modo "última carpeta usada"
@@ -185,7 +187,7 @@ final class ExtractCoordinator: ObservableObject {
     /// Extrae el siguiente plan en la carpeta destino. Si su nombre ya está ocupado (en disco
     /// o por otro elemento ya resuelto del lote), abre el diálogo; si no, lo reserva, lo extrae
     /// y sigue con el resto.
-    func processNext(doc: ArchiveDocument, perform: @escaping Perform) {
+    public func processNext(doc: ArchiveDocument, perform: @escaping Perform) {
         guard !queue.isEmpty else { return }
         let plan = queue.removeFirst()
         let dest = destinationFolder.appendingPathComponent(plan.name)
@@ -199,7 +201,7 @@ final class ExtractCoordinator: ObservableObject {
     /// Resuelve el conflicto: sobrescribe el destino existente, o conserva ambos extrayendo
     /// a un nombre libre calculado **ahora** (evita disco, lo ya reservado en el lote y los
     /// nombres literales de los elementos del lote aún pendientes, para no robarles el suyo).
-    func resolveConflict(_ item: ExtractionConflict, overwrite: Bool,
+    public func resolveConflict(_ item: ExtractionConflict, overwrite: Bool,
                          doc: ArchiveDocument, perform: @escaping Perform) {
         let dest = overwrite ? item.destination : freeDestination(for: item.destination)
         conflict = nil
@@ -225,22 +227,18 @@ final class ExtractCoordinator: ObservableObject {
     /// choque con disco, lo ya reservado, ni el nombre literal de otro plan aún en la cola.
     private func freeDestination(for url: URL) -> URL {
         let dir = url.deletingLastPathComponent()
-        let ext = url.pathExtension
-        let base = url.deletingPathExtension().lastPathComponent
         let pending = Set(queue.map { destinationFolder.appendingPathComponent($0.name).path })
-        var n = 2
-        while true {
-            let name = ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)"
-            let candidate = dir.appendingPathComponent(name)
-            if !isTaken(candidate), !pending.contains(candidate.path) { return candidate }
-            n += 1
+        let name = UniqueName.next(for: url.lastPathComponent) { candidate in
+            let c = dir.appendingPathComponent(candidate)
+            return isTaken(c) || pending.contains(c.path)
         }
+        return dir.appendingPathComponent(name)
     }
 
     /// Cancela el lote desde el diálogo de conflicto y devuelve las rutas ya extraídas (igual
     /// que `cancelBatch`, para ofrecer conservar/eliminar).
     @discardableResult
-    func cancelConflict() -> [URL] {
+    public func cancelConflict() -> [URL] {
         conflict = nil
         queue = []
         defer { extractedURLs = [] }
@@ -252,14 +250,14 @@ final class ExtractCoordinator: ObservableObject {
     /// elementos restantes (el `processNext` de la tarea actual encontrará la cola vacía); el
     /// ítem en vuelo, al cancelarse, no se cuenta como extraído (su temporal se descarta).
     @discardableResult
-    func cancelBatch() -> [URL] {
+    public func cancelBatch() -> [URL] {
         queue = []
         defer { extractedURLs = [] }
         return extractedURLs
     }
 
     /// "Elegir…": abre el navegador de carpetas para cambiar el destino.
-    func chooseFolder(prompt: String) {
+    public func chooseFolder(prompt: String) {
         if let url = chooseFolderPanel(prompt: prompt, startingAt: destination) {
             destination = url
         }
@@ -271,35 +269,36 @@ final class ExtractCoordinator: ObservableObject {
 /// orquestación. El navegador de carpetas nativo solo aparece, transitorio, al pulsar "Elegir…".
 /// La escritura real (async + manejo de error) la inyecta la vista con la closure `perform`.
 @MainActor
-final class SaveCoordinator: ObservableObject {
+public final class SaveCoordinator: ObservableObject {
+    public init() {}
     /// Hoja de opciones abierta. `false` = cerrada.
-    @Published var showingOptions = false
+    @Published public var showingOptions = false
     /// La hoja está abierta para **Exportar** (copia aparte) en vez de **Guardar**.
-    @Published private(set) var isExport = false
+    @Published public private(set) var isExport = false
     /// Nombre base del archivo (sin extensión, que la añade el formato).
-    @Published var name = ""
+    @Published public var name = ""
     /// Carpeta destino (se cambia con "Elegir…").
-    @Published var destination = FileManager.default.homeDirectoryForCurrentUser
-    @Published var format: ArchiveFormat = .zip
-    @Published var encryption: ZipEncryption = .none
-    @Published var level: CompressionLevel = .default
-    @Published var password = ""
-    @Published var splitEnabled = false
-    @Published var volumeSize: Double = 100
-    @Published var volumeUnit: VolumeUnit = .megabytes
+    @Published public var destination = FileManager.default.homeDirectoryForCurrentUser
+    @Published public var format: ArchiveFormat = .zip
+    @Published public var encryption: ZipEncryption = .none
+    @Published public var level: CompressionLevel = .default
+    @Published public var password = ""
+    @Published public var splitEnabled = false
+    @Published public var volumeSize: Double = 100
+    @Published public var volumeUnit: VolumeUnit = .megabytes
     /// Acción a ejecutar tras un guardado con éxito (p. ej. cerrar). Se descarta si se cancela
     /// o si el guardado falla.
     private var pendingAfterSave: (() -> Void)?
 
     /// Ejecuta el guardado/exportación a `url`. Devuelve `true` si el documento quedó guardado
     /// (para encadenar la acción pendiente). La implementa la vista.
-    typealias Perform = (_ isExport: Bool, _ url: URL, _ format: ArchiveFormat,
+    public typealias Perform = (_ isExport: Bool, _ url: URL, _ format: ArchiveFormat,
                          _ encryption: ZipEncryption, _ password: String?, _ volumeSize: Int?,
                          _ level: CompressionLevel) async -> Bool
 
     /// Prerrellena con nombre/carpeta y el formato/cifrado/volúmenes actuales (documento nuevo:
     /// defaults de Ajustes; abierto: lo que traía el archivo).
-    func prefill(doc: ArchiveDocument, settings: AppSettings, baseName: String) {
+    public func prefill(doc: ArchiveDocument, settings: AppSettings, baseName: String) {
         let isNew = doc.sourceURL == nil
         var fmt = isNew ? settings.resolvedFormat : doc.saveFormat
         if !fmt.isWritable { fmt = .zip }                            // rar → zip
@@ -322,38 +321,38 @@ final class SaveCoordinator: ObservableObject {
     }
 
     /// Abre la hoja para **Guardar**, recordando la acción a ejecutar al terminar con éxito.
-    func beginSave(then completion: (() -> Void)?) {
+    public func beginSave(then completion: (() -> Void)?) {
         isExport = false
         pendingAfterSave = completion
         showingOptions = true
     }
 
     /// Abre la hoja para **Exportar** una copia aparte (no encadena acción).
-    func beginExport() {
+    public func beginExport() {
         isExport = true
         pendingAfterSave = nil
         showingOptions = true
     }
 
     /// URL destino resultante (carpeta + nombre + extensión del formato, sin duplicarla).
-    var resolvedURL: URL {
+    public var resolvedURL: URL {
         let ext = format.fileExtension
         let fileName = name.hasSuffix("." + ext) ? name : "\(name).\(ext)"
         return destination.appendingPathComponent(fileName)
     }
 
     /// Falta la contraseña del cifrado elegido.
-    var needsPassword: Bool { format.supportsEncryption && encryption != .none && password.isEmpty }
+    public var needsPassword: Bool { format.supportsEncryption && encryption != .none && password.isEmpty }
 
     /// El botón de confirmar está disponible (nombre no vacío, contraseña si procede, tamaño válido).
-    var canConfirm: Bool {
+    public var canConfirm: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty && !needsPassword
             && !(splitEnabled && format.supportsVolumeSplit && volumeSize <= 0)
     }
 
     /// Confirma: cierra la hoja y escribe en `resolvedURL`. Tras guardar (no exportar) ejecuta la
     /// acción pendiente solo si tuvo éxito, pero la limpia siempre.
-    func confirm(settings: AppSettings, perform: @escaping Perform) {
+    public func confirm(settings: AppSettings, perform: @escaping Perform) {
         guard canConfirm else { return }
         // Recuerda la selección para la opción "Último usado" (la contraseña no se guarda).
         settings.lastUsedFormat = format
@@ -379,13 +378,13 @@ final class SaveCoordinator: ObservableObject {
     }
 
     /// Cierra la hoja sin guardar (botón Cancelar): descarta la acción pendiente.
-    func cancel() {
+    public func cancel() {
         showingOptions = false
         pendingAfterSave = nil
     }
 
     /// "Elegir…": abre el navegador de carpetas (nativo, transitorio) para cambiar el destino.
-    func chooseFolder(prompt: String) {
+    public func chooseFolder(prompt: String) {
         if let url = chooseFolderPanel(prompt: prompt, startingAt: destination) { destination = url }
     }
 }

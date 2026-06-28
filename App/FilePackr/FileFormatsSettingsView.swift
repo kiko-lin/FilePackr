@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import ArchiveBrowser
+import FilePackrModel
 
 /// Pestaña "Archivos" de Ajustes: lista de formatos que FilePackr puede abrir, cada uno
 /// con su icono y un check para hacerse app por defecto en el Finder (vía `DefaultHandler`).

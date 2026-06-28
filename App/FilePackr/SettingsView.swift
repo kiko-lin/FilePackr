@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import ArchiveBrowser
+import FilePackrModel
 
 /// Ajustes de la app. Se presenta como ventana propia desde el menú (⌘,), con pestañas
 /// General (preferencias) y Archivos (asociación de formatos en el Finder).

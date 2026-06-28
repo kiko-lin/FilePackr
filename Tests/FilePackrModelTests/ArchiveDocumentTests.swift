@@ -1,6 +1,6 @@
 import XCTest
 import ArchiveBrowser
-@testable import FilePackr
+@testable import FilePackrModel
 
 /// Tests de la capa de app (el modelo `ArchiveDocument`). Son posibles gracias al item 4
 /// de la auditoría: el modelo ya no depende del singleton `Localizer`, así que se puede
