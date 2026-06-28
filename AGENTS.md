@@ -398,23 +398,27 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       (`ProgressKind.cleaningUp`). **Alcance**: el aviso conservar/eliminar es para la **X del
       overlay** (la ventana sigue abierta); al **cerrar la ventana** se cancela y se cierra
       (los ya extraídos quedan en disco, sin prompt, para no chocar con el cierre).
-- [x] ~~**UI de compresión: cancelación real (TODO 5 paso 2)**~~ (HECHO 2026-06-28, pendiente
-      verificación GUI): la compresión es **cancelable de verdad** (botón Cancelar en el overlay y
-      al cerrar la ventana). Motor: nuevo `CancellationCheck` (`Cancellation.swift`) que cada
-      escritor consulta en sus bucles (por entrada y por trozo) y lanza `CancellationError`. Entra
-      por **parámetro** en `ZipWriter`/`LibArchive.write` (bucle interno por entrada) y por el
-      **`next`** en los compresores gz/xz/bz2 (pull, sin tocar el motor; lo envuelve `SavePayloadBuilder`).
-      `ArchiveSaver.encode` lo propaga; `ArchiveDocument.writeArchive` crea el `CancelToken` y, al
-      cancelar, descarta el `work` a medias (el destino es atómico → intacto). Tests del motor:
-      `CompressionCancellationTests` (ZIP por entrada y a mitad de fichero, gz/xz vía `CompressionStream`,
-      bz2 propio, libarchive). 91 tests del motor verdes.
-  - **Cerrar mientras guarda/exporta**: `WindowGuard` gana la rama `writing` (avisa "se cancelará
-    el guardado", `save.close.*`); `ArchiveDocument.isWriting` evita un segundo guardado encima.
+- [x] ~~**UI de compresión: cancelación real + barra/nombre (TODO 5 pasos 1 y 2)**~~ (HECHO
+      2026-06-28, pendiente verificación GUI): la compresión es **cancelable de verdad** y muestra
+      **barra determinada + nombre de archivo** (overlay igual que la extracción).
+  - **Cancelación** (paso 2): `CancellationCheck` (`Cancellation.swift`) que cada escritor consulta
+    en sus bucles (por entrada y por trozo) y lanza `CancellationError`. Entra por **parámetro** en
+    `ZipWriter`/`LibArchive.write` (bucle interno por entrada) y por el **`next`** en los compresores
+    gz/xz/bz2 (pull, sin tocar su código; lo envuelve `SavePayloadBuilder`). `ArchiveSaver.encode` lo
+    propaga; `writeArchive` crea el `CancelToken` y, al cancelar, descarta el `work` (destino atómico
+    → intacto).
+  - **Progreso** (paso 1): `WriteProgress` (`WriteProgress.swift`, struct) reporta **bytes de entrada
+    + fichero** desde los escritores (ZIP por entrada/intra-fichero, `Tar.reader` expone el fichero en
+    curso —incluido tar—, libarchive por entrada, gz/xz/bz2 de un fichero vía el lector). `encode`
+    acumula contra `total` (= `contentSize`) y emite `(fracción, fichero)` coalescido al ~1%; el
+    overlay ya pinta barra+nombre sin cambios de UI. Solo la ruta en memoria (`.data`, contenido ya en
+    RAM) sigue indeterminada.
+  - **Cerrar mientras guarda/exporta**: `WindowGuard` gana la rama `writing` (avisa "se cancelará el
+    guardado", `save.close.*`); `ArchiveDocument.isWriting` evita un segundo guardado encima.
   - **Limpieza defensiva**: `ArchiveDocument.cleanStaleWorkFiles` borra `.filepackr.work` huérfanos
     (>1 h) de la carpeta al abrir un archivo (restos de un cierre forzado anterior).
-  - **PENDIENTE (paso 1, menor)**: el progreso **por fracción/nombre de archivo** al comprimir solo
-    lo da ZIP; tar/gz/xz/bz2 y libarchive siguen con spinner indeterminado (ya **cancelable**). Falta
-    propagar `(fraction, currentFile)` para barra determinada en esos formatos.
+  - Tests del motor (`CompressionCancellationTests` + `WriteProgressTests`): cancelación por entrada
+    y a mitad de fichero (ZIP/gz/xz/bz2/libarchive) y reporte de bytes+nombre (ZIP, tar). **93 verdes.**
 - [ ] **Opciones de fuerza AES** (128/192) además de 256; ZipCrypto ya está. Nicho de
       seguridad — ZIP+AES-256 ya cubre el caso principal.
 - [ ] **(VALORAR) Compresión multinúcleo** · **solo si el rendimiento es queja real**: hoy

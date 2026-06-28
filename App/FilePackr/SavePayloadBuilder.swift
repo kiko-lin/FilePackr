@@ -66,27 +66,28 @@ nonisolated struct SavePayloadBuilder: Sendable {
             return .zip(inputs: zipInputs(), encryption: encryption, password: password, level: level)
         case .tar:
             let items = tarItems()
-            return .stream { handle, cancel in
-                let next = Tar.reader(items)
+            return .stream { handle, cancel, report in
+                let next = Tar.reader(items, onProgress: report)
                 while let chunk = try next() { try cancel.check(); try handle.write(contentsOf: chunk) }
             }
         case .tarGzip:
             let items = tarItems()
             let name = documentName.isEmpty ? nil : documentName
-            return .stream { handle, cancel in
-                try Gzip.compress(next: cancellable(Tar.reader(items), cancel),
+            return .stream { handle, cancel, report in
+                try Gzip.compress(next: cancellable(Tar.reader(items, onProgress: report), cancel),
                                   sink: { try handle.write(contentsOf: $0) }, filename: name, level: level)
             }
         case .tarXz:
             let items = tarItems()
-            return .stream { handle, cancel in
-                try Xz.compress(level: level, next: cancellable(Tar.reader(items), cancel),
+            return .stream { handle, cancel, report in
+                try Xz.compress(level: level, next: cancellable(Tar.reader(items, onProgress: report), cancel),
                                 sink: { try handle.write(contentsOf: $0) })
             }
         case .tarBzip2:
             let items = tarItems()
-            return .stream { handle, cancel in
-                try Bzip2.compress(blockSize: level.bzip2BlockSize, next: cancellable(Tar.reader(items), cancel),
+            return .stream { handle, cancel, report in
+                try Bzip2.compress(blockSize: level.bzip2BlockSize,
+                                   next: cancellable(Tar.reader(items, onProgress: report), cancel),
                                    sink: { try handle.write(contentsOf: $0) })
             }
         case .gzip:
@@ -152,10 +153,11 @@ nonisolated struct SavePayloadBuilder: Sendable {
                                                                   _ sink: (Data) throws -> Void) throws -> Void,
                                    memory: @escaping @Sendable (Data) -> Data) throws -> SavePayload {
         if case .diskFile(let url) = node.source {
-            return .stream { out, cancel in
+            let name = node.name
+            return .stream { out, cancel, report in
                 let input = try FileHandle(forReadingFrom: url)
                 defer { try? input.close() }
-                try compress(fileReader(input, cancel), { try out.write(contentsOf: $0) })
+                try compress(fileReader(input, name, cancel, report), { try out.write(contentsOf: $0) })
             }
         }
         guard let data = nodeData(node) else { throw CocoaError(.fileWriteUnknown) }
@@ -245,11 +247,15 @@ private nonisolated func cancellable(_ next: @escaping () throws -> Data?,
     { try cancel.check(); return try next() }
 }
 
-/// Lee `handle` por trozos como un `next` cancelable (para la compresión de un único fichero).
-private nonisolated func fileReader(_ handle: FileHandle, _ cancel: CancellationCheck) -> () throws -> Data? {
+/// Lee `handle` por trozos como un `next` cancelable que además **reporta** los bytes leídos de
+/// `name` (para la compresión de un único fichero gz/xz/bz2).
+private nonisolated func fileReader(_ handle: FileHandle, _ name: String,
+                                    _ cancel: CancellationCheck, _ report: WriteProgress) -> () throws -> Data? {
     {
         try cancel.check()
         let chunk = try handle.read(upToCount: 64 * 1024) ?? Data()
-        return chunk.isEmpty ? nil : chunk
+        guard !chunk.isEmpty else { return nil }
+        report(name, chunk.count)
+        return chunk
     }
 }

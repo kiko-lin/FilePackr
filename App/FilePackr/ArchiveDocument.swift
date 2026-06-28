@@ -591,9 +591,16 @@ final class ArchiveDocument: ObservableObject {
         let work = url.deletingLastPathComponent()
             .appendingPathComponent(".\(UUID().uuidString)\(Self.workFileSuffix)")
         do {
-            try await ArchiveSaver.encode(payload, to: work,
+            // Progreso por bytes de entrada: total = tamaño descomprimido del contenido. La
+            // fracción y el nombre del fichero en curso alimentan la barra del overlay.
+            try await ArchiveSaver.encode(payload, to: work, total: Int64(contentSize),
                                           cancellation: CancellationCheck { token.isCancelled },
-                                          progress: makeProgressReporter())
+                                          onProgress: { fraction, file in
+                Task { @MainActor in
+                    self.progress?.fraction = fraction
+                    self.progress?.detail = (file as NSString).lastPathComponent
+                }
+            })
             // 2) Colocar el resultado: un solo fichero o dividido en volúmenes.
             if let volumes {
                 progress = ProgressState(kind: .splitting, fraction: nil)

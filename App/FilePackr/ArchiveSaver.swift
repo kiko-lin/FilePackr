@@ -13,9 +13,9 @@ enum SavePayload: Sendable {
     case data(@Sendable () throws -> Data)
     /// Compresión en **streaming** a disco: el cierre escribe el resultado en el
     /// `FileHandle` por trozos, sin cargar el fichero entero en memoria (gz/xz/bz2 de
-    /// un fichero de disco). Recibe la `CancellationCheck` para consultarla en su bucle
-    /// (la inyecta en el `next` de los compresores).
-    case stream(write: @Sendable (FileHandle, CancellationCheck) throws -> Void)
+    /// un fichero de disco). Recibe la `CancellationCheck` (la inyecta en el `next` de los
+    /// compresores) y el `WriteProgress` (lo reporta la fuente: `Tar.reader`/lector de fichero).
+    case stream(write: @Sendable (FileHandle, CancellationCheck, WriteProgress) throws -> Void)
     /// Formatos de libarchive (7z/iso/xar): se escriben directamente a un fichero.
     case libArchive(items: [LibArchive.WriteItem], format: LibArchive.WriteFormat, level: CompressionLevel)
 }
@@ -26,26 +26,37 @@ enum SavePayload: Sendable {
 /// directo, sin un segundo temporal: si algo falla, el documento borra `work`.
 enum ArchiveSaver {
 
-    /// Escribe `payload` en `work`. `progress` (fracción 0…1) solo lo emite ZIP. `cancellation`
-    /// se consulta en los bucles de escritura (por entrada y por trozo): al cancelar, el escritor
-    /// lanza `CancellationError` y el documento descarta el temporal `work`.
-    static func encode(_ payload: SavePayload, to work: URL,
+    /// Escribe `payload` en `work`. `cancellation` se consulta en los bucles de escritura (al
+    /// cancelar, el escritor lanza `CancellationError` y el documento descarta `work`). El
+    /// progreso se reporta por **bytes de entrada**: aquí se acumulan contra `total` y se emite
+    /// `onProgress(fracción, fichero)` coalescido al ~1% (como la extracción).
+    static func encode(_ payload: SavePayload, to work: URL, total: Int64,
                        cancellation: CancellationCheck = .none,
-                       progress: @escaping @Sendable (Double) -> Void) async throws {
+                       onProgress: @escaping @Sendable (_ fraction: Double, _ file: String) -> Void = { _, _ in }) async throws {
         try await Task.detached(priority: .userInitiated) {
+            var done: Int64 = 0
+            var last = 0.0
+            let report = WriteProgress { file, bytes in
+                done += Int64(bytes)
+                let fraction = total > 0 ? min(1, Double(done) / Double(total)) : 0
+                guard fraction - last >= 0.01 || (fraction >= 1 && last < 1) else { return }
+                last = fraction
+                onProgress(fraction, file)
+            }
             switch payload {
             case .zip(let inputs, let encryption, let password, let level):
                 try writeToFile(work) { handle in
                     try ZipWriter().write(inputs, to: handle, encryption: encryption,
                                           password: password, level: level,
-                                          cancellation: cancellation, progress: progress)
+                                          cancellation: cancellation, progress: report)
                 }
             case .data(let make):
                 try make().write(to: work)
             case .stream(let write):
-                try writeToFile(work) { try write($0, cancellation) }
+                try writeToFile(work) { try write($0, cancellation, report) }
             case .libArchive(let items, let format, let level):
-                try LibArchive.write(items, to: work, format: format, level: level, cancellation: cancellation)
+                try LibArchive.write(items, to: work, format: format, level: level,
+                                     cancellation: cancellation, progress: report)
             }
         }.value
     }
