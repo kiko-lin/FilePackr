@@ -9,16 +9,28 @@ Checklist para una **prueba final de toda la app**. El agente solo compila y cor
 - **Parte B (§14–§24)**: regresión completa de la funcionalidad de siempre.
 
 > Relanza siempre con **⌘R** tras compilar: una instancia vieja muestra el comportamiento anterior.
-> Sustituye a la lista antigua [`pruebas-manuales.md`](pruebas-manuales.md) (más corta y algo desfasada).
+> Marca 🔴 lo crítico/arriesgado (toca el corazón del motor o el hilo principal); el resto es UI de menor riesgo.
 
 ## 0. Preparación de datos
 
 ```bash
-# Fichero grande para que la compresión/extracción dure y dé tiempo a cancelar:
-mkfile 1g ~/Desktop/grande.bin          # o: dd if=/dev/urandom of=~/Desktop/grande.bin bs=1m count=800
+mkdir -p ~/Desktop/PruebaPackr
+
+# Fichero grande para streaming/progreso/cancelar (~1 GB). Con dd usa "$HOME" en of=, NO ~
+# (la tilde no se expande tras of=).
+mkfile 1g "$HOME/Desktop/PruebaPackr/grande.bin"   # o: dd if=/dev/urandom of="$HOME/Desktop/PruebaPackr/grande.bin" bs=1m count=800
+
 # Fichero MUY compresible (para ver el efecto de los niveles): texto repetido.
-yes "FilePackr nivel de compresión — línea repetible y muy compresible." | head -2000000 > ~/Desktop/comprimible.txt
-# Carpeta con varios elementos para lotes de extracción (usa cualquier archivo con muchas entradas).
+yes "FilePackr nivel de compresión — línea repetible y muy compresible." | head -2000000 > ~/Desktop/PruebaPackr/comprimible.txt
+
+# Carpeta con ocultos/sistema + un visible (para §23):
+mkdir -p ~/Desktop/PruebaPackr/carpeta/sub
+touch ~/Desktop/PruebaPackr/carpeta/{.DS_Store,._recurso,.gitignore,visible.txt} \
+      ~/Desktop/PruebaPackr/carpeta/sub/.DS_Store
+
+# Carpeta con muchos ficheros del mismo tipo (para ordenar por «Clase» sin cuelgue, §19):
+mkdir -p ~/Desktop/PruebaPackr/muchos
+for i in $(seq 1 500); do touch ~/Desktop/PruebaPackr/muchos/v$i.mov; done
 ```
 
 ---
@@ -119,7 +131,13 @@ yes "FilePackr nivel de compresión — línea repetible y muy compresible." | h
 - [ ] Confirmar que se aplica el nivel **elegido** y no siempre el por defecto (comparar Rápido vs Máximo
       del mismo contenido → tamaños distintos).
 - [ ] Nivel + **cifrado** combinados: el nivel se respeta y el archivo cifrado reabre bien.
+- [ ] Nivel + **volúmenes**: reensamblar y extraer correctamente.
 - [ ] Nivel **«Último usado»** (Ajustes): tras guardar en Máximo, un documento nuevo prerrellena Máximo.
+- [ ] **Interop** (que otras apps lean lo nuestro): doble clic en el Finder (Utilidad de Archivo) y en
+      Terminal `unzip -t` / `gzip -t` / `xz -t` / `bzip2 -t` / `7z t` → sin avisos de corrupción.
+- [ ] **Memoria/streaming** 🔴: comprimir `grande.bin` a `xz` y `zip` en **Máximo** → la memoria en
+      Monitor de Actividad se mantiene **estable** (streaming), no se dispara.
+- [ ] **Bordes**: fichero **vacío** y carpeta con un único fichero diminuto a gz/xz/bz2 → no peta, extrae bien.
 
 ## 8. Cancelación real de compresión 🔴
 
@@ -136,6 +154,8 @@ yes "FilePackr nivel de compresión — línea repetible y muy compresible." | h
       guardado» → **Continuar** cierra y cancela; **Cancelar** mantiene y sigue.
 - [ ] Tras cerrar a mitad, no queda ningún `.filepackr.work` en la carpeta.
 - [ ] Mientras guarda, intentar **Guardar** otra vez (p. ej. ⌘S) no lanza un segundo guardado.
+- [ ] **El proceso no queda vivo**: cierra la ventana a mitad de un guardado/extracción → en Monitor de
+      Actividad `FilePackr` **no** sigue trabajando de fondo.
 
 ## 10. Limpieza de extracciones parciales (lote)
 
