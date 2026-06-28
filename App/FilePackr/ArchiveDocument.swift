@@ -485,6 +485,17 @@ final class ArchiveDocument: ObservableObject {
     /// del destino para que el movimiento final sea atómico (mismo volumen).
     static let workFileSuffix = ".filepackr.work"
 
+    /// Temporales de guardados **en curso** (todas las ventanas). Si la app termina a mitad, el
+    /// `AppDelegate` los borra en `applicationWillTerminate` (la tarea de fondo muere antes de
+    /// limpiar su propio `.work`). En cierre/cancelación normales los limpia el `catch` de `writeArchive`.
+    static var activeWorkFiles: Set<URL> = []
+
+    /// Borra los temporales de guardados que quedaran en curso al terminar la app.
+    static func cleanUpActiveWorkFiles() {
+        for url in activeWorkFiles { try? FileManager.default.removeItem(at: url) }
+        activeWorkFiles.removeAll()
+    }
+
     /// Borra restos de un guardado interrumpido por un cierre forzado anterior en `folder`.
     /// **Conservador**: solo los de más de una hora, para no tocar un guardado concurrente en
     /// curso en la misma carpeta (que tendría segundos de antigüedad).
@@ -590,6 +601,10 @@ final class ArchiveDocument: ObservableObject {
         }.value
         let work = url.deletingLastPathComponent()
             .appendingPathComponent(".\(UUID().uuidString)\(Self.workFileSuffix)")
+        // Registrar el temporal en curso: si la app **termina** a mitad (cerrar la última ventana
+        // o ⌘Q matan la tarea antes de que su `catch` limpie), `applicationWillTerminate` lo borra.
+        Self.activeWorkFiles.insert(work)
+        defer { Self.activeWorkFiles.remove(work) }
         do {
             // Progreso por bytes de entrada: total = tamaño descomprimido del contenido. La
             // fracción y el nombre del fichero en curso alimentan la barra del overlay.

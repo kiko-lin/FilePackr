@@ -42,6 +42,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// proceso quede vivo de fondo, p. ej. con una extracción aún corriendo.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    /// Al salir, borra los temporales de guardados que siguieran en curso (cerrar la última
+    /// ventana o ⌘Q matan la tarea de fondo antes de que limpie su `.work`).
+    func applicationWillTerminate(_ notification: Notification) {
+        ArchiveDocument.cleanUpActiveWorkFiles()
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let edited = sender.windows.first(where: { $0.isDocumentEdited }) else { return .terminateNow }
         UnsavedChangesAlert.present(on: sender.keyWindow ?? edited) { choice in
