@@ -54,17 +54,21 @@ public struct ZipWriter: Sendable {
     /// Construye el ZIP en memoria y lo devuelve.
     public func build(_ inputs: [ZipEntryInput], encryption: ZipEncryption = .none,
                       password: String? = nil, level: CompressionLevel = .default,
+                      cancellation: CancellationCheck = .none,
                       progress: ((Double) -> Void)? = nil) throws -> Data {
         var out = Data()
-        try writeStream(inputs, encryption: encryption, password: password, level: level, progress: progress) { out.append($0) }
+        try writeStream(inputs, encryption: encryption, password: password, level: level,
+                        cancellation: cancellation, progress: progress) { out.append($0) }
         return out
     }
 
     /// Escribe el ZIP directamente a `handle` (streaming a disco).
     public func write(_ inputs: [ZipEntryInput], to handle: FileHandle, encryption: ZipEncryption = .none,
                       password: String? = nil, level: CompressionLevel = .default,
+                      cancellation: CancellationCheck = .none,
                       progress: ((Double) -> Void)? = nil) throws {
-        try writeStream(inputs, encryption: encryption, password: password, level: level, progress: progress) {
+        try writeStream(inputs, encryption: encryption, password: password, level: level,
+                        cancellation: cancellation, progress: progress) {
             try handle.write(contentsOf: $0)
         }
     }
@@ -72,19 +76,22 @@ public struct ZipWriter: Sendable {
     // MARK: - Núcleo
 
     private func writeStream(_ inputs: [ZipEntryInput], encryption: ZipEncryption, password: String?,
-                             level: CompressionLevel, progress: ((Double) -> Void)?, sink: (Data) throws -> Void) throws {
+                             level: CompressionLevel, cancellation: CancellationCheck,
+                             progress: ((Double) -> Void)?, sink: (Data) throws -> Void) throws {
         var offset: UInt64 = 0
         var central = Data()
         var count = 0
         func emit(_ data: Data) throws { try sink(data); offset += UInt64(data.count) }
 
         for (index, input) in inputs.enumerated() {
+            try cancellation.check()   // por entrada
             // Los ficheros de disco se comprimen (y cifran) en streaming: memoria constante
             // sea el fichero del tamaño que sea.
             if case .file(let url) = input.source {
                 let localOffset = offset
                 central.append(try emitStreamedFile(path: input.path, url: url, modifiedAt: input.modifiedAt,
                                                     encryption: encryption, password: password, level: level,
+                                                    cancellation: cancellation,
                                                     localOffset: localOffset, emit: emit))
             } else {
                 var record = try makeRecord(input, level: level)
@@ -139,6 +146,7 @@ public struct ZipWriter: Sendable {
     /// cabecera central de la entrada.
     private func emitStreamedFile(path: String, url: URL, modifiedAt: Date?,
                                   encryption: ZipEncryption, password: String?, level: CompressionLevel,
+                                  cancellation: CancellationCheck,
                                   localOffset: UInt64, emit: (Data) throws -> Void) throws -> Data {
         let (time, date) = Self.dosDateTime(modifiedAt)
         let nameBytes = Data(path.utf8)
@@ -176,6 +184,7 @@ public struct ZipWriter: Sendable {
         let readNext = CompressionStream.reader(handle)
         try Zlib.encode(level: level.zlibLevel,
             next: {
+                try cancellation.check()   // por trozo (corta a mitad de un fichero grande)
                 guard let chunk = try readNext() else { return nil }
                 crc.update(chunk)
                 uncompressed += UInt64(chunk.count)

@@ -128,7 +128,8 @@ public enum LibArchive {
     /// Escribe un archivo (7z/iso/xar) en `url`. **En claro**: el escritor de 7z de
     /// libarchive no cifra (el cifrado de 7z solo está disponible en lectura).
     public static func write(_ items: [WriteItem], to url: URL, format: WriteFormat = .sevenZip,
-                             level: CompressionLevel = .default) throws {
+                             level: CompressionLevel = .default,
+                             cancellation: CancellationCheck = .none) throws {
         guard let a = archive_write_new() else { throw LibArchiveError.writeFailed }
         defer { archive_write_free(a) }
         format.apply(a, level: level)
@@ -137,6 +138,7 @@ public enum LibArchive {
         }
 
         for item in items {
+            try cancellation.check()   // por entrada
             guard let entry = archive_entry_new() else { throw LibArchiveError.writeFailed }
             defer { archive_entry_free(entry) }
             let path = item.isDirectory && !item.path.hasSuffix("/") ? item.path + "/" : item.path
@@ -146,7 +148,7 @@ public enum LibArchive {
             archive_entry_set_size(entry, item.size)
             archive_entry_set_mtime(entry, Int64(item.modifiedAt?.timeIntervalSince1970 ?? 0), 0)
             guard archive_write_header(a, entry) == OK else { throw LibArchiveError.writeFailed }
-            if !item.isDirectory { try writeBody(item.source, to: a) }
+            if !item.isDirectory { try writeBody(item.source, to: a, cancellation: cancellation) }
         }
         guard archive_write_close(a) == OK else { throw LibArchiveError.writeFailed }
     }
@@ -178,7 +180,8 @@ public enum LibArchive {
     }
 
     /// Escribe el cuerpo de una entrada: bytes en memoria o leídos del fichero por trozos.
-    private static func writeBody(_ source: WriteItem.Source, to a: OpaquePointer) throws {
+    private static func writeBody(_ source: WriteItem.Source, to a: OpaquePointer,
+                                  cancellation: CancellationCheck) throws {
         switch source {
         case .data(let d):
             guard !d.isEmpty else { return }
@@ -188,6 +191,7 @@ public enum LibArchive {
             let h = try FileHandle(forReadingFrom: url)
             defer { try? h.close() }
             while let chunk = try h.read(upToCount: 64 * 1024), !chunk.isEmpty {
+                try cancellation.check()   // por trozo (corta a mitad de un fichero grande)
                 let n = chunk.withUnsafeBytes { archive_write_data(a, $0.baseAddress, $0.count) }
                 guard n >= 0 else { throw LibArchiveError.writeFailed }
             }
