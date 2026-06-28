@@ -19,10 +19,14 @@ enum AppTheme: String, CaseIterable, Identifiable {
 
 /// A dónde extraer por defecto.
 enum ExtractDestinationMode: String, CaseIterable, Identifiable {
-    case archiveFolder, fixedFolder
+    case archiveFolder, fixedFolder, lastUsedFolder
     var id: String { rawValue }
     var nameKey: String {
-        self == .archiveFolder ? "extract.dest.archiveFolder" : "extract.dest.fixedFolder"
+        switch self {
+        case .archiveFolder: return "extract.dest.archiveFolder"
+        case .fixedFolder: return "extract.dest.fixedFolder"
+        case .lastUsedFolder: return "extract.dest.lastUsedFolder"
+        }
     }
 }
 
@@ -85,6 +89,11 @@ final class AppSettings: ObservableObject {
     @Published var fixedExtractFolder: URL? {
         didSet { defaults.set(fixedExtractFolder?.path, forKey: "fixedExtractFolder") }
     }
+    /// Última carpeta a la que se extrajo (cuando `extractMode == .lastUsedFolder`). La fija
+    /// `ExtractCoordinator.confirm` al confirmar una extracción.
+    @Published var lastUsedExtractFolder: URL? {
+        didSet { defaults.set(lastUsedExtractFolder?.path, forKey: "lastUsedExtractFolder") }
+    }
     /// Política de exclusión de ocultos/sistema al añadir ficheros desde el disco.
     @Published var addHiddenPolicy: AddHiddenPolicy {
         didSet { defaults.set(addHiddenPolicy.rawValue, forKey: "addHiddenPolicy") }
@@ -117,6 +126,7 @@ final class AppSettings: ObservableObject {
         defaultCompressionLevel = CompressionLevel(rawValue: defaults.string(forKey: "defaultCompressionLevel") ?? "") ?? .default
         extractMode = ExtractDestinationMode(rawValue: defaults.string(forKey: "extractMode") ?? "") ?? .archiveFolder
         fixedExtractFolder = defaults.string(forKey: "fixedExtractFolder").map { URL(fileURLWithPath: $0) }
+        lastUsedExtractFolder = defaults.string(forKey: "lastUsedExtractFolder").map { URL(fileURLWithPath: $0) }
         addHiddenPolicy = AddHiddenPolicy(rawValue: defaults.string(forKey: "addHiddenPolicy") ?? "") ?? .excludeSystemFiles
         firstRunPromptShown = defaults.bool(forKey: "firstRunPromptShown")
         if let raw = defaults.array(forKey: "associatedFormats") as? [String] {

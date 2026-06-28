@@ -173,5 +173,58 @@
 			<dict><key>public.filename-extension</key><array><string>xz</string></array></dict>
 		</dict>
 	</array>
+
+	<!-- Servicios de macOS: aparecen en el menú contextual del Finder (y en "Servicios")
+	     al seleccionar archivos comprimidos. Los gestiona FinderServicesProvider (registrado
+	     en AppDelegate). NSSendFileTypes = los mismos UTIs que sabemos abrir. -->
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict><key>default</key><string>Open in FilePackr</string></dict>
+			<key>NSMessage</key><string>openInFilePackr</string>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.zip-archive</string>
+				<string>public.tar-archive</string>
+				<string>org.gnu.gnu-zip-tar-archive</string>
+				<string>com.filepackr.tar-xz</string>
+				<string>com.filepackr.tar-bzip2</string>
+				<string>org.gnu.gnu-zip-archive</string>
+				<string>org.tukaani.xz-archive</string>
+				<string>public.bzip2-archive</string>
+				<string>org.7-zip.7-zip-archive</string>
+				<string>com.rarlab.rar-archive</string>
+				<string>public.iso-image</string>
+				<string>public.cpio-archive</string>
+				<string>com.filepackr.xar-archive</string>
+				<string>com.filepackr.lha-archive</string>
+				<string>com.microsoft.cab-archive</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict><key>default</key><string>Extract Here with FilePackr</string></dict>
+			<key>NSMessage</key><string>extractHereWithFilePackr</string>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.zip-archive</string>
+				<string>public.tar-archive</string>
+				<string>org.gnu.gnu-zip-tar-archive</string>
+				<string>com.filepackr.tar-xz</string>
+				<string>com.filepackr.tar-bzip2</string>
+				<string>org.gnu.gnu-zip-archive</string>
+				<string>org.tukaani.xz-archive</string>
+				<string>public.bzip2-archive</string>
+				<string>org.7-zip.7-zip-archive</string>
+				<string>com.rarlab.rar-archive</string>
+				<string>public.iso-image</string>
+				<string>public.cpio-archive</string>
+				<string>com.filepackr.xar-archive</string>
+				<string>com.filepackr.lha-archive</string>
+				<string>com.microsoft.cab-archive</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

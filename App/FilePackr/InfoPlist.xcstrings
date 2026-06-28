@@ -1,0 +1,90 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "7-Zip archive" : {
+
+    },
+    "Bzip2-compressed TAR archive" : {
+
+    },
+    "Cabinet archive" : {
+
+    },
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "FilePackr"
+          }
+        }
+      }
+    },
+    "Extract Here with FilePackr" : {
+      "comment" : "Título del Servicio del Finder (NSServices)",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extract Here with FilePackr"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Descomprimir aquí con FilePackr"
+          }
+        }
+      }
+    },
+    "LHA archive" : {
+
+    },
+    "NSHumanReadableCopyright" : {
+      "comment" : "Copyright (human-readable)",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : ""
+          }
+        }
+      }
+    },
+    "Open in FilePackr" : {
+      "comment" : "Título del Servicio del Finder (NSServices)",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in FilePackr"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir en FilePackr"
+          }
+        }
+      }
+    },
+    "RAR archive" : {
+
+    },
+    "XAR archive" : {
+
+    },
+    "Xz archive" : {
+
+    },
+    "Xz-compressed TAR archive" : {
+
+    }
+  },
+  "version" : "1.0"
+}

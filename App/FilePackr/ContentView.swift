@@ -117,7 +117,7 @@ struct ContentView: View {
             ExtractOptionsSheet(title: req.title,
                                 destination: $extractCoord.destination,
                                 onChooseFolder: { extractCoord.chooseFolder(prompt: loc("panel.choose")) },
-                                onExtract: { extractCoord.confirm(doc: doc, perform: runExtraction) },
+                                onExtract: { extractCoord.confirm(doc: doc, settings: settings, perform: runExtraction) },
                                 onCancel: { extractCoord.request = nil })
         }
         .sheet(isPresented: $showingOpenPassword) {
@@ -614,12 +614,7 @@ struct ContentView: View {
 
     /// Nombre base sin la extensión de archivo conocida (zip/tar/tar.gz/tgz/gz).
     private func strippedBaseName(_ name: String) -> String {
-        if name == loc("doc.untitled") { return name }
-        let lower = name.lowercased()
-        for ext in [".tar.gz", ".tgz", ".tar", ".zip", ".gz"] where lower.hasSuffix(ext) {
-            return String(name.dropLast(ext.count))
-        }
-        return (name as NSString).deletingPathExtension
+        name == loc("doc.untitled") ? name : archiveBaseName(name)
     }
 
     /// Cierra el documento; si hay cambios sin guardar, pide confirmación con el mismo
@@ -636,47 +631,13 @@ struct ContentView: View {
     }
 
     private func run(_ op: () throws -> Void) {
-        do { try op() } catch { errorMessage = describe(error) }
+        do { try op() } catch { errorMessage = localizedErrorMessage(error) }
     }
 
     private func runAsync(_ op: () async throws -> Void) async {
         do { try await op() }
         catch is CancellationError { /* cancelado por el usuario: parada limpia, sin alerta */ }
-        catch { errorMessage = describe(error) }
-    }
-
-    /// Traduce los errores conocidos del motor a un mensaje en el idioma de la app. Para los
-    /// no contemplados (p. ej. errores de fichero del sistema) cae a su `localizedDescription`.
-    private func describe(_ error: Error) -> String {
-        switch error {
-        case let e as ExtractError:
-            switch e {
-            case .needsPassword: return loc("error.needsPassword")
-            case .wrongPassword: return loc("error.wrongPassword")
-            case .unsupportedEncryption: return loc("error.unsupportedEncryption")
-            case .unsupportedMethod: return loc("error.unsupportedMethod")
-            case .corruptLocalHeader, .decompressionFailed: return loc("error.corrupt")
-            }
-        case let e as LibArchiveError:
-            switch e {
-            case .passphraseRequired: return loc("error.needsPassword")
-            case .wrongPassword: return loc("error.wrongPassword")
-            case .writeFailed: return loc("error.writeFailed")
-            case .openFailed, .readFailed, .entryNotFound: return loc("error.readFailed")
-            }
-        case let e as ZipAESError:
-            switch e {
-            case .wrongPassword: return loc("error.wrongPassword")
-            case .unsupportedStrength: return loc("error.unsupportedEncryption")
-            case .corrupt: return loc("error.corrupt")
-            }
-        case is ZipWriteError:
-            return loc("error.writeFailed")
-        case is ArchiveError, is TarError, is GzipError, is XzError, is Bzip2Error:
-            return loc("error.corrupt")
-        default:
-            return error.localizedDescription
-        }
+        catch { errorMessage = localizedErrorMessage(error) }
     }
 }
 

@@ -155,6 +155,8 @@ final class ExtractCoordinator: ObservableObject {
             destination = archiveFolder ?? settings.fixedExtractFolder ?? home
         case .fixedFolder:
             destination = settings.fixedExtractFolder ?? archiveFolder ?? home
+        case .lastUsedFolder:
+            destination = settings.lastUsedExtractFolder ?? archiveFolder ?? home
         }
     }
 
@@ -165,9 +167,10 @@ final class ExtractCoordinator: ObservableObject {
 
     /// Confirma la hoja: captura el destino, encola los planes y arranca el procesado en lote
     /// (el archivo ya está desbloqueado en este punto).
-    func confirm(doc: ArchiveDocument, perform: @escaping Perform) {
+    func confirm(doc: ArchiveDocument, settings: AppSettings, perform: @escaping Perform) {
         guard let req = request else { return }
         destinationFolder = destination
+        settings.lastUsedExtractFolder = destination   // alimenta el modo "última carpeta usada"
         request = nil
         queue = req.makePlans()
         claimed = []

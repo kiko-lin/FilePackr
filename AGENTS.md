@@ -106,8 +106,26 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     sin guardar”) + delegado de `NSWindow` para interceptar el cierre de ventana; el
     salir (⌘Q) lo cubre el `AppDelegate` (`FilePackrApp.swift`). **Sin pestañas de
     ventana** (`allowsAutomaticWindowTabbing = false`): cada archivo en su ventana.
+  - `FinderServicesProvider` (`FinderServices.swift`): los **Servicios de macOS** del menú
+    contextual del Finder («Abrir en FilePackr» / «Descomprimir aquí»). Declarados en
+    `Info.plist` (`NSServices`), registrados por `AppDelegate`. «Descomprimir aquí» extrae sin
+    UI reusando `ExportPlan.writeContents`. Helpers compartidos en `AppHelpers.swift`
+    (`archiveBaseName`, `localizedErrorMessage`).
 
 ## Hecho
+
+- **Sesión 2026-06-28 — i18n al idioma del sistema + dos items de UX del TODO**:
+  - **i18n idiomática** (commit `refactor(i18n)`): la app sigue el idioma del **sistema** vía
+    **String Catalog** (`Localizable.xcstrings`, EN+ES); `es` en `knownRegions`. Se retiraron
+    `Localizer`/`Language`/selector de idioma y el parche del menú; `loc(...)` es función global
+    sobre `NSLocalizedString`. AppKit localiza gratis menú/paneles/«Clase». Ver sección i18n.
+  - **Extracción "Última carpeta usada"**: nuevo `ExtractDestinationMode.lastUsedFolder` +
+    `AppSettings.lastUsedExtractFolder`, fijada en `ExtractCoordinator.confirm` y usada en
+    `prepareDestination`. Visible en Ajustes (informativa).
+  - **Servicios del Finder** (`FinderServices.swift`, `Info.plist` `NSServices`): «Abrir en
+    FilePackr» y «Descomprimir aquí» (extracción headless reusando `ExportPlan.writeContents`).
+    Helpers `archiveBaseName`/`localizedErrorMessage` extraídos a `AppHelpers.swift`. Ver TODO
+    para la verificación en GUI pendiente (registro de Servicios + títulos en inglés).
 
 - **Tercera auditoría (2026-06-22, rama `refactor/auditoria-2026-06-22`)** — informe en
   `docs/auditoria-2026-06-22.md`. Sin hallazgos críticos; 4 MEDIO + 4 BAJO resueltos en 5 commits:
@@ -352,28 +370,32 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   - Exponer el Picker en `SettingsView`.
   - Esfuerzo bajo: no toca `CFBundleDocumentTypes` ni `AppDelegate`, el flujo de
     apertura ya es robusto y centralizado. Uso diario frecuente.
-- [ ] **Carpeta de extracción por defecto: opción "Última usada"** · análisis hecho
-      2026-06-26: hoy `ExtractDestinationMode` (`AppSettings.swift`) solo tiene
-      `archiveFolder`/`fixedFolder`; no existe tracking de última carpeta usada.
-  - Añadir case `lastUsedFolder` al enum.
-  - Nueva `@Published var lastUsedFolder: URL?` en `AppSettings`, persistida igual
-    que `fixedExtractFolder`; guardarla al confirmar una extracción (en
-    `OperationCoordinators`).
-  - Usarla en `prepareDestination()` y exponer la opción en el Picker de
-    `SettingsView`.
-  - Esfuerzo muy bajo (~30 líneas), sin cambios arquitectónicos. Quality-of-life diario.
-- [ ] **Menú contextual de Finder** ("Abrir en FilePackr", "Descomprimir aquí") ·
-      análisis hecho 2026-06-26: la app **no** tiene App Sandbox activo hoy (ver
-      "Distribución" abajo) → usar **NSServices** (menú "Servicios" de Finder), NO
-      Finder Sync Extension (exigiría sandbox + entitlements + target separado).
-  - Declarar servicios en `Info.plist` + handler en `AppDelegate` que reciba la(s)
-    ruta(s) seleccionadas.
-  - "Abrir en FilePackr": ya funciona vía tipos de documento registrados
-    (`CFBundleDocumentTypes` en `Info.plist`) — solo falta la entrada de servicio.
-  - "Descomprimir aquí": reusa `OperationCoordinators.prepareDestination()`
-    (caso `.archiveFolder` = carpeta del archivo origen) sin mostrar la hoja de
-    opciones — extraer directo.
-  - Esfuerzo bajo-medio, sin bloqueos arquitectónicos. Punto de entrada muy usado.
+- [x] ~~**Carpeta de extracción por defecto: opción "Última usada"**~~ (HECHO 2026-06-28):
+      nuevo case `lastUsedFolder` en `ExtractDestinationMode`; `AppSettings.lastUsedExtractFolder:
+      URL?` persistida igual que `fixedExtractFolder`. `ExtractCoordinator.confirm` la fija al
+      confirmar cada extracción (recibe `settings`), y `prepareDestination` la usa cuando el modo
+      es `.lastUsedFolder` (cae a la carpeta del archivo / home si aún no hay). En Ajustes el Picker
+      la incluye solo (CaseIterable) y muestra la carpeta recordada (informativa, sin "Elegir…").
+      Clave `extract.dest.lastUsedFolder` EN/ES. Compila; build genera la clave en en/es.lproj.
+- [x] ~~**Menú contextual de Finder** ("Abrir en FilePackr", "Descomprimir aquí")~~
+      (HECHO 2026-06-28, pendiente verificación en GUI): vía **NSServices** (sin sandbox, sin
+      target aparte). `FinderServicesProvider` (`FinderServices.swift`) con dos `@objc` que casan
+      con `NSMessage`; registrado en `AppDelegate` (`NSApp.servicesProvider` + `NSUpdateDynamicServices`).
+      `NSServices` declarado en `Info.plist` (`NSSendFileTypes` = los mismos UTIs que abrimos).
+  - **Abrir en FilePackr**: entrega las rutas a la app por la vía normal (`NSWorkspace.open`
+    con nuestro bundle), igual que el doble clic.
+  - **Descomprimir aquí**: extracción **headless** reusando `openArchive` + `exportPlanForAll` +
+    `ExportPlan.writeContents` (a una carpeta hermana libre `<nombre>`/`<nombre> 2`); revela lo
+    extraído en el Finder. Si el archivo pide contraseña (`isLocked`/`requiresOpenPassword`), cae a
+    abrirlo en la app. Errores → `NSAlert` (mensajes vía `localizedErrorMessage`, extraído a
+    `AppHelpers.swift` junto con `archiveBaseName`, antes privados de `ContentView`).
+  - **Títulos localizados**: `InfoPlist.xcstrings` traduce los títulos de los Servicios (AppKit
+    los busca en `InfoPlist.strings` por su título inglés). El build genera `en/es.lproj/InfoPlist.strings`;
+    falta confirmar en GUI que el menú los muestra traducidos.
+  - **PENDIENTE de verificar en GUI**: el Servicio solo aparece tras registrar el `.app` con
+    Launch Services (`pbs`): instalar en /Applications o `/System/Library/CoreServices/pbs -update`
+    y, si hace falta, reiniciar sesión. Probar «Abrir» y «Descomprimir aquí» (incl. uno cifrado →
+    debe abrir la app para pedir clave) y que los títulos salgan en el idioma del sistema.
 - [ ] **Convertir un icono de la barra superior en menú con opciones rápidas**
       (`documentBar`, `ContentView.swift:324`, botones a la derecha: Extraer todo ·
       Cerrar · Exportar · Guardar) · análisis hecho 2026-06-26: hoy son `Button`

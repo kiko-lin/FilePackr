@@ -74,6 +74,16 @@ struct SettingsView: View {
                         Spacer()
                         Button(loc("extract.choose"), action: chooseFixedFolder)
                     }
+                } else if settings.extractMode == .lastUsedFolder {
+                    // Solo informativa: la fija cada extracción, no se elige aquí.
+                    HStack(spacing: 6) {
+                        Image(nsImage: NSWorkspace.shared.icon(for: .folder))
+                            .resizable().frame(width: 16, height: 16)
+                        Text(settings.lastUsedExtractFolder?.lastPathComponent ?? loc("settings.noFolder"))
+                            .foregroundStyle(settings.lastUsedExtractFolder == nil ? .secondary : .primary)
+                            .lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                    }
                 }
             }
 

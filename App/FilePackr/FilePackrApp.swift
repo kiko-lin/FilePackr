@@ -25,10 +25,17 @@ struct FilePackrApp: App {
 /// **mismo** aviso unificado (`UnsavedChangesAlert`) que el cierre de ventana y de documento.
 /// El cierre de cada ventana por separado lo gestiona `WindowGuard`.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Proveedor de los Servicios del Finder («Abrir en FilePackr» / «Descomprimir aquí»).
+    /// Lo retenemos aquí porque `NSApp.servicesProvider` no lo conserva con fuerza.
+    private let servicesProvider = FinderServicesProvider()
+
     /// Sin pestañas de ventana: cada archivo abre en su propia ventana independiente.
     /// Esto también retira los ítems de menú de pestañas (Mostrar barra/Combinar ventanas…).
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
+        // Registra los Servicios de macOS (menú contextual del Finder / menú «Servicios»).
+        NSApp.servicesProvider = servicesProvider
+        NSUpdateDynamicServices()
     }
 
     /// Cerrar la última ventana cierra la app (utilidad de una sola ventana): evita que el
