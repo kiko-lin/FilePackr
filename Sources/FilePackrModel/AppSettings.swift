@@ -135,9 +135,12 @@ public final class AppSettings: ObservableObject {
     /// Formatos premarcados por defecto: los más habituales (ZIP > RAR > 7Z + Unix).
     public static let defaultAssociatedFormats: Set<ArchiveFormat> = [.zip, .sevenZip, .rar, .tarGzip, .gzip, .tar]
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
-    private init() {
+    /// Inyectable para tests (un `UserDefaults` aislado en vez del global). La app usa siempre
+    /// `.shared`, que toma `.standard`.
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         theme = AppTheme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .system
         // Sin clave guardada → `nil` = "Último usado" (por defecto en instalación nueva).
         defaultFormat = defaults.string(forKey: "defaultFormat").flatMap(ArchiveFormat.init(rawValue:))

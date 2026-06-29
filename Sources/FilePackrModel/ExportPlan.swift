@@ -81,7 +81,7 @@ public struct ExportPlan: Sendable {
 /// Qué operación larga está en curso. El modelo emite el **token** (dato), no el texto;
 /// la vista lo traduce. Así la i18n no vive en el modelo y la etiqueta se re-localiza si
 /// se cambia de idioma a mitad de la operación.
-public enum ProgressKind: Equatable {
+public enum ProgressActivity: Equatable {
     case opening(String)       // nombre del fichero que se abre
     case extracting
     case compressing(String)   // nombre del documento ("" si aún sin guardar)
@@ -92,7 +92,7 @@ public enum ProgressKind: Equatable {
 
 /// Estado de una operación larga (comprimir/extraer) para la barra de progreso.
 public struct ProgressState {
-    public var kind: ProgressKind
+    public var kind: ProgressActivity
     public var fraction: Double? // nil = indeterminado
     public var detail: String? // nombre del fichero en curso (p. ej. al extraer), opcional
 }

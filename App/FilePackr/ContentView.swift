@@ -275,7 +275,7 @@ struct ContentView: View {
 
     /// Traduce el token de progreso del modelo. Resolver el nombre vacío a "Sin título"
     /// reproduce el antiguo `displayName` para un documento aún sin guardar.
-    private func progressLabel(_ kind: FilePackrModel.ProgressKind) -> String {
+    private func progressLabel(_ kind: ProgressActivity) -> String {
         switch kind {
         case .opening(let name): return loc("progress.opening", name)
         case .extracting: return loc("progress.extracting")
