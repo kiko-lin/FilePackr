@@ -9,6 +9,22 @@ import ArchiveBrowser
 @MainActor
 final class SaveCoordinatorTests: XCTestCase {
 
+    /// Ajustes aislados (UserDefaults propio): los tests no tocan el estado global de la app.
+    private var settings: AppSettings!
+    private var suiteName: String!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "test.\(UUID().uuidString)"
+        settings = AppSettings(defaults: UserDefaults(suiteName: suiteName)!)
+    }
+
+    override func tearDown() {
+        UserDefaults().removePersistentDomain(forName: suiteName)
+        settings = nil
+        super.tearDown()
+    }
+
     private func waitUntil(_ condition: () -> Bool, timeout: TimeInterval = 3,
                            _ message: String = "condición no cumplida en el tiempo previsto",
                            file: StaticString = #filePath, line: UInt = #line) async {
@@ -80,9 +96,6 @@ final class SaveCoordinatorTests: XCTestCase {
     // MARK: - Prerrelleno
 
     func testPrefillNewDocumentUsesSettingsDefault() {
-        let settings = AppSettings.shared
-        let saved = settings.defaultFormat
-        defer { settings.defaultFormat = saved }
         settings.defaultFormat = .tar
 
         let coord = SaveCoordinator()
@@ -92,9 +105,6 @@ final class SaveCoordinatorTests: XCTestCase {
     }
 
     func testPrefillForcesZipForNonWritableFormat() {
-        let settings = AppSettings.shared
-        let saved = settings.defaultFormat
-        defer { settings.defaultFormat = saved }
         settings.defaultFormat = .rar   // solo lectura → debe caer a zip
 
         let coord = SaveCoordinator()
@@ -103,9 +113,6 @@ final class SaveCoordinatorTests: XCTestCase {
     }
 
     func testPrefillForcesZipForSingleFileFormatWhenNotSingleFile() {
-        let settings = AppSettings.shared
-        let saved = settings.defaultFormat
-        defer { settings.defaultFormat = saved }
         settings.defaultFormat = .gzip   // solo-un-fichero, pero el doc no lo es → zip
 
         let coord = SaveCoordinator()
@@ -116,10 +123,6 @@ final class SaveCoordinatorTests: XCTestCase {
     // MARK: - Encadenado tras guardar
 
     func testConfirmSaveRunsPendingActionOnSuccess() async {
-        let settings = AppSettings.shared
-        let savedFmt = settings.lastUsedFormat, savedEnc = settings.lastUsedEncryption, savedLvl = settings.lastUsedLevel
-        defer { settings.lastUsedFormat = savedFmt; settings.lastUsedEncryption = savedEnc; settings.lastUsedLevel = savedLvl }
-
         let coord = SaveCoordinator()
         coord.destination = URL(fileURLWithPath: "/tmp")
         coord.name = "out"
@@ -140,10 +143,6 @@ final class SaveCoordinatorTests: XCTestCase {
     }
 
     func testConfirmExportDoesNotRunPendingAction() async {
-        let settings = AppSettings.shared
-        let savedFmt = settings.lastUsedFormat, savedEnc = settings.lastUsedEncryption, savedLvl = settings.lastUsedLevel
-        defer { settings.lastUsedFormat = savedFmt; settings.lastUsedEncryption = savedEnc; settings.lastUsedLevel = savedLvl }
-
         let coord = SaveCoordinator()
         coord.destination = URL(fileURLWithPath: "/tmp")
         coord.name = "out"
@@ -161,10 +160,6 @@ final class SaveCoordinatorTests: XCTestCase {
     }
 
     func testConfirmDoesNotRunPendingActionOnFailure() async {
-        let settings = AppSettings.shared
-        let savedFmt = settings.lastUsedFormat, savedEnc = settings.lastUsedEncryption, savedLvl = settings.lastUsedLevel
-        defer { settings.lastUsedFormat = savedFmt; settings.lastUsedEncryption = savedEnc; settings.lastUsedLevel = savedLvl }
-
         let coord = SaveCoordinator()
         coord.destination = URL(fileURLWithPath: "/tmp")
         coord.name = "out"

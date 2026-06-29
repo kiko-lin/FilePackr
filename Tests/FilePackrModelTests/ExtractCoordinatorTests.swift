@@ -14,20 +14,23 @@ import ArchiveBrowser
 final class ExtractCoordinatorTests: XCTestCase {
 
     private var tempDir: URL!
-    /// Valor previo de `lastUsedExtractFolder` (singleton compartido): se restaura al acabar.
-    private var savedLastUsed: URL??
+    /// Ajustes aislados (UserDefaults propio): los tests no tocan el estado global de la app.
+    private var settings: AppSettings!
+    private var suiteName: String!
 
     override func setUp() {
         super.setUp()
         tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        savedLastUsed = AppSettings.shared.lastUsedExtractFolder
+        suiteName = "test.\(UUID().uuidString)"
+        settings = AppSettings(defaults: UserDefaults(suiteName: suiteName)!)
     }
 
     override func tearDown() {
         try? FileManager.default.removeItem(at: tempDir)
-        if let saved = savedLastUsed { AppSettings.shared.lastUsedExtractFolder = saved }
+        UserDefaults().removePersistentDomain(forName: suiteName)
         tempDir = nil
+        settings = nil
         super.tearDown()
     }
 
@@ -72,7 +75,7 @@ final class ExtractCoordinatorTests: XCTestCase {
         }
 
         coord.begin(title: "t") { [self.plan("a.txt"), self.plan("b.txt")] }
-        coord.confirm(doc: doc, settings: .shared, perform: perform)
+        coord.confirm(doc: doc, settings: settings, perform: perform)
 
         await waitUntil { calls.count == 2 }
         XCTAssertEqual(Set(calls.map { $0.dest.lastPathComponent }), ["a.txt", "b.txt"])
@@ -93,7 +96,7 @@ final class ExtractCoordinatorTests: XCTestCase {
         }
 
         coord.begin(title: "t") { [self.plan("dup.txt"), self.plan("dup.txt")] }
-        coord.confirm(doc: doc, settings: .shared, perform: perform)
+        coord.confirm(doc: doc, settings: settings, perform: perform)
 
         await waitUntil { coord.conflict != nil }
         XCTAssertEqual(coord.conflict?.destination.lastPathComponent, "dup.txt")
@@ -112,7 +115,7 @@ final class ExtractCoordinatorTests: XCTestCase {
         }
 
         coord.begin(title: "t") { [self.plan("file.txt")] }
-        coord.confirm(doc: doc, settings: .shared, perform: perform)
+        coord.confirm(doc: doc, settings: settings, perform: perform)
 
         await waitUntil { coord.conflict != nil }
         coord.resolveConflict(coord.conflict!, overwrite: false, doc: doc, perform: perform)
@@ -132,7 +135,7 @@ final class ExtractCoordinatorTests: XCTestCase {
         }
 
         coord.begin(title: "t") { [self.plan("file.txt")] }
-        coord.confirm(doc: doc, settings: .shared, perform: perform)
+        coord.confirm(doc: doc, settings: settings, perform: perform)
 
         await waitUntil { coord.conflict != nil }
         coord.resolveConflict(coord.conflict!, overwrite: true, doc: doc, perform: perform)
@@ -157,7 +160,7 @@ final class ExtractCoordinatorTests: XCTestCase {
         coord.begin(title: "t") {
             [self.plan("foto.jpg"), self.plan("foto.jpg"), self.plan("foto 2.jpg")]
         }
-        coord.confirm(doc: doc, settings: .shared, perform: perform)
+        coord.confirm(doc: doc, settings: settings, perform: perform)
 
         // El 1.º se extrae sin conflicto; el 2.º (mismo nombre) abre conflicto.
         await waitUntil { coord.conflict != nil }
@@ -185,7 +188,7 @@ final class ExtractCoordinatorTests: XCTestCase {
         }
 
         coord.begin(title: "t") { [self.plan("done.txt"), self.plan("done.txt")] }
-        coord.confirm(doc: doc, settings: .shared, perform: perform)
+        coord.confirm(doc: doc, settings: settings, perform: perform)
 
         await waitUntil { coord.conflict != nil }   // 1.º extraído, 2.º en conflicto
         let extracted = coord.cancelConflict()
@@ -197,11 +200,6 @@ final class ExtractCoordinatorTests: XCTestCase {
     // MARK: - Destino por defecto según ajustes
 
     func testPrepareDestinationUsesFixedFolder() {
-        let settings = AppSettings.shared
-        let savedMode = settings.extractMode
-        let savedFixed = settings.fixedExtractFolder
-        defer { settings.extractMode = savedMode; settings.fixedExtractFolder = savedFixed }
-
         settings.extractMode = .fixedFolder
         settings.fixedExtractFolder = tempDir
         let coord = ExtractCoordinator()
@@ -214,8 +212,8 @@ final class ExtractCoordinatorTests: XCTestCase {
         let doc = ArchiveDocument()
         let perform: ExtractCoordinator.Perform = { _, _, _ in true }
         coord.begin(title: "t") { [self.plan("x.txt")] }
-        coord.confirm(doc: doc, settings: .shared, perform: perform)
-        await waitUntil { AppSettings.shared.lastUsedExtractFolder == self.tempDir }
-        XCTAssertEqual(AppSettings.shared.lastUsedExtractFolder, tempDir)
+        coord.confirm(doc: doc, settings: settings, perform: perform)
+        await waitUntil { self.settings.lastUsedExtractFolder == self.tempDir }
+        XCTAssertEqual(settings.lastUsedExtractFolder, tempDir)
     }
 }
