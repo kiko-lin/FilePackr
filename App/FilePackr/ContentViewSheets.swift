@@ -150,8 +150,9 @@ struct ExtractOptionsSheet: View {
 }
 
 /// Campo de contraseña con el clásico botón de **ojo** para mostrar/ocultar el texto.
-/// Alterna entre `SecureField` (oculto) y `TextField` (visible) conservando el foco. El estilo
-/// del campo lo hereda del contexto (`.textFieldStyle`), así encaja tanto suelto como en un `Form`.
+/// Alterna entre `SecureField` (oculto) y `TextField` (visible) conservando el foco. El ojo va
+/// **dentro** del campo, pegado al borde derecho, con su propia zona de respeto: el campo es
+/// `.plain` y dibujamos nosotros el marco redondeado alrededor de campo + ojo (con anillo de foco).
 struct RevealableSecureField: View {
     let placeholder: String
     @Binding var text: String
@@ -169,6 +170,7 @@ struct RevealableSecureField: View {
                     SecureField(placeholder, text: $text)
                 }
             }
+            .textFieldStyle(.plain)
             .focused($focused)
             .onSubmit(onSubmit)
 
@@ -178,12 +180,21 @@ struct RevealableSecureField: View {
             } label: {
                 Image(systemName: isRevealed ? "eye.slash" : "eye")
                     .foregroundStyle(.secondary)
+                    .frame(width: 16)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
             .help(loc(isRevealed ? "password.hide" : "password.show"))
             .accessibilityLabel(loc(isRevealed ? "password.hide" : "password.show"))
         }
+        .padding(.leading, 7)
+        .padding(.trailing, 6)   // zona de respeto: el texto nunca pisa el ojo
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+            .fill(Color(nsColor: .textBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+            .strokeBorder(focused ? Color.accentColor : Color(nsColor: .separatorColor),
+                          lineWidth: focused ? 2 : 1))
     }
 }
 
@@ -202,7 +213,6 @@ struct PasswordSheet: View {
             RevealableSecureField(placeholder: loc("password.field"), text: $password) {
                 if !password.isEmpty { onConfirm() }
             }
-            .textFieldStyle(.roundedBorder)
             if let note {
                 Text(note).font(.callout).foregroundStyle(.red)
             }
