@@ -61,3 +61,23 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGN_IDENTITY=""
+
+  # EXPERIMENTAL / no bloqueante: corre la suite COMPLETA (motor + modelo) sin el skip, para
+  # averiguar si los FilePackrModelTests (@MainActor con setUp/tearDown síncronos) compilan en
+  # el XCTest del runner (Xcode 16) o si hace falta el fix de portabilidad (setUp async).
+  # `continue-on-error` evita que su rojo marque en rojo el CI mientras lo verificamos. Si pasa
+  # de forma estable, fusionar con el job `test` (quitando FILEPACKR_SKIP_MODEL_TESTS) y borrar
+  # este job. Ver AGENTS.md / TODO de CI.
+  model-tests-experimental:
+    name: model tests (experimental, no bloqueante)
+    runs-on: macos-15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versión de Swift
+        run: swift --version
+
+      - name: Suite completa (motor + modelo, sin skip)
+        # Sin FILEPACKR_SKIP_MODEL_TESTS: incluye el target FilePackrModelTests.
+        run: swift test
