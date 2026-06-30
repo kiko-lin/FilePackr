@@ -358,17 +358,14 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 > Los items de formato/streaming de pura completitud van al final, en este orden:
 > **DMG ≈ 7z-cifrado (baja) > tar-open (muy baja) > multinúcleo (solo si el rendimiento duele)**.
 
-- [ ] **Verificar en GUI los flujos del refactor de auditoría (rama `refactor/auditoria-2026-06-21`)**
-      · el agente solo compila/test del modelo, no ejecuta la GUI. Probar en Xcode (⌘R) y reportar:
-  - **Añadir con conflicto** de nombre → Sobrescribir / Conservar ambos / Cancelar (H-2b).
-  - **Extraer en lote** con conflictos → diálogo "Sobrescribir / Conservar ambos / Cancelar".
-  - **Caso concreto reportado**: carpeta con «React Compiler – React» y «…React 2»; extraer
-    «…React», «…React 2», «…React 3» y, con "conservar ambos", verificar que C acaba como
-    «…React 3» (su nombre) y **no hay dos ficheros con el mismo nombre** (fix `5772c41`:
-    el alternativo evita disco ∪ lo ya extraído del lote ∪ los nombres literales pendientes).
-  - **Guardar/Exportar** en cada formato (zip, tar.gz, 7z, gz…) sigue produciendo el archivo correcto.
-  - Una vez validado, el usuario hace el `git push` (el agente no tiene red).
-  - Deuda de validación pendiente sobre código ya mergeado: bloquea confianza en el refactor.
+- [x] ~~**Verificar en GUI los flujos del refactor de auditoría**~~ (HECHO 2026-06-30, verificación
+      GUI por el usuario tras la 4ª auditoría + reestructuración a SPM): añadir con conflicto,
+      extraer en lote con conflictos (caso «React»→«React 4», sin duplicados), guardar/exportar por
+      formato, niveles de compresión y la hoja de contraseña compacta — todo correcto. **Bug hallado
+      y corregido** (commit `2425e9a`): al cancelar una operación que comparte el overlay pero no es
+      del `ExtractCoordinator` (arrastre al Finder / guardado), salía "Conservar/Eliminar" con rutas
+      residuales de un lote anterior; ahora `processNext` limpia el estado del lote al terminar.
+      Pendiente solo el `git push` (el agente no tiene red).
 - [ ] **Comportamiento configurable al arrastrar un archivo al icono de la app**
       (Dock/Finder) · análisis hecho 2026-06-26: hoy `.onOpenURL` (`ContentView.swift:142`)
       → `handleOpen()` siempre abre y muestra contenido (`doc.openArchive()`), sin
