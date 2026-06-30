@@ -12,11 +12,11 @@ final class AddCoordinatorTests: XCTestCase {
 
     // tearDown async: la clase es @MainActor y `temps` está aislada al actor principal. La
     // variante síncrona es `nonisolated` en el XCTest del runner (Xcode 16); la async adopta el
-    // aislamiento de la clase. Portable Xcode 16/26.
+    // aislamiento de la clase. No se llama a super.tearDown() (nonisolated → enviaría `self`
+    // no-Sendable fuera del actor principal; la base async está vacía). Portable Xcode 16/26.
     override func tearDown() async throws {
         for url in temps { try? FileManager.default.removeItem(at: url) }
         temps = []
-        try await super.tearDown()
     }
 
     /// Escribe un fichero con nombre **exacto** `name` en una carpeta temporal única (el UUID
