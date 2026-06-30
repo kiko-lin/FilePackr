@@ -443,6 +443,18 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       en claro). Haría falta el **LZMA SDK** de Igor Pavlov (cifra contenido y nombres; además
       comprime multihilo, ver "valorar" arriba) → vendorizar dependencia, rompe el principio de
       cero-deps. ZIP+AES-256 ya cubre "archivo seguro". Confirmado en revisión externa (2026-06-21).
+- [ ] **CI: compilar también la app de Xcode en el workflow** · **prioridad BAJA, BLOQUEADO por
+      runners** (añadido 2026-06-30). Hay CI en `.github/workflows/ci.yml` que corre `swift test`
+      (el **motor**, `FilePackrCore`, 155 tests) en cada PR a `main`. **Falta** que el CI verifique
+      que la **app** (target Xcode `FilePackr` + sus 6 tests `FilePackrTests`, que viven en el
+      `.pbxproj`, no en el paquete) **compila**. Motivo de no hacerlo ya: el proyecto usa
+      **Xcode 26 / macOS 26 (Tahoe)** y los runners alojados de GitHub van por **macOS 15** → un job
+      `xcodebuild build` daría rojo por la **versión del runner, no por el código** (falso positivo
+      inútil). **Retomar** cuando GitHub publique el runner de macOS 26: añadir un job aparte con
+      `xcodebuild -project App/FilePackr.xcodeproj -scheme FilePackr -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build`
+      (solo build, sin firma; para tests `xcodebuild test`). Alternativa si urge antes: runner
+      self-hosted en el Mac del usuario. Considerar también activar **branch protection** en `main`
+      (exigir el check verde antes de mergear).
 - [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
       notarización, `.dmg`. Aplazado a propósito, no por bajo valor.
