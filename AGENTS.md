@@ -470,16 +470,19 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       + scheme compartido + ruta de paquete `relativePath = ..`. Verificado verde en el runner.
       PENDIENTE menor (opcional): activar **branch protection** en `main` (exigir el check verde antes
       de mergear).
-- [~] **Accesibilidad / VoiceOver** · **Tier 1 + 2 HECHOS (2026-07-01)**, Tier 3 pendiente. Hecho:
-      (1) la **zona de arrastre** del estado vacío (antes `onTapGesture`, no activable por VoiceOver)
-      se expone como botón con label/pista/acción; (2) los **iconos de estado** de la cabecera
-      (cifrado/volúmenes) ganan `accessibilityLabel` (antes solo `.help`, que VoiceOver no lee);
-      (3) el **icono de fila** del outline se marca decorativo (`setAccessibilityElement(false)`) —
-      la columna «Clase» ya da el tipo. **Diagnóstico**: el resto ya era accesible de base
-      (NSOutlineView con NSTextField, botones con texto, NSAlert nativos, ojo de contraseña).
-      **Tier 3 pendiente (opcional)**: anunciar el progreso de operaciones largas a VoiceOver y
-      repasar orden de foco en la cabecera. **Verificación**: manual con VoiceOver (⌘F5), la hace
-      el usuario.
+- [x] ~~**Accesibilidad / VoiceOver** (Tier 1 + 2 + 3)~~ (HECHO 2026-07-01). Tier 1 (operabilidad):
+      la **zona de arrastre** del estado vacío (antes `onTapGesture`, no activable por VoiceOver) se
+      expone como botón con label/pista/acción. Tier 2 (estado anunciado): **iconos de cabecera**
+      (cifrado/volúmenes) ganan `accessibilityLabel` (antes solo `.help`, que VoiceOver no lee); el
+      **icono de fila** del outline se marca decorativo (`setAccessibilityElement(false)`) — la columna
+      «Clase» ya da el tipo. Tier 3 (progreso): la **barra** del overlay gana `accessibilityLabel` con
+      la actividad ("Comprimiendo X, 45 %") y se **anuncia** el arranque/cambio de fase y el fin
+      (`AccessibilityNotification.Announcement`, observando solo `kind` → sin spam; clave nueva
+      `a11y.operationFinished`). **Diagnóstico**: el resto ya era accesible de base (NSOutlineView con
+      NSTextField, botones con texto, NSAlert nativos, ojo de contraseña); el orden de foco de la
+      cabecera ya era lineal y correcto → no se tocó. **PENDIENTE**: verificación manual con VoiceOver
+      (⌘F5), la hace el usuario. Descartado por riesgo>valor: mover el foco al overlay
+      (`@AccessibilityFocusState`).
 - [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
       notarización, `.dmg`. Aplazado a propósito, no por bajo valor.
