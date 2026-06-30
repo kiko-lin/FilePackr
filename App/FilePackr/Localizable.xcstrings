@@ -2050,13 +2050,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Default encryption"
+            "value" : "Encryption"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cifrado por defecto"
+            "value" : "Cifrado"
           }
         }
       }
@@ -2067,13 +2067,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Default format"
+            "value" : "Format"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Formato por defecto"
+            "value" : "Formato"
           }
         }
       }
@@ -2261,6 +2261,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ninguna carpeta elegida"
+          }
+        }
+      }
+    },
+    "settings.section.defaults" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Defaults"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valores por defecto"
           }
         }
       }

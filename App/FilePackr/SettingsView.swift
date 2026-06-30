@@ -37,8 +37,8 @@ struct SettingsView: View {
         .frame(width: 480, height: 460)
     }
 
-    /// Pestaña General: apariencia, formato/cifrado por defecto y destino de extracción.
-    /// El idioma lo gobierna el sistema (Ajustes → Idioma y región), no la app.
+    /// Pestaña General: apariencia + los valores por defecto de cada operación (comprimir,
+    /// extraer, añadir). El idioma lo gobierna el sistema (Ajustes → Idioma y región), no la app.
     private var general: some View {
         Form {
             Section {
@@ -47,6 +47,9 @@ struct SettingsView: View {
                 }
             }
 
+            // Valores por defecto de cada operación: comprimir (formato/cifrado/nivel),
+            // extraer (destino) y añadir (política de ocultos). Todos se preseleccionan y se
+            // pueden cambiar en su operación (salvo la política de añadir, que rige siempre).
             Section {
                 Picker(loc("settings.defaultFormat"), selection: $settings.defaultFormat) {
                     Text(loc("settings.lastUsed")).tag(ArchiveFormat?.none)
@@ -62,9 +65,6 @@ struct SettingsView: View {
                     Text(loc("settings.lastUsed")).tag(CompressionLevel?.none)
                     ForEach(CompressionLevel.allCases, id: \.self) { Text(loc($0.nameKey)).tag(CompressionLevel?.some($0)) }
                 }
-            }
-
-            Section {
                 Picker(loc("settings.extractTo"), selection: $settings.extractMode) {
                     ForEach(ExtractDestinationMode.allCases) { Text(loc($0.nameKey)).tag($0) }
                 }
@@ -89,12 +89,11 @@ struct SettingsView: View {
                         Spacer()
                     }
                 }
-            }
-
-            Section {
                 Picker(loc("settings.addHidden"), selection: $settings.addHiddenPolicy) {
                     ForEach(AddHiddenPolicy.allCases) { Text(loc($0.nameKey)).tag($0) }
                 }
+            } header: {
+                Text(loc("settings.section.defaults"))
             } footer: {
                 Text(loc("settings.addHidden.note"))
                     .font(.caption)
