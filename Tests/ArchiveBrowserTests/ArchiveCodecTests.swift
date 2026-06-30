@@ -72,4 +72,94 @@ final class ArchiveCodecTests: XCTestCase {
         let data = try result.format.codec.entryData(for: entry, in: result.container, password: nil)
         XCTAssertEqual(data, hello)
     }
+
+    /// Fase 3b / §10 #4–#5 (invariante de memoria): abrir un `.tar.gz` **no** debe inflar el TAR
+    /// en RAM. El `container` que se conserva son los bytes **comprimidos** (los mismos que
+    /// entraron, para mantenerlos mapeados), no el TAR descomprimido. Test estructural —
+    /// determinista, ataca la causa (¿se materializa el tar entero?) y no la RSS.
+    func testTarGzipCodecKeepsCompressedContainer() throws {
+        let big = Data(repeating: 0x41, count: 256 * 1024)   // muy compresible: tar inflado >> .gz
+        let tar = Tar.write([
+            Tar.WriteItem(path: "uno.txt", data: hello, modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "dir/grande.bin", data: big, modifiedAt: nil, isDirectory: false),
+        ])
+        let targz = Gzip.compress(tar)
+        let result = try ArchiveFormat.tarGzip.codec.open(targz, fallbackName: "paquete")
+
+        XCTAssertEqual(result.format, .tarGzip)
+        XCTAssertEqual(result.container, targz, "el container debe ser el .gz comprimido, no el tar inflado")
+        XCTAssertLessThan(result.container.count, tar.count / 4,
+                          "el container comprimido debe ser mucho menor que el tar descomprimido")
+    }
+
+    /// El round-trip por entrada sobre el container **comprimido**: `entryData` re-descomprime
+    /// hasta el offset y `extract` emite por trozos (streaming). Ambos deben reproducir el original.
+    func testTarGzipCodecRoundTripOverCompressedContainer() throws {
+        let big = Data((0..<200_000).map { UInt8($0 & 0xFF) })
+        let tar = Tar.write([
+            Tar.WriteItem(path: "uno.txt", data: hello, modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "dir/grande.bin", data: big, modifiedAt: nil, isDirectory: false),
+        ])
+        let result = try ArchiveFormat.tarGzip.codec.open(Gzip.compress(tar), fallbackName: "p")
+        let codec = result.format.codec
+
+        for (path, expected) in [("uno.txt", hello), ("dir/grande.bin", big)] {
+            let entry = try XCTUnwrap(result.entries.first { $0.path == path })
+            // entryData (re-descompresión por offset)
+            XCTAssertEqual(try codec.entryData(for: entry, in: result.container, password: nil), expected)
+            // extract (streaming por trozos al sink)
+            var streamed = Data()
+            try codec.extract(entry, in: result.container, password: nil) { streamed.append($0) }
+            XCTAssertEqual(streamed, expected, "el streaming de \(path) debe reproducir el original")
+        }
+    }
+
+    /// Fase 4 / §10 #1 (el corazón de la feature): extraer **varias** entradas de un tar comprimido
+    /// debe hacerse en **una sola descompresión** (`streamEntries`), no una por entrada. Lo medimos
+    /// con un `streamDecompress` espía que cuenta los pases; es un test estructural y determinista.
+    func testTarGzipExtractAllUsesSinglePass() throws {
+        final class PassCounter: @unchecked Sendable { var count = 0 }
+        let counter = PassCounter()
+        let big = Data((0..<100_000).map { UInt8($0 & 0xFF) })
+        let tar = Tar.write([
+            Tar.WriteItem(path: "uno.txt", data: hello, modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "dir/dos.txt", data: Data("dos".utf8), modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "dir/grande.bin", data: big, modifiedAt: nil, isDirectory: false),
+        ])
+        let codec = TarCodec(format: .tarGzip, streamDecompress: { data, sink in
+            counter.count += 1
+            try Gzip.decompress(data, sink: sink)
+        })
+        let result = try codec.open(Gzip.compress(tar), fallbackName: "p")
+
+        counter.count = 0   // ignorar el pase del indexado al abrir; medir solo la extracción
+        var got: [String: Data] = [:]
+        try codec.extractAll(result.entries, in: result.container, password: nil) { entry in
+            let path = entry.path
+            got[path] = Data()
+            return { got[path, default: Data()].append($0) }
+        }
+
+        XCTAssertEqual(counter.count, 1, "varias entradas = un solo pase de descompresión")
+        XCTAssertEqual(got["uno.txt"], hello)
+        XCTAssertEqual(got["dir/dos.txt"], Data("dos".utf8))
+        XCTAssertEqual(got["dir/grande.bin"], big)
+    }
+
+    /// El otro lado de la decisión §10 #1: extraer **una sola** entrada no recorre todo el tar,
+    /// usa `streamExtract` (corta tras la entrada). El espía debe ver un solo pase igualmente, pero
+    /// la garantía importante (no inflar el resto) la cubre `TarStreamTests`; aquí basta el round-trip.
+    func testTarGzipExtractAllSingleEntry() throws {
+        let tar = Tar.write([
+            Tar.WriteItem(path: "a.txt", data: hello, modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "b.txt", data: Data("bbb".utf8), modifiedAt: nil, isDirectory: false),
+        ])
+        let result = try ArchiveFormat.tarGzip.codec.open(Gzip.compress(tar), fallbackName: "p")
+        let entry = try XCTUnwrap(result.entries.first { $0.path == "a.txt" })
+        var got = Data()
+        try result.format.codec.extractAll([entry], in: result.container, password: nil) { _ in
+            { got.append($0) }
+        }
+        XCTAssertEqual(got, hello)
+    }
 }

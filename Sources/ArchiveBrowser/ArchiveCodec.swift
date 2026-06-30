@@ -34,6 +34,18 @@ public protocol ArchiveCodec: Sendable {
     /// materializar la salida en RAM** cuando el formato lo permite (ZIP, gz/xz/bz2).
     func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
                  sink: (Data) throws -> Void) throws
+
+    /// Extrae varias entradas en el **mínimo número de pases**. Por cada entrada que el codec
+    /// recorre, `place(entry)` devuelve un sink donde volcar su contenido (en streaming) o `nil`
+    /// para saltarla. Las llamadas a `place` van en el orden de recorrido del codec; una entrada
+    /// se considera **terminada** cuando empieza la siguiente (o al volver de este método), para
+    /// que el llamador pueda cerrar/colocar cada fichero secuencialmente.
+    ///
+    /// Por defecto: una llamada a `extract` por entrada (óptimo en formatos de **acceso aleatorio**
+    /// —ZIP, `.tar` puro, libarchive—). `TarCodec` comprimido lo hace en **un solo pase** cuando
+    /// hay varias entradas (re-descomprime una vez con `streamEntries`).
+    func extractAll(_ entries: [ArchiveEntry], in container: Data, password: String?,
+                    place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws
 }
 
 public extension ArchiveCodec {
@@ -48,6 +60,17 @@ public extension ArchiveCodec {
                  sink: (Data) throws -> Void) throws {
         try sink(entryData(for: entry, in: container, password: password))
     }
+
+    /// Por defecto: extrae cada entrada por separado (acceso aleatorio). `TarCodec` comprimido lo
+    /// sobreescribe para hacer un único pase cuando hay varias entradas.
+    func extractAll(_ entries: [ArchiveEntry], in container: Data, password: String?,
+                    place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
+        for entry in entries {
+            if let sink = try place(entry) {
+                try extract(entry, in: container, password: password, sink: sink)
+            }
+        }
+    }
 }
 
 public extension ArchiveFormat {
@@ -57,13 +80,13 @@ public extension ArchiveFormat {
         case .zip:
             return ZipCodec()
         case .tar:
-            return TarCodec(format: .tar, decompress: { $0 })
+            return TarCodec(format: .tar, streamDecompress: nil)
         case .tarGzip:
-            return TarCodec(format: .tarGzip, decompress: { try Gzip.decompress($0) })
+            return TarCodec(format: .tarGzip, streamDecompress: { try Gzip.decompress($0, sink: $1) })
         case .tarXz:
-            return TarCodec(format: .tarXz, decompress: { try Xz.decompress($0) })
+            return TarCodec(format: .tarXz, streamDecompress: { try Xz.decompress($0, sink: $1) })
         case .tarBzip2:
-            return TarCodec(format: .tarBzip2, decompress: { try Bzip2.decompress($0) })
+            return TarCodec(format: .tarBzip2, streamDecompress: { try Bzip2.decompress($0, sink: $1) })
         case .gzip:
             return SingleFileCodec(format: .gzip, tarFormat: .tarGzip,
                                    decompress: { try Gzip.decompress($0) },
@@ -105,20 +128,71 @@ struct ZipCodec: ArchiveCodec {
     }
 }
 
-/// TAR, opcionalmente envuelto en un compresor (gzip/xz/bzip2). El `container` que se
-/// conserva es el TAR ya descomprimido, así que extraer es leer una porción.
+/// TAR, opcionalmente envuelto en un compresor (gzip/xz/bzip2).
+///
+/// - **`.tar` puro** (`streamDecompress == nil`): el `container` es el propio TAR (mapeado);
+///   acceso aleatorio directo por offset, sin descomprimir nada — no tiene el problema de RAM.
+/// - **`.tar.<x>` comprimido**: el `container` son los bytes **comprimidos** (mapeados). Al abrir
+///   se indexa al vuelo con `StreamIndexer` (sin materializar el TAR inflado) y cada entrada se
+///   extrae re-descomprimiendo hasta su offset con `streamExtract`. Acceso por entrada = re-stream
+///   (patrón canónico de tar; sin caché — §10 #2), memoria acotada.
 struct TarCodec: ArchiveCodec {
     let format: ArchiveFormat
-    let decompress: @Sendable (Data) throws -> Data
+    /// Descompresión en streaming del envoltorio; `nil` para `.tar` puro (sin compresión).
+    let streamDecompress: (@Sendable (Data, (Data) throws -> Void) throws -> Void)?
 
     func open(_ data: Data, fallbackName: String, passphrase: String?,
               progress: ((Double) -> Void)?) throws -> ArchiveReadResult {
-        let tar = try decompress(data)
-        return ArchiveReadResult(format: format, container: tar, entries: try Tar.listEntries(in: tar))
+        guard let streamDecompress else {   // .tar puro: acceso aleatorio directo sobre el container
+            return ArchiveReadResult(format: format, container: data, entries: try Tar.listEntries(in: data))
+        }
+        let indexer = Tar.StreamIndexer()
+        try streamDecompress(data) { try indexer.consume($0) }
+        // El container se conserva COMPRIMIDO (mapeado); las entradas se re-descomprimen por offset.
+        return ArchiveReadResult(format: format, container: data, entries: try indexer.finish())
     }
 
     func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {
-        try Tar.entryData(for: entry, in: container)
+        guard let streamDecompress else { return try Tar.entryData(for: entry, in: container) }
+        var out = Data()
+        try streamExtractEntry(entry, in: container, with: streamDecompress) { out.append($0) }
+        return out
+    }
+
+    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+                 sink: (Data) throws -> Void) throws {
+        guard let streamDecompress else { try sink(Tar.entryData(for: entry, in: container)); return }
+        try withoutActuallyEscaping(sink) { escapingSink in
+            try streamExtractEntry(entry, in: container, with: streamDecompress, sink: escapingSink)
+        }
+    }
+
+    func extractAll(_ entries: [ArchiveEntry], in container: Data, password: String?,
+                    place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
+        // Varias entradas de un tar **comprimido**: un solo recorrido (re-descomprime una vez).
+        // Con una sola entrada (o `.tar` puro) sale más a cuenta ir por entrada: `extract` usa
+        // `streamExtract`, que **corta** al terminarla sin inflar el resto del flujo (§10 #1).
+        if let streamDecompress, entries.count > 1 {
+            try withoutActuallyEscaping(place) { escapingPlace in
+                try Tar.streamEntries(decompressing: container, with: streamDecompress, selecting: escapingPlace)
+            }
+            return
+        }
+        for entry in entries {
+            if let sink = try place(entry) {
+                try extract(entry, in: container, password: password, sink: sink)
+            }
+        }
+    }
+
+    /// Re-descomprime `container` hasta el offset de `entry` y emite sus bytes por `sink`,
+    /// cortando al terminar la entrada (no infla el resto del flujo).
+    private func streamExtractEntry(_ entry: ArchiveEntry, in container: Data,
+                                    with streamDecompress: @Sendable (Data, (Data) throws -> Void) throws -> Void,
+                                    sink: @escaping (Data) throws -> Void) throws {
+        guard let offset = entry.dataOffset.map(Int.init) else { throw TarError.corrupt }
+        try Tar.streamExtract(offset: offset, length: Int(entry.uncompressedSize),
+                              decompressing: container, with: streamDecompress, sink: sink)
     }
 }
 
@@ -138,8 +212,12 @@ struct SingleFileCodec: ArchiveCodec {
         // descomprimidos (la firma ustar está en el offset 257). Inflamos solo esa cabecera en
         // streaming: si es un suelto, no materializamos todo el contenido (que se descartaría).
         if Tar.hasUstarMagic(try peekDecompressed(data, count: 263)) {
-            let inner = try decompress(data)   // es un TAR: ahora sí necesitamos el contenido entero
-            return ArchiveReadResult(format: tarFormat, container: inner, entries: try Tar.listEntries(in: inner))
+            // Es un TAR comprimido: indexar al vuelo (sin inflar el TAR entero) y conservar los
+            // bytes COMPRIMIDOS (mapeados) como container. La extracción usará el TarCodec de
+            // tarFormat, que re-descomprime por offset (§10 #2, mismo container comprimido).
+            let indexer = Tar.StreamIndexer()
+            try streamDecompress(data) { try indexer.consume($0) }
+            return ArchiveReadResult(format: tarFormat, container: data, entries: try indexer.finish())
         }
         return ArchiveReadResult(format: format, container: data, entries: entries(data, fallbackName))
     }
