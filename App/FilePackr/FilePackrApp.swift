@@ -25,6 +25,11 @@ struct FilePackrApp: App {
 /// Avisa al salir de la app (⌘Q) si alguna ventana tiene cambios sin guardar, con el
 /// **mismo** aviso unificado (`UnsavedChangesAlert`) que el cierre de ventana y de documento.
 /// El cierre de cada ventana por separado lo gestiona `WindowGuard`.
+///
+/// `@MainActor` explícito: un delegate de `NSApplication` corre siempre en el hilo principal y
+/// sus métodos tocan AppKit (`NSApp`, `NSWindow`) y estado @MainActor (`WorkFile`). Xcode 26 lo
+/// infiere; el SDK de Xcode 16 (CI) no, y sin esto la app no compila allí.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Proveedor de los Servicios del Finder («Abrir en FilePackr» / «Descomprimir aquí»).
     /// Lo retenemos aquí porque `NSApp.servicesProvider` no lo conserva con fuerza.

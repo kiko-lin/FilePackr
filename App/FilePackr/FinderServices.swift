@@ -8,6 +8,12 @@ import FilePackrModel
 /// `AppDelegate` (`NSApp.servicesProvider`). Los nombres de método casan con `NSMessage`.
 @MainActor
 final class FinderServicesProvider: NSObject {
+    /// `init` nonisolated: la clase es @MainActor (sus handlers tocan AppKit en el hilo
+    /// principal), pero **no tiene estado que aislar**, así que permitir construirla desde un
+    /// contexto nonisolated (el init de `AppDelegate`) compila en Xcode 16 y 26. Sin esto, en el
+    /// SDK de Xcode 16 falla con "call to main actor-isolated initializer in a nonisolated context".
+    nonisolated override init() { super.init() }
+
     /// «Abrir en FilePackr»: entrega las rutas a la propia app por la vía normal de apertura
     /// (la misma que el doble clic en el Finder), abriendo cada archivo en su ventana.
     @objc func openInFilePackr(_ pboard: NSPasteboard, userData: String?,
