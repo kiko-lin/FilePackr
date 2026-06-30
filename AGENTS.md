@@ -326,7 +326,8 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   `ArchiveFormat.codec`), `ArchiveDocument` troceado 1151→~760 LOC (`FileNode`,
   `ExportPlan`, `ArchiveSaver`, `VolumeStore`), `ArchiveEntry` neutral, modelo sin
   `Localizer`, multivolumen sin cargar todo en RAM, detección por firma. Tests 49→61.
-  Tests del modelo de la app en `FilePackrTests` (⌘U). Ver sección Arquitectura.
+  Tests del modelo (entonces en `FilePackrTests`/⌘U; **después** movidos a SPM
+  `FilePackrModelTests`, los corre `swift test`). Ver sección Arquitectura.
 - **Exportar** (`ArchiveDocument.export`): escribe una **copia** con otro formato/
   cifrado/contraseña/volúmenes **sin cambiar el documento activo** (no llama a
   `markSaved` ni muta los ajustes recordados, a diferencia de `save`). Comparten la
@@ -458,23 +459,17 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       en claro). Haría falta el **LZMA SDK** de Igor Pavlov (cifra contenido y nombres; además
       comprime multihilo, ver "valorar" arriba) → vendorizar dependencia, rompe el principio de
       cero-deps. ZIP+AES-256 ya cubre "archivo seguro". Confirmado en revisión externa (2026-06-21).
-- [ ] **CI: ampliar cobertura (tests de modelo + app) cuando haya runner macOS 26** · **prioridad
-      BAJA, BLOQUEADO por runners** (añadido 2026-06-30). Hay CI en `.github/workflows/ci.yml` que en
-      cada PR a `main` compila ambas librerías (motor + modelo) y corre los **tests del motor**
-      (`ArchiveBrowserTests`, ~108). **Excluidos del CI** por ahora: (a) **`FilePackrModelTests`** —
-      no compila en el Swift de los runners alojados porque está escrito contra el `XCTest` de
-      Xcode 26 (setUp/tearDown aislables a `@MainActor`; en Swift más antiguo son `nonisolated` →
-      error de aislamiento de actor). Se omite con la var **`FILEPACKR_SKIP_MODEL_TESTS`** (guard en
-      `Package.swift`); en local con Xcode 26 corre normal. (b) La **app** (target Xcode `FilePackr` +
-      sus 6 tests `FilePackrTests`, que viven en el `.pbxproj`, no en el paquete). Motivo común: el
-      proyecto usa
-      **Xcode 26 / macOS 26 (Tahoe)** y los runners alojados de GitHub van por **macOS 15** → un job
-      `xcodebuild build` daría rojo por la **versión del runner, no por el código** (falso positivo
-      inútil). **Retomar** cuando GitHub publique el runner de macOS 26: añadir un job aparte con
-      `xcodebuild -project App/FilePackr.xcodeproj -scheme FilePackr -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build`
-      (solo build, sin firma; para tests `xcodebuild test`). Alternativa si urge antes: runner
-      self-hosted en el Mac del usuario. Considerar también activar **branch protection** en `main`
-      (exigir el check verde antes de mergear).
+- [x] ~~**CI: ampliar cobertura (tests de modelo + app)**~~ (HECHO 2026-07-01, sin esperar runner
+      macOS 26: se hizo el código **portable a Xcode 16**, el del runner `macos-15`). El CI tiene
+      ahora dos jobs bloqueantes: `test` = `swift test` (suite completa **motor + modelo, 158**) y
+      `build-app` = `xcodebuild build` sin firma (la capa de vistas). Cómo se desbloqueó cada parte:
+      (a) **`FilePackrModelTests`**: `setUp`/`tearDown` pasados a **`async`** y sin llamar a `super`
+      (eliminado el mecanismo `FILEPACKR_SKIP_MODEL_TESTS`). (b) **App**: `@MainActor` explícito en las
+      clases de glue de AppKit (`AppDelegate`, los dos `Coordinator`, `init` nonisolated en
+      `FinderServicesProvider`), porque **Xcode 16 ignora `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`**;
+      + scheme compartido + ruta de paquete `relativePath = ..`. Verificado verde en el runner.
+      PENDIENTE menor (opcional): activar **branch protection** en `main` (exigir el check verde antes
+      de mergear).
 - [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
       notarización, `.dmg`. Aplazado a propósito, no por bajo valor.

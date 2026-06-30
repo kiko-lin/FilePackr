@@ -58,7 +58,7 @@ Ver [`docs/architecture.md`](docs/architecture.md) y [`docs/encryption.md`](docs
 ```
 FilePackr/                            (raíz del repo; remoto: github.com/kiko-lin/FilePackr)
 ├── Package.swift                     paquete "FilePackrCore": librerías ArchiveBrowser + FilePackrModel
-├── .github/workflows/ci.yml          CI (GitHub Actions): compila y corre los tests del motor en cada PR
+├── .github/workflows/ci.yml          CI (GitHub Actions): swift test (motor + modelo) + compila la app, en cada PR
 ├── Sources/
 │   ├── ArchiveBrowser/               motor de archivos (sin UI)
 │   │   ├── ArchiveFormat.swift        enum de formato: capacidades + detección (ext/firma)
@@ -77,7 +77,7 @@ FilePackr/                            (raíz del repo; remoto: github.com/kiko-l
 │   └── Cbz2 / Carchive / Cz / Clzma  systemLibrary → libbz2 / libarchive / zlib / liblzma del sistema
 ├── Tests/
 │   ├── ArchiveBrowserTests/          tests del motor (swift test; interop opcional zip/unzip, pyzipper)
-│   └── FilePackrModelTests/          tests del modelo (en local; excluidos del CI, ver AGENTS.md)
+│   └── FilePackrModelTests/          tests del modelo (documento + coordinadores; los corre `swift test`)
 └── App/                             proyecto Xcode de la app (SwiftUI/AppKit)
     ├── FilePackr.xcodeproj
     ├── FilePackr/                    vistas y arranque de la app
@@ -86,7 +86,7 @@ FilePackr/                            (raíz del repo; remoto: github.com/kiko-l
     │   ├── WindowGuard.swift          aviso de cambios sin guardar (cierre de ventana)
     │   ├── SettingsView / Localization
     │   └── FilePackrApp.swift
-    └── FilePackrTests/               tests del modelo de la app (⌘U; no los ve `swift test`)
+    └── FilePackr.xcodeproj/xcshareddata/xcschemes/   scheme compartido (lo usa el CI)
 ```
 
 La lógica de archivos (`ArchiveBrowser`) y la capa de modelo (`FilePackrModel`) viven en
@@ -95,7 +95,7 @@ se prueba sin levantar la interfaz.
 
 ## Compilar y probar
 
-Tests del motor (sin Xcode):
+Tests del motor y del modelo (sin Xcode):
 
 ```bash
 swift test
@@ -105,7 +105,7 @@ swift test
 La app (requiere Xcode, macOS):
 
 ```bash
-open App/FilePackr.xcodeproj   # luego ⌘R (esquema FilePackr); tests del modelo con ⌘U
+open App/FilePackr.xcodeproj   # luego ⌘R (esquema FilePackr)
 # o por línea de comandos:
 xcodebuild -project App/FilePackr.xcodeproj -scheme FilePackr \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
@@ -113,10 +113,10 @@ xcodebuild -project App/FilePackr.xcodeproj -scheme FilePackr \
 
 ### Integración continua
 
-Cada PR (y push) a `main` dispara [GitHub Actions](.github/workflows/ci.yml): compila las
-librerías y corre los **tests del motor** en un runner de macOS. Los tests de `FilePackrModel`
-y la app quedan fuera del CI por ahora (requieren la toolchain de Xcode 26, aún no disponible
-en los runners alojados) y se ejecutan en local; ver [`AGENTS.md`](AGENTS.md) para el detalle.
+Cada PR (y push) a `main` dispara [GitHub Actions](.github/workflows/ci.yml) en un runner de
+macOS, con dos jobs en paralelo: **`swift test`** (suite completa, motor + modelo) y
+**`xcodebuild build`** (compila la app, la capa de vistas). Si algo no compila o un test falla,
+el PR queda en rojo. Ver [`AGENTS.md`](AGENTS.md) para el detalle.
 
 ## Estado y pendientes
 
