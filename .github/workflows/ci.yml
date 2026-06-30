@@ -1,7 +1,7 @@
 name: CI
 
 # Detección de errores en cada PR. Dos jobs en paralelo:
-#  - test: compila el paquete y corre los tests del motor.
+#  - test: compila el paquete y corre la suite completa (motor + modelo) con `swift test`.
 #  - build-app: compila la app (capa de vistas), que `swift test` no toca.
 # Si algo no compila o un test falla, el PR queda marcado en rojo.
 
@@ -18,31 +18,26 @@ concurrency:
 
 jobs:
   test:
-    name: swift test (motor)
+    name: swift test (motor + modelo)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Versión de Swift
         run: swift --version
 
-      - name: Compilar y testear (motor)
-        # Compila las dos librerías (motor + modelo) y corre los tests del MOTOR.
-        # FILEPACKR_SKIP_MODEL_TESTS excluye FilePackrModelTests, que requiere el XCTest de
-        # Xcode 26 (las clases @MainActor sobrescriben setUp/tearDown síncronos, que en el
-        # XCTest del runner —Xcode 16— son nonisolated y no compilan). Ver Package.swift y el
-        # TODO en AGENTS.md. Reincorporar cuando exista runner de macOS 26.
+      - name: Compilar y testear (motor + modelo)
+        # Suite completa: ArchiveBrowserTests + FilePackrModelTests. Los tests de modelo usan
+        # setUp/tearDown async, así que compilan también en el XCTest del runner (Xcode 16).
         # Los tests de interop (zip/unzip/pyzipper) se saltan solos con XCTSkipUnless si la
         # herramienta no está, así que el runner queda en verde sin instalar nada.
-        env:
-          FILEPACKR_SKIP_MODEL_TESTS: "1"
         run: swift test
 
   build-app:
     name: build app (xcodebuild)
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Versión de Xcode
         run: xcodebuild -version
@@ -61,23 +56,3 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGN_IDENTITY=""
-
-  # EXPERIMENTAL / no bloqueante: corre la suite COMPLETA (motor + modelo) sin el skip, para
-  # averiguar si los FilePackrModelTests (@MainActor con setUp/tearDown síncronos) compilan en
-  # el XCTest del runner (Xcode 16) o si hace falta el fix de portabilidad (setUp async).
-  # `continue-on-error` evita que su rojo marque en rojo el CI mientras lo verificamos. Si pasa
-  # de forma estable, fusionar con el job `test` (quitando FILEPACKR_SKIP_MODEL_TESTS) y borrar
-  # este job. Ver AGENTS.md / TODO de CI.
-  model-tests-experimental:
-    name: model tests (experimental, no bloqueante)
-    runs-on: macos-15
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Versión de Swift
-        run: swift --version
-
-      - name: Suite completa (motor + modelo, sin skip)
-        # Sin FILEPACKR_SKIP_MODEL_TESTS: incluye el target FilePackrModelTests.
-        run: swift test

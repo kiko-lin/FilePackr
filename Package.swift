@@ -1,15 +1,7 @@
 // swift-tools-version: 6.0
 import PackageDescription
-import Foundation
 
-// Los tests de la capa de modelo (`FilePackrModelTests`) están escritos contra el modelo de
-// concurrencia de XCTest de Xcode 26 / Swift 6.3 (setUp/tearDown aislables al actor principal).
-// Los runners de GitHub traen un Swift más antiguo donde esos métodos son `nonisolated`, así que
-// no compilan allí. El CI los omite (define FILEPACKR_SKIP_MODEL_TESTS); en local, con Xcode 26,
-// se compilan y corren con normalidad. Reincorporar al CI cuando exista runner de macOS 26.
-let skipModelTests = ProcessInfo.processInfo.environment["FILEPACKR_SKIP_MODEL_TESTS"] != nil
-
-var targets: [Target] = [
+let targets: [Target] = [
     // Acceso a la libbz2 del sistema (header en el SDK, dylib vía -lbz2).
     .systemLibrary(name: "Cbz2", path: "Sources/Cbz2"),
     // Acceso a la libarchive del sistema (7z/rar/iso… vía -larchive; cabeceras propias).
@@ -29,16 +21,14 @@ var targets: [Target] = [
         dependencies: ["ArchiveBrowser"],
         resources: [.copy("Fixtures")]
     ),
-]
 
-if !skipModelTests {
-    targets.append(
-        .testTarget(
-            name: "FilePackrModelTests",
-            dependencies: ["FilePackrModel"]
-        )
-    )
-}
+    // Tests de la capa de modelo. Sus clases @MainActor usan setUp/tearDown `async` (no
+    // síncronos) para compilar tanto en Xcode 26 como en el XCTest del runner de CI (Xcode 16).
+    .testTarget(
+        name: "FilePackrModelTests",
+        dependencies: ["FilePackrModel"]
+    ),
+]
 
 let package = Package(
     name: "FilePackrCore",
