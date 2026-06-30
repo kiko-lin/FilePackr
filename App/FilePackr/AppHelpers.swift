@@ -39,6 +39,8 @@ func localizedErrorMessage(_ error: Error) -> String {
         }
     case is ZipWriteError:
         return loc("error.writeFailed")
+    case is DecompressionLimitError:
+        return loc("error.bomb")
     case is ArchiveError, is TarError, is GzipError, is XzError, is Bzip2Error:
         return loc("error.corrupt")
     default:

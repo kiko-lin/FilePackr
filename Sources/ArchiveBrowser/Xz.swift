@@ -33,22 +33,23 @@ public enum Xz {
     }
 
     /// Descomprime un flujo `.xz` a memoria.
-    public static func decompress(_ data: Data) throws -> Data {
+    public static func decompress(_ data: Data, limit: DecompressionLimit = .standard) throws -> Data {
         var out = Data()
-        try decompress(data, sink: { out.append($0) })
+        try decompress(data, sink: { out.append($0) }, limit: limit)
         return out
     }
 
     /// Descomprime un flujo `.xz` emitiendo la salida por trozos (`sink`), sin materializar
     /// el resultado en RAM. La entrada `.xz` ya está en memoria (mapeada); lo grande es la
     /// salida, que va al `sink` (p. ej. un fichero) trozo a trozo.
-    public static func decompress(_ data: Data, sink: (Data) throws -> Void) throws {
+    public static func decompress(_ data: Data, sink: (Data) throws -> Void,
+                                  limit: DecompressionLimit = .standard) throws {
         guard data.count >= 6, Array(data.prefix(6)) == [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00] else {
             throw XzError.notXz
         }
         do {
             try CompressionStream.run(operation: COMPRESSION_STREAM_DECODE, algorithm: COMPRESSION_LZMA,
-                                      next: CompressionStream.once(data), sink: sink)
+                                      next: CompressionStream.once(data), sink: sink, limit: limit)
         } catch is CompressionStreamError { throw XzError.corrupt }   // error del códec; los del sink se propagan
     }
 

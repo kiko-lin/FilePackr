@@ -86,20 +86,22 @@ public enum Bzip2 {
     }
 
     /// Descomprime un flujo `.bz2` a memoria.
-    public static func decompress(_ data: Data) throws -> Data {
+    public static func decompress(_ data: Data, limit: DecompressionLimit = .standard) throws -> Data {
         var out = Data()
-        try decompress(data, sink: { out.append($0) })
+        try decompress(data, sink: { out.append($0) }, limit: limit)
         return out
     }
 
     /// Descomprime un flujo `.bz2` emitiendo la salida por trozos (`sink`), sin materializar
     /// el resultado en RAM, con la **API incremental** de `libbz2`. La entrada (ya en
     /// memoria/mapeada) se alimenta en trozos; lo grande es la salida, que va al `sink`.
-    public static func decompress(_ data: Data, sink: (Data) throws -> Void) throws {
+    public static func decompress(_ data: Data, sink: (Data) throws -> Void,
+                                  limit: DecompressionLimit = .standard) throws {
         let base = data.startIndex
         guard data.count >= 3, data[base] == 0x42, data[base + 1] == 0x5A, data[base + 2] == 0x68 else {  // "BZh"
             throw Bzip2Error.notBzip2
         }
+        var totalOut = 0   // cota anti-bomba: salida acumulada vs entrada consumida (`offset - base`)
         var strm = bz_stream()
         guard BZ2_bzDecompressInit(&strm, 0, 0) == BZ_OK else { throw Bzip2Error.corrupt }
         defer { BZ2_bzDecompressEnd(&strm) }
@@ -128,7 +130,13 @@ public enum Bzip2 {
             strm.avail_out = UInt32(cap)
             let rc = BZ2_bzDecompress(&strm)
             let produced = cap - Int(strm.avail_out)
-            if produced > 0 { try sink(Data(bytes: outBuf, count: produced)) }
+            if produced > 0 {
+                try sink(Data(bytes: outBuf, count: produced))
+                totalOut += produced
+                if limit.isExceeded(output: totalOut, input: offset - base) {
+                    throw DecompressionLimitError.bombDetected
+                }
+            }
             if rc == BZ_STREAM_END { break }
             guard rc == BZ_OK else { throw Bzip2Error.corrupt }
             if !moreInput && produced == 0 && strm.avail_in == 0 { throw Bzip2Error.corrupt }   // truncado

@@ -18,7 +18,14 @@ enum CompressionStream {
     static func run(operation: compression_stream_operation,
                     algorithm: compression_algorithm,
                     next: () throws -> Data?,
-                    sink: (Data) throws -> Void) throws {
+                    sink: (Data) throws -> Void,
+                    limit: DecompressionLimit = .standard) throws {
+        // Cota anti-bomba: solo al DESCOMPRIMIR (al comprimir, la salida es menor que la entrada).
+        // Llevamos el total consumido/producido inline (next/sink son no-escaping) y abortamos
+        // al superarse `input × maxRatio + floor`.
+        let enforce = (operation == COMPRESSION_STREAM_DECODE)
+        var totalIn = 0, totalOut = 0
+
         let dstCapacity = 64 * 1024
         let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: dstCapacity)
         defer { dst.deallocate() }
@@ -44,7 +51,14 @@ enum CompressionStream {
                 while true {
                     let status = compression_stream_process(&stream, flags)
                     if stream.dst_size < dstCapacity {
-                        try sink(Data(bytes: dst, count: dstCapacity - stream.dst_size))
+                        let produced = dstCapacity - stream.dst_size
+                        if enforce {
+                            totalOut += produced
+                            if limit.isExceeded(output: totalOut, input: totalIn) {
+                                throw DecompressionLimitError.bombDetected
+                            }
+                        }
+                        try sink(Data(bytes: dst, count: produced))
                         stream.dst_ptr = dst
                         stream.dst_size = dstCapacity
                     }
@@ -63,6 +77,7 @@ enum CompressionStream {
 
         while let chunk = try next() {
             if chunk.isEmpty { continue }
+            if enforce { totalIn += chunk.count }
             _ = try process(chunk, finalize: false)
         }
         _ = try process(Data(), finalize: true)

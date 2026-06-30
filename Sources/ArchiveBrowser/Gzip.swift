@@ -73,16 +73,17 @@ public enum Gzip {
     }
 
     /// Descomprime un flujo gzip a memoria. Verifica CRC-32 y tamaño.
-    public static func decompress(_ data: Data) throws -> Data {
+    public static func decompress(_ data: Data, limit: DecompressionLimit = .standard) throws -> Data {
         var out = Data()
-        try decompress(data, sink: { out.append($0) })
+        try decompress(data, sink: { out.append($0) }, limit: limit)
         return out
     }
 
     /// Descomprime un flujo gzip emitiendo la salida por trozos (`sink`), sin materializar
     /// el resultado en RAM. Verifica CRC-32 y tamaño del footer al vuelo. La entrada (ya en
     /// memoria/mapeada) se recorre en trozos; lo grande es la salida, que va al `sink`.
-    public static func decompress(_ data: Data, sink: (Data) throws -> Void) throws {
+    public static func decompress(_ data: Data, sink: (Data) throws -> Void,
+                                  limit: DecompressionLimit = .standard) throws {
         let count = data.count
         let base = data.startIndex
         func u8(_ i: Int) -> UInt8 { data[base + i] }
@@ -109,7 +110,8 @@ public enum Gzip {
         do {
             try CompressionStream.run(operation: COMPRESSION_STREAM_DECODE, algorithm: COMPRESSION_ZLIB,
                 next: CompressionStream.once(body),
-                sink: { chunk in acc.update(chunk); total += UInt64(chunk.count); try sink(chunk) })
+                sink: { chunk in acc.update(chunk); total += UInt64(chunk.count); try sink(chunk) },
+                limit: limit)
         } catch is CompressionStreamError { throw GzipError.corrupt }
         // `isize` es el tamaño módulo 2^32 (RFC 1952): para >4 GB esta comparación solo valida
         // los 32 bits bajos. La garantía real de integridad es el CRC, que sí cubre todo.
