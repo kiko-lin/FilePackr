@@ -334,6 +334,10 @@ struct ContentView: View {
     /// Cancela la operación larga en curso (extracción o guardado) y, si era una extracción en
     /// lote con elementos ya extraídos, ofrece conservarlos o eliminarlos.
     private func cancelCurrentOperation() {
+        // Carrera del overlay: la operación pudo terminar justo antes de que el clic se procese
+        // (la vista va un frame por detrás del modelo). Si ya no hay nada cancelable, no hacemos
+        // nada —si no, saldría el aviso "Conservar/Eliminar" sobre algo ya extraído con éxito.
+        guard doc.cancellable else { return }
         doc.cancelCurrentOperation()
         promptExtractionCleanup(extractCoord.cancelBatch())
     }

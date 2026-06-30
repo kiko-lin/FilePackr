@@ -188,7 +188,14 @@ public final class ExtractCoordinator: ObservableObject {
     /// o por otro elemento ya resuelto del lote), abre el diálogo; si no, lo reserva, lo extrae
     /// y sigue con el resto.
     public func processNext(doc: ArchiveDocument, perform: @escaping Perform) {
-        guard !queue.isEmpty else { return }
+        guard !queue.isEmpty else {
+            // Lote terminado (sin conflicto pendiente): limpiar el estado para no dejar rutas
+            // residuales. Si no, una cancelación posterior de otra operación que comparte el
+            // overlay (arrastre al Finder, guardado) las leería como una extracción parcial y
+            // ofrecería "Conservar/Eliminar" sobre ficheros de un lote anterior ya completado.
+            if conflict == nil { claimed.removeAll(); extractedURLs.removeAll() }
+            return
+        }
         let plan = queue.removeFirst()
         let dest = destinationFolder.appendingPathComponent(plan.name)
         if isTaken(dest) {

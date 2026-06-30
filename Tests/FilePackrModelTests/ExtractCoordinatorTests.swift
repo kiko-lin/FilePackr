@@ -197,6 +197,23 @@ final class ExtractCoordinatorTests: XCTestCase {
         XCTAssertNil(coord.conflict)
     }
 
+    /// Regresión: tras un lote completado con éxito no debe quedar estado residual. Si no,
+    /// cancelar después otra operación (arrastre/guardado) mostraría "Conservar/Eliminar" sobre
+    /// ficheros de un lote anterior ya extraído.
+    func testNoResidualStateAfterSuccessfulBatch() async {
+        let coord = makeCoordinator()
+        let doc = ArchiveDocument()
+        var done = 0
+        let perform: ExtractCoordinator.Perform = { _, _, _ in done += 1; return true }
+
+        coord.begin(title: "t") { [self.plan("a.txt"), self.plan("b.txt")] }
+        coord.confirm(doc: doc, settings: settings, perform: perform)
+        await waitUntil { done == 2 }
+        try? await Task.sleep(nanoseconds: 20_000_000)   // margen para el processNext de cierre
+
+        XCTAssertTrue(coord.cancelBatch().isEmpty, "no debe quedar nada que limpiar tras el éxito")
+    }
+
     // MARK: - Destino por defecto según ajustes
 
     func testPrepareDestinationUsesFixedFolder() {
