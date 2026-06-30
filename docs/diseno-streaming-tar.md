@@ -235,8 +235,9 @@ comprimido serían N re-descompresiones. Falta **diseñar la integración** (dec
 - [x] Limitaciones documentadas y aplicadas: Quick Look re-descomprime; **sparse no soportado con
       guard real** — `listEntries` y `StreamIndexer` lanzan `TarError.unsupportedSparse` ante type
       `'S'` (GNU antiguo) o claves `GNU.sparse.*` (PAX), nunca emiten basura (`TarStreamTests`).
-- [ ] Pulido pendiente: el buffer de `StreamIndexer` hace `Data(buffer)` tras cada `removeFirst`
-      (re-basa índices; correcto pero copia) → cambiar a un índice de lectura.
+- [x] Pulido: `StreamIndexer` usa un **índice de lectura** (`head`) que solo avanza y compacta una
+      vez por `consume` (antes re-basaba con `Data(buffer)` en cada cabecera/trozo → copia cuadrática).
+      Sin cambio de comportamiento; cubierto por la paridad con `listEntries` a varios troceados.
 
 ---
 

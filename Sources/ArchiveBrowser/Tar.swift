@@ -85,6 +85,7 @@ public enum Tar {
         /// (`nil`). `nil` global = solo indexar (descarta todo el contenido).
         private let selecting: ((ArchiveEntry) throws -> BodySink?)?
         private var buffer = Data()
+        private var head = 0               // índice de lectura: bytes ya procesados del frente de `buffer`
         private var consumed = 0            // bytes del flujo ya procesados (offset lógico actual)
         private var entries: [ArchiveEntry] = []
         private var pendingPath: String?
@@ -101,58 +102,73 @@ public enum Tar {
         init(selecting: @escaping (ArchiveEntry) throws -> BodySink?) { self.selecting = selecting }
 
         /// Alimenta el siguiente trozo del flujo descomprimido.
-        public func consume(_ chunk: Data) throws { buffer.append(chunk); try drain() }
+        public func consume(_ chunk: Data) throws { buffer.append(chunk); try drain(); compact() }
 
         /// Cierra el flujo y devuelve las entradas indexadas.
         @discardableResult public func finish() throws -> [ArchiveEntry] { try drain(); return entries }
 
+        /// Descarta de `buffer` el prefijo ya procesado (`head`), liberando su memoria. Se llama una
+        /// vez por `consume` (no por cabecera): la cola pendiente es pequeña (< un bloque, o un cuerpo
+        /// a medio entregar), así que copia poco. Antes se re-basaba (`Data(buffer)`) en **cada** paso.
+        private func compact() {
+            guard head > 0 else { return }
+            if head == buffer.count {
+                buffer.removeAll(keepingCapacity: true)   // todo consumido (cuerpo en streaming): sin copia
+            } else {
+                buffer.removeFirst(head)
+                buffer = Data(buffer)   // fuerza un backing contiguo desde 0 (libera el prefijo consumido)
+            }
+            head = 0
+        }
+
         private func drain() throws {
             while true {
-                if finished { buffer.removeAll(keepingCapacity: false); return }
+                if finished { buffer.removeAll(keepingCapacity: false); head = 0; return }
+                let available = buffer.count - head             // bytes sin procesar desde `head`
+                let base = buffer.startIndex + head             // índice absoluto del frente sin procesar
                 if deliver > 0 {                                // contenido de la entrada actual
-                    let n = Swift.min(deliver, buffer.count)
+                    let n = Swift.min(deliver, available)
                     if n > 0 {
-                        if let sink { try sink(Data(buffer.prefix(n))) }   // emitir, o descartar si nil
-                        buffer.removeFirst(n); buffer = Data(buffer); deliver -= n; consumed += n
+                        if let sink { try sink(Data(buffer[base ..< base + n])) }   // emitir, o descartar si nil
+                        head += n; deliver -= n; consumed += n
                     }
                     if deliver > 0 { return }
                     continue
                 }
                 if pad > 0 {                                    // padding: siempre se descarta
-                    let n = Swift.min(pad, buffer.count)
-                    if n > 0 { buffer.removeFirst(n); buffer = Data(buffer); pad -= n; consumed += n }
+                    let n = Swift.min(pad, available)
+                    if n > 0 { head += n; pad -= n; consumed += n }
                     if pad > 0 { return }
                     sink = nil
                     continue
                 }
-                guard buffer.count >= blockSize else { return } // necesita una cabecera completa
-                let b = buffer.startIndex
-                if isZeroBlock(buffer, at: b) { finished = true; continue }
+                guard available >= blockSize else { return }    // necesita una cabecera completa
+                if isZeroBlock(buffer, at: base) { finished = true; continue }
 
-                let size = pendingSize ?? octal(buffer, b + 124, 12)
-                let type = buffer[b + 156]
+                let size = pendingSize ?? octal(buffer, base + 124, 12)
+                let type = buffer[base + 156]
                 let dataBlocks = (Int(size) + blockSize - 1) / blockSize
 
                 if type == 0x53 { throw TarError.unsupportedSparse }   // 'S' GNU sparse antiguo (§10 #3)
 
                 if type == 0x78 || type == 0x67 || type == 0x4C {   // PAX 'x'/'g' o GNU 'L'
                     let total = blockSize + dataBlocks * blockSize
-                    guard buffer.count >= total else { return }     // espera los bloques de metadatos
+                    guard available >= total else { return }        // espera los bloques de metadatos
                     if type == 0x4C {
-                        pendingPath = string(buffer, b + blockSize, Int(size))
+                        pendingPath = string(buffer, base + blockSize, Int(size))
                             .trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
                     } else {
-                        let h = parsePax(buffer, start: b + blockSize, size: Int(size))
+                        let h = parsePax(buffer, start: base + blockSize, size: Int(size))
                         if h.sparse { throw TarError.unsupportedSparse }   // sparse PAX: no soportado (§10 #3)
                         pendingPath = h.path; pendingSize = h.size; pendingDate = h.mtime
                     }
-                    buffer.removeFirst(total); buffer = Data(buffer); consumed += total
+                    head += total; consumed += total
                     continue
                 }
 
-                let rawName = string(buffer, b, 100)
-                let prefix = string(buffer, b + 345, 155)
-                let mtime = pendingDate ?? dateFrom(octal(buffer, b + 136, 12))
+                let rawName = string(buffer, base, 100)
+                let prefix = string(buffer, base + 345, 155)
+                let mtime = pendingDate ?? dateFrom(octal(buffer, base + 136, 12))
                 let name = pendingPath ?? (prefix.isEmpty ? rawName : prefix + "/" + rawName)
                 pendingPath = nil; pendingSize = nil; pendingDate = nil
 
@@ -166,7 +182,7 @@ public enum Tar {
                     entries.append(entry)
                     if !isDir { bodySink = try selecting?(entry) ?? nil }
                 }
-                buffer.removeFirst(blockSize); buffer = Data(buffer); consumed += blockSize
+                head += blockSize; consumed += blockSize
                 // deliver+pad = dataBlocks*512 (= lo que el indexer "saltaba"); para carpetas, 0.
                 deliver = isDir ? 0 : Int(size)
                 pad = dataBlocks * blockSize - deliver
