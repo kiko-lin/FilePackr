@@ -379,19 +379,15 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       `AppSettings` (persistido como `extractMode`); `handleOpen()` (`ContentView`) consulta la
       preferencia; Picker en `SettingsView`; no toca `CFBundleDocumentTypes` ni `AppDelegate`.
 - [ ] **Convertir un icono de la barra superior en menú con opciones rápidas**
-      (`documentBar`, `ContentView.swift:324`, botones a la derecha: Extraer todo ·
-      Cerrar · Exportar · Guardar) · análisis hecho 2026-06-26: hoy son `Button`
-      simples en un `HStack` custom (no hay `NSToolbar` nativo), cambiar a `Menu` de
-      SwiftUI es directo.
-  - **Candidato principal: Exportar** (`ContentView.swift:350`) — hoy abre siempre la
-    hoja completa de opciones; menú propuesto: accesos directos a formatos usados
-    ("Exportar a ZIP", "Exportar a TAR.GZ"…) + separador + "Exportar como…" (hoja
-    completa, comportamiento actual).
-  - Candidato secundario: **Extraer todo** — "Extraer aquí" / "Extraer en…" /
-    "Extraer a escritorio".
-  - Reusa `SaveCoordinator`/hoja de opciones existentes, solo parametrizar el punto
-    de entrada (formato preseleccionado).
-  - Esfuerzo bajo (< 1h por icono), sin bloqueos arquitectónicos.
+      · **APARCADO 2026-06-30 — poco práctico para lo que aporta.** El candidato principal era
+      *Exportar*, pero: Exportar es una acción **poco frecuente** (el caso común es Guardar), y un
+      "Exportar a ZIP" rápido o **ahorra solo 1 clic** (si igual abre la hoja con el formato ya
+      puesto) o exige **inventar una convención de destino/nombre** al saltar la hoja (cambio de
+      comportamiento mayor). El candidato secundario *Extraer todo* (menú con destinos rápidos)
+      tendría más sentido —ahí el destino es la decisión— pero tampoco hay demanda real.
+      Reconsiderar solo si el uso lo pide. Análisis técnico original (por si se retoma): hoy son
+      `Button` en un `HStack` custom (`documentBar`, `ContentView`); pasar a `Menu` de SwiftUI es
+      directo y reusa `SaveCoordinator`/la hoja preseleccionando el formato. Esfuerzo bajo.
 - [x] ~~**Limpieza de extracciones parciales al cancelar un lote**~~ (HECHO 2026-06-28, pendiente
       verificación GUI): `ExtractCoordinator` rastrea `extractedURLs` (ítems escritos con éxito;
       `Perform` ahora devuelve `Bool`); `cancelBatch`/`cancelConflict` las devuelven al cancelar.
