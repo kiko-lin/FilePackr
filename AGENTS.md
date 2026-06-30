@@ -490,9 +490,9 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     descomprimir, cabecera tar con checksum inválido, central directory dañado. Hoy toda la suite
     asume input bien formado → no se prueba que un archivo roto falle limpio (sin crash ni datos
     a medias).
-  - **Anti-DoS más allá del ratio DEFLATE**: hay cota de ratio por entrada (`Deflate`), pero no
-    test de **total agregado** (muchas entradas declaradas enormes) ni de límite por entrada; ni
-    bomba en tar/7z (solo ZIP). Va con el item de la cota agregada anti-zip-bomb.
+  - **Anti-DoS**: cota anti-bomba en gzip/xz/bz2 **HECHA** (`DecompressionLimit`, commit
+    2026-07-01, con tests). Queda: cota **agregada** en ZIP (muchas entradas declaradas enormes
+    sumando TB; hoy solo hay ratio por entrada en `Deflate`) y su test.
   - **Formatos libarchive**: 7z/xar/iso solo tienen round-trip básico; **RAR/CAB/CPIO/LHA: cero
     tests** (aunque estén en el UI). Faltan fixtures reales de esos formatos.
   - **Cifrado AES 128/192**: solo se prueba AES-256. El motor escribe las tres fuerzas
