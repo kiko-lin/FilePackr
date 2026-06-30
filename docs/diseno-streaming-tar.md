@@ -109,8 +109,16 @@ Tres operaciones:
    re-descomprime, descarta hasta el offset, emite los `length` bytes y **corta** la descompresión
    (no infla el resto). Tests: round-trip sobre un `.tar.gz` real == `Tar.entryData` para todas las
    entradas, y exactitud con una entrada grande no alineada a 512. Sigue sin tocar el codec.
-3. **Cableado del codec:** `TarCodec`/`SingleFileCodec` usan índice + container comprimido; ajustar
-   `ArchiveReadResult`. Ejecutar toda la suite (no debe romperse nada aguas arriba).
+3. Dividida en 3a (motor) y 3b (cableado):
+   - 3a. ✅ **HECHO** — **Iterador del motor** `Tar.streamEntries(decompressing:with:selecting:)`:
+     recorre el tar comprimido en **un solo pase** y, por cada entrada, el llamador devuelve un
+     sink (emitir su cuerpo en streaming) o `nil` (saltarla). Se generalizó `StreamIndexer` para
+     soportarlo (indexar = recorrer descartando; mismo núcleo, sin duplicar la máquina de parseo).
+     Tests: extraer-todo en un pase == `entryData` por entrada; saltar selectivo en un pase. La
+     paridad de Fase 1 sigue verde (el refactor no rompió nada).
+   - 3b. ⏳ **PENDIENTE — cableado del codec:** `TarCodec`/`SingleFileCodec` conservan el container
+     **comprimido** y usan índice (`StreamIndexer`) al abrir + `streamExtract`/`streamEntries` al
+     extraer; ajustar `ArchiveReadResult`. Toca aguas arriba → ejecutar toda la suite.
 4. **Extracción por lotes ordenada** (un pase) + integración con `ExportPlan`/extraer-todo.
 5. **Verificación de memoria**: medir que abrir+listar un tar.gz grande ya no escala la RAM.
 
@@ -151,9 +159,9 @@ Tres operaciones:
 
 ---
 
-**Estado:** rama `feat/streaming-tar`. **Fases 1 y 2 hechas y verificadas** (`Tar.StreamIndexer` +
-`Tar.streamExtract` + `TarStreamTests`; suite 142 verdes). Las piezas del motor están listas y
-aisladas (aún **no** tocan el codec). **Antes de la Fase 3** (cablear `TarCodec`/`SingleFileCodec`
-para conservar el container comprimido en vez del tar en RAM) **hay que cerrar las decisiones
-abiertas (§10)** — sobre todo **dónde vive la extracción por lotes** (codec batch vs `ExportPlan`,
-cruce motor↔modelo), que condiciona la API del codec. Ese es el punto de decisión, no de código.
+**Estado:** rama `feat/streaming-tar`. **El motor está completo y verificado** — Fase 1
+(`StreamIndexer`), Fase 2 (`streamExtract`), Fase 3a (`streamEntries`, un pase selectivo) +
+decisión §10 #1 tomada (opción A). Suite **144 verdes**. Todo **aislado: aún no toca el codec**.
+Siguiente: **Fase 3b** (cablear `TarCodec`/`SingleFileCodec` para conservar el container comprimido
+y usar índice/iterador) y **Fase 4** (integrar con la extracción async del modelo: "extraer todo"
+en un pase, progreso/cancelación). Es lo que **toca aguas arriba** → abordarlo con cuidado.

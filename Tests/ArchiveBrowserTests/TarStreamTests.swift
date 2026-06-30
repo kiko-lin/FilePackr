@@ -18,15 +18,15 @@ final class TarStreamTests: XCTestCase {
         ])
     }
 
-    private func index(_ tar: Data, chunkSize: Int) -> [ArchiveEntry] {
+    private func index(_ tar: Data, chunkSize: Int) throws -> [ArchiveEntry] {
         let indexer = Tar.StreamIndexer()
         var i = tar.startIndex
         while i < tar.endIndex {
             let end = Swift.min(i + chunkSize, tar.endIndex)
-            indexer.consume(tar.subdata(in: i..<end))
+            try indexer.consume(tar.subdata(in: i..<end))
             i = end
         }
-        return indexer.finish()
+        return try indexer.finish()
     }
 
     func testStreamIndexerMatchesListEntriesAcrossChunkSizes() throws {
@@ -36,7 +36,7 @@ final class TarStreamTests: XCTestCase {
 
         // Trozos no alineados a 512 a propósito (1, 7, 513…) para forzar cabeceras a caballo.
         for chunkSize in [1, 7, 100, 512, 513, 1024, 4096, tar.count] {
-            let got = index(tar, chunkSize: chunkSize)
+            let got = try index(tar, chunkSize: chunkSize)
             XCTAssertEqual(got.map(\.path), expected.map(\.path), "paths con chunk \(chunkSize)")
             XCTAssertEqual(got.map(\.uncompressedSize), expected.map(\.uncompressedSize), "sizes con chunk \(chunkSize)")
             XCTAssertEqual(got.map(\.dataOffset), expected.map(\.dataOffset), "offsets con chunk \(chunkSize)")
@@ -48,15 +48,15 @@ final class TarStreamTests: XCTestCase {
     /// del tar (mismo resultado que `Tar.entryData`, que usa el mismo offset sobre el tar en RAM).
     func testStreamIndexerOffsetsLocateContent() throws {
         let tar = sampleTar()
-        let entries = index(tar, chunkSize: 7)
+        let entries = try index(tar, chunkSize: 7)
         let a = try XCTUnwrap(entries.first { $0.path == "a.txt" })
         XCTAssertEqual(try Tar.entryData(for: a, in: tar), Data("hola".utf8))
         let c = try XCTUnwrap(entries.first { $0.path == "c.txt" })
         XCTAssertEqual(try Tar.entryData(for: c, in: tar), Data("fin".utf8))
     }
 
-    func testEmptyTarIndexesToNothing() {
-        XCTAssertTrue(index(Data(count: 1024), chunkSize: 512).isEmpty)   // dos bloques cero
+    func testEmptyTarIndexesToNothing() throws {
+        XCTAssertTrue(try index(Data(count: 1024), chunkSize: 512).isEmpty)   // dos bloques cero
     }
 
     // MARK: - Fase 2: extracción por offset (re-descomprimir + saltar + emitir)
@@ -70,8 +70,8 @@ final class TarStreamTests: XCTestCase {
 
         // Indexar el flujo descomprimido alimentando el indexer con Gzip.decompress (push).
         let indexer = Tar.StreamIndexer()
-        try Gzip.decompress(gz) { indexer.consume($0) }
-        let entries = indexer.finish()
+        try Gzip.decompress(gz) { try indexer.consume($0) }
+        let entries = try indexer.finish()
         XCTAssertEqual(entries.map(\.path), try Tar.listEntries(in: tar).map(\.path))
 
         for e in entries {
@@ -99,5 +99,48 @@ final class TarStreamTests: XCTestCase {
                               decompressing: gz, with: { try Gzip.decompress($0, sink: $1) },
                               sink: { out.append($0) })
         XCTAssertEqual(out, payload)
+    }
+
+    // MARK: - Fase 3a: recorrido en un solo pase (iterador del motor)
+
+    /// Extraer **todo** en un único pase debe dar el mismo contenido por entrada que `entryData`.
+    func testStreamEntriesExtractsAllInOnePass() throws {
+        let tar = sampleTar()
+        let gz = Gzip.compress(tar)
+        let expected = try Tar.listEntries(in: tar)
+
+        var collected: [String: Data] = [:]
+        try Tar.streamEntries(decompressing: gz, with: { try Gzip.decompress($0, sink: $1) }) { entry in
+            guard !entry.isDirectory else { return nil }
+            return { chunk in collected[entry.path, default: Data()].append(chunk) }
+        }
+
+        for e in expected where !e.isDirectory {
+            XCTAssertEqual(collected[e.path] ?? Data(), try Tar.entryData(for: e, in: tar), "contenido de \(e.path)")
+        }
+        // No se materializan las carpetas como ficheros.
+        XCTAssertFalse(collected.keys.contains("carpeta/"))
+    }
+
+    /// El iterador debe **saltar** las entradas no seleccionadas (devolver `nil`) y emitir solo
+    /// las elegidas, en un único pase.
+    func testStreamEntriesSkipsUnselected() throws {
+        let tar = sampleTar()
+        let gz = Gzip.compress(tar)
+        let wanted: Set<String> = ["a.txt", "c.txt"]
+
+        var collected: [String: Data] = [:]
+        var visited: [String] = []
+        try Tar.streamEntries(decompressing: gz, with: { try Gzip.decompress($0, sink: $1) }) { entry in
+            visited.append(entry.path)
+            guard wanted.contains(entry.path) else { return nil }
+            return { chunk in collected[entry.path, default: Data()].append(chunk) }
+        }
+
+        XCTAssertEqual(Set(collected.keys), wanted)
+        XCTAssertEqual(collected["a.txt"], Data("hola".utf8))
+        XCTAssertEqual(collected["c.txt"], Data("fin".utf8))
+        // Aunque se salten, todas las entradas se visitan (un solo pase ve el archivo entero).
+        XCTAssertTrue(visited.contains("vacio.txt"))
     }
 }

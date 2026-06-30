@@ -72,30 +72,49 @@ public enum Tar {
     /// flujo descomprimido (mismo valor que `listEntries`, que lo calcula sobre el tar ya en RAM).
     /// Replica la lógica de `listEntries` para producir entradas idénticas.
     public final class StreamIndexer {
+        public typealias BodySink = (Data) throws -> Void
+        /// Por cada entrada de fichero decide si emitir su cuerpo (devuelve un sink) o saltarlo
+        /// (`nil`). `nil` global = solo indexar (descarta todo el contenido).
+        private let selecting: ((ArchiveEntry) throws -> BodySink?)?
         private var buffer = Data()
         private var consumed = 0            // bytes del flujo ya procesados (offset lógico actual)
         private var entries: [ArchiveEntry] = []
         private var pendingPath: String?
         private var pendingSize: UInt64?
         private var pendingDate: Date?
-        private var skip = 0               // bytes de contenido de fichero por descartar
+        private var deliver = 0            // bytes de contenido por entregar (al sink) o descartar
+        private var pad = 0               // bytes de padding a 512 por descartar
+        private var sink: BodySink?       // sink de la entrada actual (nil = descartar su contenido)
         private var finished = false
 
-        public init() {}
+        /// Solo indexar: descarta el contenido a medida que llega.
+        public init() { selecting = nil }
+        /// Indexar y, por cada entrada de fichero, emitir su cuerpo si `selecting` devuelve un sink.
+        init(selecting: @escaping (ArchiveEntry) throws -> BodySink?) { self.selecting = selecting }
 
         /// Alimenta el siguiente trozo del flujo descomprimido.
-        public func consume(_ chunk: Data) { buffer.append(chunk); drain() }
+        public func consume(_ chunk: Data) throws { buffer.append(chunk); try drain() }
 
         /// Cierra el flujo y devuelve las entradas indexadas.
-        public func finish() -> [ArchiveEntry] { drain(); return entries }
+        @discardableResult public func finish() throws -> [ArchiveEntry] { try drain(); return entries }
 
-        private func drain() {
+        private func drain() throws {
             while true {
                 if finished { buffer.removeAll(keepingCapacity: false); return }
-                if skip > 0 {                                   // descartar contenido de fichero
-                    let n = Swift.min(skip, buffer.count)
-                    if n > 0 { buffer.removeFirst(n); buffer = Data(buffer); skip -= n; consumed += n }
-                    if skip > 0 { return }
+                if deliver > 0 {                                // contenido de la entrada actual
+                    let n = Swift.min(deliver, buffer.count)
+                    if n > 0 {
+                        if let sink { try sink(Data(buffer.prefix(n))) }   // emitir, o descartar si nil
+                        buffer.removeFirst(n); buffer = Data(buffer); deliver -= n; consumed += n
+                    }
+                    if deliver > 0 { return }
+                    continue
+                }
+                if pad > 0 {                                    // padding: siempre se descarta
+                    let n = Swift.min(pad, buffer.count)
+                    if n > 0 { buffer.removeFirst(n); buffer = Data(buffer); pad -= n; consumed += n }
+                    if pad > 0 { return }
+                    sink = nil
                     continue
                 }
                 guard buffer.count >= blockSize else { return } // necesita una cabecera completa
@@ -127,14 +146,20 @@ public enum Tar {
                 pendingPath = nil; pendingSize = nil; pendingDate = nil
 
                 let isDir = type == 0x35 || name.hasSuffix("/")
+                var bodySink: BodySink?
                 if type == 0x30 || type == 0x00 || type == 0x35 || isDir {
-                    entries.append(ArchiveEntry(
+                    let entry = ArchiveEntry(
                         path: name, compressedSize: size, uncompressedSize: size,
                         isDirectory: isDir, modificationDate: mtime,
-                        isEncrypted: false, dataOffset: UInt64(consumed + blockSize)))
+                        isEncrypted: false, dataOffset: UInt64(consumed + blockSize))
+                    entries.append(entry)
+                    if !isDir { bodySink = try selecting?(entry) ?? nil }
                 }
                 buffer.removeFirst(blockSize); buffer = Data(buffer); consumed += blockSize
-                skip = dataBlocks * blockSize
+                // deliver+pad = dataBlocks*512 (= lo que el indexer "saltaba"); para carpetas, 0.
+                deliver = isDir ? 0 : Int(size)
+                pad = dataBlocks * blockSize - deliver
+                sink = bodySink
             }
         }
     }
@@ -167,6 +192,18 @@ public enum Tar {
                 if toEmit == 0 { throw Done() }              // ya tenemos la entrada: cortar
             }
         } catch is Done {}
+    }
+
+    /// Recorrido en **un solo pase** (Fase 3a, opción A del diseño): re-descomprime `compressed`
+    /// una vez y, por cada entrada en orden de stream, llama `selecting(entry)`. Si devuelve un
+    /// sink, le emite el contenido de esa entrada por trozos (streaming); si devuelve `nil`, la
+    /// salta. Pensado para "extraer todo"/lote sin re-descomprimir por entrada. Memoria acotada.
+    public static func streamEntries(decompressing compressed: Data,
+                                     with streamDecompress: (Data, (Data) throws -> Void) throws -> Void,
+                                     selecting: @escaping (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
+        let indexer = StreamIndexer(selecting: selecting)
+        try streamDecompress(compressed) { try indexer.consume($0) }
+        try indexer.finish()
     }
 
     /// `true` si `data` empieza con la firma ustar (es un TAR). Sirve para distinguir
