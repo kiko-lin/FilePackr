@@ -367,17 +367,17 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       residuales de un lote anterior; ahora `processNext` limpia el estado del lote al terminar.
       Pendiente solo el `git push` (el agente no tiene red).
 - [ ] **Comportamiento configurable al arrastrar un archivo al icono de la app**
-      (Dock/Finder) · análisis hecho 2026-06-26: hoy `.onOpenURL` (`ContentView.swift:142`)
-      → `handleOpen()` siempre abre y muestra contenido (`doc.openArchive()`), sin
-      opción. No existe preferencia alguna en `AppSettings` para esto.
-  - Nuevo enum `FileOpenAction` (`.open` / `.extract` / `.ask`) en `AppSettings`,
-    persistido igual que `extractMode`.
-  - `handleOpen()` consulta la preferencia: si `.extract`, salta `openArchive()` y va
-    directo a extracción (reusa `extractMode`/`fixedExtractFolder` ya existentes para
-    el destino); si `.ask`, alerta "¿Abrir o extraer?" antes de decidir.
-  - Exponer el Picker en `SettingsView`.
-  - Esfuerzo bajo: no toca `CFBundleDocumentTypes` ni `AppDelegate`, el flujo de
-    apertura ya es robusto y centralizado. Uso diario frecuente.
+      (Dock/Finder) · **APARCADO 2026-06-30 — no merece la pena por ahora.** Razones: (1) el
+      caso "extraer directo" ya está cubierto por **«Descomprimir aquí» de los Servicios del
+      Finder** (`FinderServices.swift`), una vía más natural (menú del propio archivo); (2)
+      contradice el valor diferencial de la app (visor/gestor: ver antes de extraer); (3) añade
+      preferencia persistida + Picker + rama en `handleOpen` + borde del archivo cifrado (en
+      `.extract` igual hay que abrir para pedir la clave) + el `.ask` cansa; (4) no hay demanda
+      real. Reconsiderar solo si en el uso diario el gesto "arrastrar al Dock para extraer" se
+      vuelve frecuente y los Servicios no bastan; entonces, versión mínima `.open`/`.extract`
+      (sin `.ask`). Análisis técnico original (por si se retoma): enum `FileOpenAction` en
+      `AppSettings` (persistido como `extractMode`); `handleOpen()` (`ContentView`) consulta la
+      preferencia; Picker en `SettingsView`; no toca `CFBundleDocumentTypes` ni `AppDelegate`.
 - [ ] **Convertir un icono de la barra superior en menú con opciones rápidas**
       (`documentBar`, `ContentView.swift:324`, botones a la derecha: Extraer todo ·
       Cerrar · Exportar · Guardar) · análisis hecho 2026-06-26: hoy son `Button`
