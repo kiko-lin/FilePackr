@@ -13,7 +13,7 @@ y escritura, con cifrado), **tar / tar.gz / tar.xz / tar.bz2 / gz / xz / bz2**
 sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 - **Repo local**: `~/Desktop/Repos/FilePackr` (la app y el producto son **FilePackr**).
-- **Remoto git**: `git@github.com:kiko-lin/packr.git` (SSH). El entorno del agente
+- **Remoto git**: `git@github.com:kiko-lin/FilePackr.git` (SSH). El entorno del agente
   **no tiene red** → los `git push` los hace el usuario.
 - **Plataforma**: macOS 26 (Tahoe), Swift 6.3, Xcode 26. App target `FilePackr`,
   bundle `com.kiko.FilePackr`, lenguaje Swift 5 mode con `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.

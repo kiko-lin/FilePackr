@@ -52,7 +52,7 @@ Ver [`docs/architecture.md`](docs/architecture.md) y [`docs/encryption.md`](docs
 ## Arquitectura
 
 ```
-FilePackr/                            (raíz del repo; remoto: github.com/kiko-lin/packr)
+FilePackr/                            (raíz del repo; remoto: github.com/kiko-lin/FilePackr)
 ├── Package.swift                     paquete "FilePackrCore" (motor, sin UI, testeable por CLI)
 ├── Sources/
 │   ├── ArchiveBrowser/               motor de archivos (sin UI)
