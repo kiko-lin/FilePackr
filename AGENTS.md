@@ -483,6 +483,24 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       cabecera ya era lineal y correcto → no se tocó. **PENDIENTE**: verificación manual con VoiceOver
       (⌘F5), la hace el usuario. Descartado por riesgo>valor: mover el foco al overlay
       (`@AccessibilityFocusState`).
+- [ ] **Ampliar cobertura de tests** (huecos detectados en la evaluación 2026-07-01; prioridad
+      media, nada bloquea). El motor está bien cubierto (158 tests, interop real con zip/unzip/
+      pyzipper/tar), pero faltan:
+  - **Robustez ante corrupción** (lo más valioso): ficheros truncados, CRC32 que no cuadra tras
+    descomprimir, cabecera tar con checksum inválido, central directory dañado. Hoy toda la suite
+    asume input bien formado → no se prueba que un archivo roto falle limpio (sin crash ni datos
+    a medias).
+  - **Anti-DoS más allá del ratio DEFLATE**: hay cota de ratio por entrada (`Deflate`), pero no
+    test de **total agregado** (muchas entradas declaradas enormes) ni de límite por entrada; ni
+    bomba en tar/7z (solo ZIP). Va con el item de la cota agregada anti-zip-bomb.
+  - **Formatos libarchive**: 7z/xar/iso solo tienen round-trip básico; **RAR/CAB/CPIO/LHA: cero
+    tests** (aunque estén en el UI). Faltan fixtures reales de esos formatos.
+  - **Cifrado AES 128/192**: solo se prueba AES-256. El motor escribe las tres fuerzas
+    (`ZipAES`), pero 128/192 no tienen cobertura de round-trip/interop.
+  - **Multivolumen**: `VolumeStore` cubre nombrado + descubrimiento + join; faltan edge cases
+    (>999 partes y su formato de índice, recuperación de un juego con una parte ausente).
+  - **`streamEntries` (un solo pase)**: cubierto el skip y casos básicos; falta sucesión de
+    varias entradas grandes y "saltar entrada → continuar sin desincronizar".
 - [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
       notarización, `.dmg`. Aplazado a propósito, no por bajo valor.
