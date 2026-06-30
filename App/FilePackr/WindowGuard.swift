@@ -76,6 +76,10 @@ struct WindowGuard: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    // @MainActor explícito: el coordinador es un NSWindowDelegate (callbacks en el hilo
+    // principal) y toca estado @MainActor (WindowSaveHandlers, NSWindow). Xcode 26 lo infiere
+    // del SDK; Xcode 16 (CI) no, y sin esto la app no compila allí.
+    @MainActor
     final class Coordinator: NSObject, NSWindowDelegate {
         var edited = false { didSet { window?.isDocumentEdited = edited } }
         var extracting = false

@@ -125,6 +125,10 @@ final class FileOutlineView: NSOutlineView {
 }
 
 extension ArchiveOutlineView {
+    // @MainActor explícito: el coordinador es delegado de NSOutlineView (callbacks en el hilo
+    // principal) y toca estado @MainActor (el documento, NSOutlineView, caches de Quick Look).
+    // Xcode 26 lo infiere del SDK; Xcode 16 (CI) no, y sin esto la app no compila allí.
+    @MainActor
     final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate,
                              NSFilePromiseProviderDelegate, QLPreviewPanelDataSource {
         var doc: ArchiveDocument
