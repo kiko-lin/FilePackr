@@ -24,7 +24,12 @@ jobs:
       - name: Versión de Swift
         run: swift --version
 
-      - name: Compilar y testear (FilePackrCore)
-        # Los tests de interop (zip/unzip/pyzipper) se saltan solos con XCTSkipUnless
-        # si la herramienta no está, así que el runner queda en verde sin instalar nada.
+      - name: Compilar y testear (motor)
+        # Compila las dos librerías (motor + modelo) y corre los tests del MOTOR.
+        # FILEPACKR_SKIP_MODEL_TESTS excluye FilePackrModelTests, que requiere el XCTest de
+        # Xcode 26 (no disponible en runners alojados). Ver Package.swift y el TODO en AGENTS.md.
+        # Los tests de interop (zip/unzip/pyzipper) se saltan solos con XCTSkipUnless si la
+        # herramienta no está, así que el runner queda en verde sin instalar nada.
+        env:
+          FILEPACKR_SKIP_MODEL_TESTS: "1"
         run: swift test

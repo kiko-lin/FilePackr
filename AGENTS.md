@@ -443,11 +443,16 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       en claro). Haría falta el **LZMA SDK** de Igor Pavlov (cifra contenido y nombres; además
       comprime multihilo, ver "valorar" arriba) → vendorizar dependencia, rompe el principio de
       cero-deps. ZIP+AES-256 ya cubre "archivo seguro". Confirmado en revisión externa (2026-06-21).
-- [ ] **CI: compilar también la app de Xcode en el workflow** · **prioridad BAJA, BLOQUEADO por
-      runners** (añadido 2026-06-30). Hay CI en `.github/workflows/ci.yml` que corre `swift test`
-      (el **motor**, `FilePackrCore`, 155 tests) en cada PR a `main`. **Falta** que el CI verifique
-      que la **app** (target Xcode `FilePackr` + sus 6 tests `FilePackrTests`, que viven en el
-      `.pbxproj`, no en el paquete) **compila**. Motivo de no hacerlo ya: el proyecto usa
+- [ ] **CI: ampliar cobertura (tests de modelo + app) cuando haya runner macOS 26** · **prioridad
+      BAJA, BLOQUEADO por runners** (añadido 2026-06-30). Hay CI en `.github/workflows/ci.yml` que en
+      cada PR a `main` compila ambas librerías (motor + modelo) y corre los **tests del motor**
+      (`ArchiveBrowserTests`, ~108). **Excluidos del CI** por ahora: (a) **`FilePackrModelTests`** —
+      no compila en el Swift de los runners alojados porque está escrito contra el `XCTest` de
+      Xcode 26 (setUp/tearDown aislables a `@MainActor`; en Swift más antiguo son `nonisolated` →
+      error de aislamiento de actor). Se omite con la var **`FILEPACKR_SKIP_MODEL_TESTS`** (guard en
+      `Package.swift`); en local con Xcode 26 corre normal. (b) La **app** (target Xcode `FilePackr` +
+      sus 6 tests `FilePackrTests`, que viven en el `.pbxproj`, no en el paquete). Motivo común: el
+      proyecto usa
       **Xcode 26 / macOS 26 (Tahoe)** y los runners alojados de GitHub van por **macOS 15** → un job
       `xcodebuild build` daría rojo por la **versión del runner, no por el código** (falso positivo
       inútil). **Retomar** cuando GitHub publique el runner de macOS 26: añadir un job aparte con
