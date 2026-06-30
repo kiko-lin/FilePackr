@@ -162,7 +162,6 @@ struct PasswordSheet: View {
             Text(title).font(.headline)
             SecureField(loc("password.field"), text: $password)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 280)
                 .onSubmit { if !password.isEmpty { onConfirm() } }
             if let note {
                 Text(note).font(.callout).foregroundStyle(.red)
@@ -177,5 +176,6 @@ struct PasswordSheet: View {
             }
         }
         .padding(20)
+        .frame(width: 320)   // compacta; sin esto el Spacer de los botones la estira
     }
 }
