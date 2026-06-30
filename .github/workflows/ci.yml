@@ -1,6 +1,8 @@
 name: CI
 
-# Detección de errores en cada PR: compila el paquete y corre los tests del motor.
+# Detección de errores en cada PR. Dos jobs en paralelo:
+#  - test: compila el paquete y corre los tests del motor.
+#  - build-app: compila la app (capa de vistas), que `swift test` no toca.
 # Si algo no compila o un test falla, el PR queda marcado en rojo.
 
 on:
@@ -27,9 +29,35 @@ jobs:
       - name: Compilar y testear (motor)
         # Compila las dos librerías (motor + modelo) y corre los tests del MOTOR.
         # FILEPACKR_SKIP_MODEL_TESTS excluye FilePackrModelTests, que requiere el XCTest de
-        # Xcode 26 (no disponible en runners alojados). Ver Package.swift y el TODO en AGENTS.md.
+        # Xcode 26 (las clases @MainActor sobrescriben setUp/tearDown síncronos, que en el
+        # XCTest del runner —Xcode 16— son nonisolated y no compilan). Ver Package.swift y el
+        # TODO en AGENTS.md. Reincorporar cuando exista runner de macOS 26.
         # Los tests de interop (zip/unzip/pyzipper) se saltan solos con XCTSkipUnless si la
         # herramienta no está, así que el runner queda en verde sin instalar nada.
         env:
           FILEPACKR_SKIP_MODEL_TESTS: "1"
         run: swift test
+
+  build-app:
+    name: build app (xcodebuild)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versión de Xcode
+        run: xcodebuild -version
+
+      - name: Compilar la app (capa de vistas)
+        # `swift test` solo cubre motor + modelo; la app (App/FilePackr) no se compilaba en CI,
+        # así que una rotura de la capa de vistas pasaba desapercibida hasta abrir Xcode.
+        # Build sin firma (no distribuimos aquí, solo verificamos que compila). El proyecto es
+        # objectVersion 77 (Xcode 16), que el runner macos-15 abre sin problema; deployment
+        # target macOS 14.
+        run: >
+          xcodebuild build
+          -project App/FilePackr.xcodeproj
+          -scheme FilePackr
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGN_IDENTITY=""
