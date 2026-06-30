@@ -1,5 +1,7 @@
 # FilePackr
 
+[![CI](https://github.com/kiko-lin/FilePackr/actions/workflows/ci.yml/badge.svg)](https://github.com/kiko-lin/FilePackr/actions/workflows/ci.yml)
+
 Gestor de archivos comprimidos para **macOS**: abre y navega archivos **sin
 descomprimirlos**, edita (añadir, borrar, renombrar, mover, crear carpetas), extrae,
 previsualiza con Quick Look, **convierte entre formatos** y **cifra con contraseña**
@@ -53,7 +55,8 @@ Ver [`docs/architecture.md`](docs/architecture.md) y [`docs/encryption.md`](docs
 
 ```
 FilePackr/                            (raíz del repo; remoto: github.com/kiko-lin/FilePackr)
-├── Package.swift                     paquete "FilePackrCore" (motor, sin UI, testeable por CLI)
+├── Package.swift                     paquete "FilePackrCore": librerías ArchiveBrowser + FilePackrModel
+├── .github/workflows/ci.yml          CI (GitHub Actions): compila y corre los tests del motor en cada PR
 ├── Sources/
 │   ├── ArchiveBrowser/               motor de archivos (sin UI)
 │   │   ├── ArchiveFormat.swift        enum de formato: capacidades + detección (ext/firma)
@@ -63,25 +66,30 @@ FilePackr/                            (raíz del repo; remoto: github.com/kiko-l
 │   │   ├── Tar / Gzip / Xz / Bzip2    tar y compresores (Swift puro / Compression / libbz2)
 │   │   ├── LibArchive.swift           puente a la libarchive del sistema (7z/rar/iso/…)
 │   │   └── Volumes / VolumeStore      troceado por bytes (en memoria / en disco)
-│   ├── Cbz2/                          systemLibrary → libbz2 del sistema
-│   └── Carchive/                      systemLibrary → libarchive del sistema (shim.h propio)
-├── Tests/                            tests del motor (swift test); interop opcional (zip/unzip, pyzipper)
+│   ├── FilePackrModel/               capa de modelo de la app (sin vistas; testeable por CLI)
+│   │   ├── ArchiveDocument.swift      modelo (árbol editable, abrir/guardar/exportar/extraer)
+│   │   ├── ArchiveSaver / SavePayloadBuilder   codifica el SavePayload a disco (streaming)
+│   │   ├── FileNode / ExportPlan      nodo del árbol / instantánea Sendable para extraer
+│   │   ├── OperationCoordinators.swift  coordinadores de añadir / extraer / guardar
+│   │   └── AppSettings.swift          ajustes (tema, idioma, formato/cifrado por defecto)
+│   └── Cbz2 / Carchive / Cz / Clzma  systemLibrary → libbz2 / libarchive / zlib / liblzma del sistema
+├── Tests/
+│   ├── ArchiveBrowserTests/          tests del motor (swift test; interop opcional zip/unzip, pyzipper)
+│   └── FilePackrModelTests/          tests del modelo (en local; excluidos del CI, ver AGENTS.md)
 └── App/                             proyecto Xcode de la app (SwiftUI/AppKit)
     ├── FilePackr.xcodeproj
-    ├── FilePackr/                    fuentes de la app
-    │   ├── ArchiveDocument.swift      modelo (árbol editable, abrir/guardar/exportar/extraer)
-    │   ├── ArchiveSaver.swift         codifica el SavePayload a disco (streaming/saver)
-    │   ├── FileNode / ExportPlan      nodo del árbol / instantánea Sendable para extraer
+    ├── FilePackr/                    vistas y arranque de la app
     │   ├── ArchiveOutlineView.swift   navegador NSOutlineView (selección, drag, Quick Look)
     │   ├── ContentView.swift          cabecera + columna de acciones + barra de estado + diálogos
     │   ├── WindowGuard.swift          aviso de cambios sin guardar (cierre de ventana)
-    │   ├── SettingsView / AppSettings / Localization
+    │   ├── SettingsView / Localization
     │   └── FilePackrApp.swift
     └── FilePackrTests/               tests del modelo de la app (⌘U; no los ve `swift test`)
 ```
 
-La lógica de archivos vive en un paquete Swift independiente de la UI, así la parte
-sensible (formato, cifrado) se prueba sin levantar la interfaz.
+La lógica de archivos (`ArchiveBrowser`) y la capa de modelo (`FilePackrModel`) viven en
+un paquete Swift independiente de la UI, así la parte sensible (formato, cifrado, edición)
+se prueba sin levantar la interfaz.
 
 ## Compilar y probar
 
@@ -100,6 +108,13 @@ open App/FilePackr.xcodeproj   # luego ⌘R (esquema FilePackr); tests del model
 xcodebuild -project App/FilePackr.xcodeproj -scheme FilePackr \
   -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
+
+### Integración continua
+
+Cada PR (y push) a `main` dispara [GitHub Actions](.github/workflows/ci.yml): compila las
+librerías y corre los **tests del motor** en un runner de macOS. Los tests de `FilePackrModel`
+y la app quedan fuera del CI por ahora (requieren la toolchain de Xcode 26, aún no disponible
+en los runners alojados) y se ejecutan en local; ver [`AGENTS.md`](AGENTS.md) para el detalle.
 
 ## Estado y pendientes
 
