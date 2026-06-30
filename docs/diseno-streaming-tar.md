@@ -157,6 +157,67 @@ Tres operaciones:
 4. ¿El `container` comprimido se mantiene **mapeado** todo el ciclo de vida del documento?
 5. Métrica de éxito de memoria: ¿test automatizado de RSS o verificación manual?
 
+## 11. Retoma — arranque de la próxima sesión (Fases 3b y 4)
+
+> Punto de partida: rama `feat/streaming-tar`, `swift test` 144 verde. El **motor está completo**
+> (`StreamIndexer` indexar, `streamExtract` por offset, `streamEntries` un pase) y **aislado**
+> (no toca el codec). A partir de aquí se **toca aguas arriba**; ir con cuidado y la suite delante.
+
+**Antes de tocar código, resolver §10 #2–#5.** Recomendaciones de partida (revisar al empezar):
+- #2 Acceso aleatorio repetido (Quick Look): **aceptar el coste en v1** (re-descomprime hasta el
+  offset). Sin caché por ahora; documentar.
+- #3 Tar **sparse** (GNU): **no soportar en v1**, documentar como limitación (caso exótico).
+- #4 `container` comprimido: **mantenerlo mapeado** — `openArchive` ya carga con `mappedIfSafe`,
+  así que el `.tar.gz` original ya está mapeado; basta con conservar **esos** bytes como container.
+- #5 Memoria: empezar con **verificación manual** (Instruments / Activity Monitor con un tar.gz
+  grande); un test de RSS es frágil, valorarlo aparte.
+
+### Fase 3b — cablear el codec (`Sources/ArchiveBrowser/ArchiveCodec.swift`)
+Hoy `TarCodec.open` hace `decompress(data)` → **tar entero en RAM** como `container`, y
+`entryData`/`extract` leen de ese tar. Cambiar a conservar el **container comprimido**:
+
+1. **`TarCodec`** necesita también el `streamDecompress` del formato (hoy solo tiene `decompress`).
+   Distinguir dos casos:
+   - **`.tar` puro** (sin compresión): dejar como hoy — `container = data` (ya viene mapeado),
+     `entries = listEntries`, `entryData = Tar.entryData` (acceso aleatorio directo). **No tiene el
+     problema de RAM** (no se descomprime nada), así que no hace falta cambiarlo.
+   - **`.tarGzip`/`.tarXz`/`.tarBzip2`**: `container = data` **comprimido**; `entries =` indexar con
+     `StreamIndexer` alimentado por `streamDecompress(data){…}`; `entryData(entry,container) =`
+     `streamExtract` a un buffer; `extract(entry,container,sink) =` `streamExtract` directo al sink.
+2. **`SingleFileCodec.open`**: cuando detecta tar (ustar magic), hoy `decompress(data)` entero →
+   cambiar a **indexar** (`StreamIndexer` con `streamDecompress`) y devolver `container = data`
+   comprimido + `format = tarFormat`. Aguas arriba la extracción usará `format.codec` (el `TarCodec`
+   del `tarFormat`) sobre ese container comprimido → **debe re-descomprimir** (de ahí el punto 1).
+3. **Invariante clave a respetar:** "el `container` de `ArchiveReadResult` es lo que se conserva
+   como `sourceArchiveData` y de lo que se extrae". Pasa de *tar descomprimido* a *bytes comprimidos*;
+   verificar **todos** los consumidores de `sourceArchiveData`/`entryData`/`extract` (sobre todo
+   `ExportPlan.payload = .archiveEntry(...)` en `FilePackrModel`).
+4. Correr **toda** la suite: los tests de `ArchiveDocumentTests` (round-trip tar.gz) deben seguir
+   verdes — mismo resultado, menos RAM.
+
+### Fase 4 — "extraer todo"/lote en un pase (modelo, `FilePackrModel`)
+Hoy la extracción recorre el árbol `ExportPlan` y llama `codec.extract` por entrada → con tar
+comprimido serían N re-descompresiones. Falta **diseñar la integración** (decisión §10 #1 ya fija el
+*qué*: usar `Tar.streamEntries`; falta el *cómo* en el modelo):
+- Detectar que una extracción cubre **varias entradas del mismo tar comprimido** (p. ej. "Extraer
+  todo", o una carpeta entera) y desviarla a **un solo `streamEntries`**, colocando cada entrada en
+  su destino relativo y **saltando** las no seleccionadas.
+- Respetar **progreso** (bytes emitidos) y **cancelación** (`CancelToken`) dentro del pase.
+- Una entrada suelta (Quick Look, selección de 1) sigue por `streamExtract` (offset).
+- **Sub-decisión a tomar al empezar:** cómo encaja con `ExportPlan` (¿un camino especial cuando el
+  nodo raíz a extraer es un archivo tar comprimido entero? ¿el coordinador agrupa por archivo?).
+  Mantener `ExportPlan` **neutral** (no meter un caso por-formato; el "un pase" lo orquesta el modelo
+  llamando al motor).
+
+### Checklist de "hecho" (toda la feature)
+- [ ] Abrir+listar un `.tar.gz` grande **no** escala la RAM (verificado a mano).
+- [ ] Extraer **todo** = un solo pase de descompresión.
+- [ ] Extraer **una** entrada suelta = `streamExtract` (offset).
+- [ ] Sin regresión: `swift test` verde + `xcodebuild build` app verde + `ArchiveDocumentTests` ok.
+- [ ] Limitaciones documentadas (sparse no soportado; Quick Look re-descomprime).
+- [ ] Pulido pendiente: el buffer de `StreamIndexer` hace `Data(buffer)` tras cada `removeFirst`
+      (re-basa índices; correcto pero copia) → cambiar a un índice de lectura.
+
 ---
 
 **Estado:** rama `feat/streaming-tar`. **El motor está completo y verificado** — Fase 1
