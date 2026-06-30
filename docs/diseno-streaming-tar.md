@@ -166,11 +166,21 @@ Tres operaciones:
 4. ✅ **RESUELTA (2026-06-30) → mantenerlo mapeado.** `openArchive` ya carga con `mappedIfSafe`, así
    que el SO pagina los bytes comprimidos bajo demanda y la RAM no escala (equivalente a leer de un
    `fd` como libarchive). Conservar **esos** bytes como `container`; no copiarlos a RAM.
-5. ✅ **RESUELTA (2026-06-30) → test estructural de streaming (no RSS).** Un test de RSS es frágil
-   entre máquinas/CI. Más robusto y determinista: un `streamDecompress` espía que afirme que se
-   procesa por trozos y que el indexer **nunca** acumula el flujo entero (pico de buffer acotado), y
-   aserción de que el `container` conservado es el **comprimido** (`container.count` ≈ tamaño del
-   `.gz`, no del tar inflado). Verificación manual con Instruments como complemento, no como prueba.
+5. ✅ **RESUELTA (2026-06-30) → test estructural de streaming (no RSS) + medición puntual.** Un test
+   de RSS en CI es frágil entre máquinas, así que la prueba **automatizada** es estructural y
+   determinista: un `streamDecompress` espía que afirme que se procesa por trozos y que el indexer
+   **nunca** acumula el flujo entero, y aserción de que el `container` conservado es el **comprimido**
+   (`container.count` ≈ tamaño del `.gz`, no del tar inflado).
+   **Medición de RSS hecha** (CLI release sobre el motor real + `/usr/bin/time -l`, fixture `.tar.gz`
+   de tar interno 1.07 GB / `.gz` 1 MB, extracción completa a un sink que descarta):
+
+   | | código previo (`48469d3`) | streaming (`d4ce9bb`) |
+   |---|---|---|
+   | `container` conservado | 1.07 GB (tar inflado) | 1 MB (el `.gz` mapeado) |
+   | **RSS pico** | **1.31 GB** | **8.5 MB** |
+
+   → ~154× menos RAM, sin escalar con el tamaño del tar. (El método/harness queda en notas de sesión,
+   no en el repo.)
 
 ## 11. Retoma — arranque de la próxima sesión (Fases 3b y 4)
 
@@ -225,13 +235,13 @@ comprimido serían N re-descompresiones. Falta **diseñar la integración** (dec
   llamando al motor).
 
 ### Checklist de "hecho" (toda la feature)
-- [x] Abrir+listar un `.tar.gz` **no** infla el TAR en RAM — container comprimido + `StreamIndexer`
-      (Fase 3b). Test estructural en `ArchiveCodecTests`. Falta solo confirmar RSS a mano (§10 #5).
+- [x] Abrir+listar+extraer un `.tar.gz` **no** infla el TAR en RAM — container comprimido +
+      `StreamIndexer` (Fase 3b). Test estructural en `ArchiveCodecTests` **y RSS medido** (ver §10 #5).
 - [x] Extraer **todo** = un solo pase de descompresión (Fase 4: `extractAll` → `streamEntries`;
       test `testTarGzipExtractAllUsesSinglePass` afirma 1 pase).
 - [x] Extraer **una** entrada suelta = `streamExtract` (offset), corta antes (Fase 4: `extractAll`
       con 1 entrada → `extract` → `streamExtract`).
-- [x] Sin regresión: `swift test` 150 verde + `xcodebuild` app SUCCEEDED.
+- [x] Sin regresión: `swift test` 152 verde + `xcodebuild` app SUCCEEDED.
 - [x] Limitaciones documentadas y aplicadas: Quick Look re-descomprime; **sparse no soportado con
       guard real** — `listEntries` y `StreamIndexer` lanzan `TarError.unsupportedSparse` ante type
       `'S'` (GNU antiguo) o claves `GNU.sparse.*` (PAX), nunca emiten basura (`TarStreamTests`).
@@ -241,9 +251,9 @@ comprimido serían N re-descompresiones. Falta **diseñar la integración** (dec
 
 ---
 
-**Estado:** rama `feat/streaming-tar`. **El motor está completo y verificado** — Fase 1
-(`StreamIndexer`), Fase 2 (`streamExtract`), Fase 3a (`streamEntries`, un pase selectivo) +
-decisión §10 #1 tomada (opción A). Suite **144 verdes**. Todo **aislado: aún no toca el codec**.
-Siguiente: **Fase 3b** (cablear `TarCodec`/`SingleFileCodec` para conservar el container comprimido
-y usar índice/iterador) y **Fase 4** (integrar con la extracción async del modelo: "extraer todo"
-en un pase, progreso/cancelación). Es lo que **toca aguas arriba** → abordarlo con cuidado.
+**Estado: COMPLETA** en la rama `feat/streaming-tar`. Todas las fases hechas y verificadas —
+Fase 1 (`StreamIndexer`), Fase 2 (`streamExtract`), Fase 3a (`streamEntries`), **Fase 3b** (codec
+conserva el container comprimido + API `extractAll`), **Fase 4** (extracción en un solo pase en el
+modelo, `ExportPlan` neutral), guard de **sparse** (§10 #3) y **pulido** del `StreamIndexer` (índice
+de lectura). Decisiones §10 #1–#5 resueltas. **`swift test` 152 verde + `xcodebuild` app OK + RSS
+medido** (§10 #5: 1.31 GB → 8.5 MB). Pendiente solo: decidir **push / PR** de la rama.
