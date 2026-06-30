@@ -58,4 +58,46 @@ final class TarStreamTests: XCTestCase {
     func testEmptyTarIndexesToNothing() {
         XCTAssertTrue(index(Data(count: 1024), chunkSize: 512).isEmpty)   // dos bloques cero
     }
+
+    // MARK: - Fase 2: extracción por offset (re-descomprimir + saltar + emitir)
+
+    /// Round-trip completo sobre un `.tar.gz` real: indexar el flujo descomprimido (Fase 1) y
+    /// extraer cada entrada por su offset re-descomprimiendo (Fase 2) debe dar el mismo contenido
+    /// que `Tar.entryData` sobre el tar entero en RAM.
+    func testStreamExtractMatchesEntryData() throws {
+        let tar = sampleTar()
+        let gz = Gzip.compress(tar)
+
+        // Indexar el flujo descomprimido alimentando el indexer con Gzip.decompress (push).
+        let indexer = Tar.StreamIndexer()
+        try Gzip.decompress(gz) { indexer.consume($0) }
+        let entries = indexer.finish()
+        XCTAssertEqual(entries.map(\.path), try Tar.listEntries(in: tar).map(\.path))
+
+        for e in entries {
+            var out = Data()
+            try Tar.streamExtract(offset: Int(try XCTUnwrap(e.dataOffset)), length: Int(e.uncompressedSize),
+                                  decompressing: gz, with: { try Gzip.decompress($0, sink: $1) },
+                                  sink: { out.append($0) })
+            XCTAssertEqual(out, try Tar.entryData(for: e, in: tar), "contenido de \(e.path)")
+        }
+    }
+
+    /// La extracción debe ser exacta también para una entrada grande no alineada a 512.
+    func testStreamExtractExactBytesForOddSizedEntry() throws {
+        let payload = Data((0..<5000).map { UInt8($0 % 251) })   // 5000 B, no múltiplo de 512
+        let tar = Tar.write([
+            Tar.WriteItem(path: "x", data: Data("antes".utf8), modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "big.bin", data: payload, modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "z", data: Data("despues".utf8), modifiedAt: nil, isDirectory: false),
+        ])
+        let gz = Gzip.compress(tar)
+        let big = try XCTUnwrap(try Tar.listEntries(in: tar).first { $0.path == "big.bin" })
+
+        var out = Data()
+        try Tar.streamExtract(offset: Int(try XCTUnwrap(big.dataOffset)), length: Int(big.uncompressedSize),
+                              decompressing: gz, with: { try Gzip.decompress($0, sink: $1) },
+                              sink: { out.append($0) })
+        XCTAssertEqual(out, payload)
+    }
 }

@@ -139,6 +139,36 @@ public enum Tar {
         }
     }
 
+    /// Extracción por offset (Fase 2): emite por `sink` el rango `[offset, offset+length)` del
+    /// flujo **descomprimido**, re-descomprimiendo `compressed` con `streamDecompress` (p. ej.
+    /// `Gzip.decompress(_:sink:)`) sin materializar el flujo. Descarta hasta `offset` y **para de
+    /// descomprimir** en cuanto ha emitido los `length` bytes de la entrada (no infla el resto).
+    public static func streamExtract(offset: Int, length: Int,
+                                     decompressing compressed: Data,
+                                     with streamDecompress: (Data, (Data) throws -> Void) throws -> Void,
+                                     sink: @escaping (Data) throws -> Void) throws {
+        guard length > 0 else { return }   // carpetas / ficheros vacíos: nada que emitir
+        var toSkip = offset
+        var toEmit = length
+        struct Done: Error {}
+        do {
+            try streamDecompress(compressed) { chunk in
+                var piece = chunk[...]                       // Data.SubSequence == Data
+                if toSkip > 0 {
+                    let s = Swift.min(toSkip, piece.count)
+                    piece = piece.dropFirst(s)
+                    toSkip -= s
+                }
+                if toEmit > 0, !piece.isEmpty {
+                    let e = Swift.min(toEmit, piece.count)
+                    try sink(Data(piece.prefix(e)))
+                    toEmit -= e
+                }
+                if toEmit == 0 { throw Done() }              // ya tenemos la entrada: cortar
+            }
+        } catch is Done {}
+    }
+
     /// `true` si `data` empieza con la firma ustar (es un TAR). Sirve para distinguir
     /// un `.gz`/`.xz`/`.bz2` suelto de un `.tar.<x>` tras descomprimir.
     public static func hasUstarMagic(_ data: Data) -> Bool {

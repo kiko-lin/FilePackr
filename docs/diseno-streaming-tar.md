@@ -105,8 +105,10 @@ Tres operaciones:
    carpetas, ficheros vacíos y multi-bloque; los offsets localizan el contenido correcto. No toca
    el codec todavía. (Pendiente de optimizar: el buffer hace `Data(buffer)` tras cada `removeFirst`
    para re-basar índices — correcto pero copia; mejorar con un índice de lectura en la fase de pulido.)
-2. **Extracción por offset** de una entrada (re-descomprimir + saltar + emitir); test round-trip
-   contra `entryData` actual.
+2. ✅ **HECHO** — **Extracción por offset** `Tar.streamExtract(offset:length:decompressing:with:sink:)`:
+   re-descomprime, descarta hasta el offset, emite los `length` bytes y **corta** la descompresión
+   (no infla el resto). Tests: round-trip sobre un `.tar.gz` real == `Tar.entryData` para todas las
+   entradas, y exactitud con una entrada grande no alineada a 512. Sigue sin tocar el codec.
 3. **Cableado del codec:** `TarCodec`/`SingleFileCodec` usan índice + container comprimido; ajustar
    `ArchiveReadResult`. Ejecutar toda la suite (no debe romperse nada aguas arriba).
 4. **Extracción por lotes ordenada** (un pase) + integración con `ExportPlan`/extraer-todo.
@@ -141,8 +143,9 @@ Tres operaciones:
 
 ---
 
-**Estado:** rama `feat/streaming-tar`. **Fase 1 (indexador incremental) hecha y verificada**
-(`Tar.StreamIndexer` + `TarStreamTests`; suite 140 verdes). Siguiente paso natural: **Fase 2**
-(extracción por offset: re-descomprimir + saltar + emitir, con test round-trip contra `entryData`).
-Antes de la Fase 3/4 conviene cerrar las decisiones abiertas (§10), sobre todo **dónde vive la
-extracción por lotes** (codec batch vs `ExportPlan`), que condiciona la API.
+**Estado:** rama `feat/streaming-tar`. **Fases 1 y 2 hechas y verificadas** (`Tar.StreamIndexer` +
+`Tar.streamExtract` + `TarStreamTests`; suite 142 verdes). Las piezas del motor están listas y
+aisladas (aún **no** tocan el codec). **Antes de la Fase 3** (cablear `TarCodec`/`SingleFileCodec`
+para conservar el container comprimido en vez del tar en RAM) **hay que cerrar las decisiones
+abiertas (§10)** — sobre todo **dónde vive la extracción por lotes** (codec batch vs `ExportPlan`,
+cruce motor↔modelo), que condiciona la API del codec. Ese es el punto de decisión, no de código.
