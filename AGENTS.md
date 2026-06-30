@@ -470,6 +470,16 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       + scheme compartido + ruta de paquete `relativePath = ..`. Verificado verde en el runner.
       PENDIENTE menor (opcional): activar **branch protection** en `main` (exigir el check verde antes
       de mergear).
+- [~] **Accesibilidad / VoiceOver** · **Tier 1 + 2 HECHOS (2026-07-01)**, Tier 3 pendiente. Hecho:
+      (1) la **zona de arrastre** del estado vacío (antes `onTapGesture`, no activable por VoiceOver)
+      se expone como botón con label/pista/acción; (2) los **iconos de estado** de la cabecera
+      (cifrado/volúmenes) ganan `accessibilityLabel` (antes solo `.help`, que VoiceOver no lee);
+      (3) el **icono de fila** del outline se marca decorativo (`setAccessibilityElement(false)`) —
+      la columna «Clase» ya da el tipo. **Diagnóstico**: el resto ya era accesible de base
+      (NSOutlineView con NSTextField, botones con texto, NSAlert nativos, ojo de contraseña).
+      **Tier 3 pendiente (opcional)**: anunciar el progreso de operaciones largas a VoiceOver y
+      repasar orden de foco en la cabecera. **Verificación**: manual con VoiceOver (⌘F5), la hace
+      el usuario.
 - [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
       notarización, `.dmg`. Aplazado a propósito, no por bajo valor.
