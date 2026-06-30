@@ -42,8 +42,10 @@ Abrir un archivo en un formato y **guardarlo en otro** reconstruye el contenido.
 - **Cifrado ZIP estándar**:
   - **Débil** — ZipCrypto / PKWARE clásico (universal, inseguro).
   - **Fuerte** — AES‑256 de WinZip (AE‑2), interop verificada contra `pyzipper`.
-  - Abrir archivos con contraseña de otras apps (pide la clave, la valida y la
-    recuerda); re‑guardar conserva el cifrado; un cifrado bloqueado es de solo lectura.
+  - Abrir archivos con contraseña de otras apps: pide la clave y la valida; mientras el
+    archivo está abierto la mantiene en memoria (no hay que repetirla por entrada ni al
+    re‑guardar conservando el cifrado), pero **no se persiste** —al cerrar y reabrir se
+    vuelve a pedir. Un cifrado bloqueado (sin contraseña) es de solo lectura.
 - **Aviso de cambios sin guardar** al cerrar/salir, con tres opciones **Guardar /
   Cerrar sin guardar / Cancelar** (Guardar ejecuta el guardado y luego cierra);
   **sin pestañas** (una ventana por archivo); **Ajustes** en el menú de la app (⌘,):
