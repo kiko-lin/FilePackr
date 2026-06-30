@@ -99,8 +99,12 @@ Tres operaciones:
 
 ## 7. Plan por fases (incremental, cada una verificable con `swift test`)
 
-1. **Indexador incremental** `Tar.index(stream:)` + lector de bloques; tests contra los mismos
-   fixtures que `listEntries` (mismo resultado de entradas). Sin tocar aún el codec.
+1. ✅ **HECHO** — **Indexador incremental** `Tar.StreamIndexer` (push: `consume`/`finish`, encaja
+   con `decompress(_:sink:)`); descarta el contenido a medida que llega. Tests `TarStreamTests`:
+   paridad con `listEntries` en todos los troceados de chunk (1, 7, 513… bytes), cubriendo PAX,
+   carpetas, ficheros vacíos y multi-bloque; los offsets localizan el contenido correcto. No toca
+   el codec todavía. (Pendiente de optimizar: el buffer hace `Data(buffer)` tras cada `removeFirst`
+   para re-basar índices — correcto pero copia; mejorar con un índice de lectura en la fase de pulido.)
 2. **Extracción por offset** de una entrada (re-descomprimir + saltar + emitir); test round-trip
    contra `entryData` actual.
 3. **Cableado del codec:** `TarCodec`/`SingleFileCodec` usan índice + container comprimido; ajustar
@@ -137,5 +141,8 @@ Tres operaciones:
 
 ---
 
-**Estado:** rama `feat/streaming-tar` creada. Este documento es la base; el siguiente paso es
-convertir las §5–§10 en un plan de tareas concreto antes de escribir código.
+**Estado:** rama `feat/streaming-tar`. **Fase 1 (indexador incremental) hecha y verificada**
+(`Tar.StreamIndexer` + `TarStreamTests`; suite 140 verdes). Siguiente paso natural: **Fase 2**
+(extracción por offset: re-descomprimir + saltar + emitir, con test round-trip contra `entryData`).
+Antes de la Fase 3/4 conviene cerrar las decisiones abiertas (§10), sobre todo **dónde vive la
+extracción por lotes** (codec batch vs `ExportPlan`), que condiciona la API.

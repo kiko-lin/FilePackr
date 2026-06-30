@@ -65,6 +65,80 @@ public enum Tar {
         return entries
     }
 
+    /// Indexador **incremental** del TAR (Fase 1 del streaming de tar comprimido). Se alimenta
+    /// con los trozos del flujo descomprimido (`consume`, *push* — encaja con `decompress(_:sink:)`)
+    /// y, **sin guardar el contenido de los ficheros** (lo descarta a medida que llega, memoria
+    /// acotada), registra las entradas con su `dataOffset` = posición lógica de sus datos en el
+    /// flujo descomprimido (mismo valor que `listEntries`, que lo calcula sobre el tar ya en RAM).
+    /// Replica la lógica de `listEntries` para producir entradas idénticas.
+    public final class StreamIndexer {
+        private var buffer = Data()
+        private var consumed = 0            // bytes del flujo ya procesados (offset lógico actual)
+        private var entries: [ArchiveEntry] = []
+        private var pendingPath: String?
+        private var pendingSize: UInt64?
+        private var pendingDate: Date?
+        private var skip = 0               // bytes de contenido de fichero por descartar
+        private var finished = false
+
+        public init() {}
+
+        /// Alimenta el siguiente trozo del flujo descomprimido.
+        public func consume(_ chunk: Data) { buffer.append(chunk); drain() }
+
+        /// Cierra el flujo y devuelve las entradas indexadas.
+        public func finish() -> [ArchiveEntry] { drain(); return entries }
+
+        private func drain() {
+            while true {
+                if finished { buffer.removeAll(keepingCapacity: false); return }
+                if skip > 0 {                                   // descartar contenido de fichero
+                    let n = Swift.min(skip, buffer.count)
+                    if n > 0 { buffer.removeFirst(n); buffer = Data(buffer); skip -= n; consumed += n }
+                    if skip > 0 { return }
+                    continue
+                }
+                guard buffer.count >= blockSize else { return } // necesita una cabecera completa
+                let b = buffer.startIndex
+                if isZeroBlock(buffer, at: b) { finished = true; continue }
+
+                let size = pendingSize ?? octal(buffer, b + 124, 12)
+                let type = buffer[b + 156]
+                let dataBlocks = (Int(size) + blockSize - 1) / blockSize
+
+                if type == 0x78 || type == 0x67 || type == 0x4C {   // PAX 'x'/'g' o GNU 'L'
+                    let total = blockSize + dataBlocks * blockSize
+                    guard buffer.count >= total else { return }     // espera los bloques de metadatos
+                    if type == 0x4C {
+                        pendingPath = string(buffer, b + blockSize, Int(size))
+                            .trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
+                    } else {
+                        let h = parsePax(buffer, start: b + blockSize, size: Int(size))
+                        pendingPath = h.path; pendingSize = h.size; pendingDate = h.mtime
+                    }
+                    buffer.removeFirst(total); buffer = Data(buffer); consumed += total
+                    continue
+                }
+
+                let rawName = string(buffer, b, 100)
+                let prefix = string(buffer, b + 345, 155)
+                let mtime = pendingDate ?? dateFrom(octal(buffer, b + 136, 12))
+                let name = pendingPath ?? (prefix.isEmpty ? rawName : prefix + "/" + rawName)
+                pendingPath = nil; pendingSize = nil; pendingDate = nil
+
+                let isDir = type == 0x35 || name.hasSuffix("/")
+                if type == 0x30 || type == 0x00 || type == 0x35 || isDir {
+                    entries.append(ArchiveEntry(
+                        path: name, compressedSize: size, uncompressedSize: size,
+                        isDirectory: isDir, modificationDate: mtime,
+                        isEncrypted: false, dataOffset: UInt64(consumed + blockSize)))
+                }
+                buffer.removeFirst(blockSize); buffer = Data(buffer); consumed += blockSize
+                skip = dataBlocks * blockSize
+            }
+        }
+    }
+
     /// `true` si `data` empieza con la firma ustar (es un TAR). Sirve para distinguir
     /// un `.gz`/`.xz`/`.bz2` suelto de un `.tar.<x>` tras descomprimir.
     public static func hasUstarMagic(_ data: Data) -> Bool {
