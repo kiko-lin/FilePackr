@@ -70,8 +70,9 @@ struct SaveOptionsSheet: View {
                         Text(loc("save.encryption.strong")).tag(ZipEncryption.aes256)
                     }
                     if coord.encryption != .none {
-                        SecureField(loc("save.password"), text: $coord.password)
-                            .onSubmit { if coord.canConfirm { attemptConfirm() } }
+                        RevealableSecureField(placeholder: loc("save.password"), text: $coord.password) {
+                            if coord.canConfirm { attemptConfirm() }
+                        }
                     }
                 } else {
                     Text(loc("save.noEncryption")).font(.callout).foregroundStyle(.secondary)
@@ -148,6 +149,44 @@ struct ExtractOptionsSheet: View {
     }
 }
 
+/// Campo de contraseña con el clásico botón de **ojo** para mostrar/ocultar el texto.
+/// Alterna entre `SecureField` (oculto) y `TextField` (visible) conservando el foco. El estilo
+/// del campo lo hereda del contexto (`.textFieldStyle`), así encaja tanto suelto como en un `Form`.
+struct RevealableSecureField: View {
+    let placeholder: String
+    @Binding var text: String
+    var onSubmit: () -> Void = {}
+
+    @State private var isRevealed = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Group {
+                if isRevealed {
+                    TextField(placeholder, text: $text)
+                } else {
+                    SecureField(placeholder, text: $text)
+                }
+            }
+            .focused($focused)
+            .onSubmit(onSubmit)
+
+            Button {
+                isRevealed.toggle()
+                focused = true   // el cambio recrea el campo; devolvemos el foco
+            } label: {
+                Image(systemName: isRevealed ? "eye.slash" : "eye")
+                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .help(loc(isRevealed ? "password.hide" : "password.show"))
+            .accessibilityLabel(loc(isRevealed ? "password.hide" : "password.show"))
+        }
+    }
+}
+
 /// Hoja de introducción de contraseña.
 struct PasswordSheet: View {
     let title: String
@@ -160,9 +199,10 @@ struct PasswordSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title).font(.headline)
-            SecureField(loc("password.field"), text: $password)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { if !password.isEmpty { onConfirm() } }
+            RevealableSecureField(placeholder: loc("password.field"), text: $password) {
+                if !password.isEmpty { onConfirm() }
+            }
+            .textFieldStyle(.roundedBorder)
             if let note {
                 Text(note).font(.callout).foregroundStyle(.red)
             }
