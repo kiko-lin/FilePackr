@@ -426,12 +426,15 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       streaming a un único fichero secuencial (habría que comprimir a temporales en paralelo y
       concatenar, o usar el LZMA SDK multihilo para 7z). Decidido priorizar memoria > velocidad;
       reevaluar si el rendimiento se vuelve un problema real. (revisión externa 2026-06-21)
-- [ ] **Streaming en la apertura de tar comprimido** · **prioridad MUY BAJA** (casi descartado):
-      abrir un `.tar.gz`/`.xz`/`.bz2` aún
-      descomprime el tar entero en RAM (su `container`). Haría falta un **índice de tar
-      incremental** (parsear descomprimiendo una vez, sin guardar los bytes, cubriendo
-      PAX/GNU) y una extracción que **re-descomprima** saltando hasta el offset de la entrada.
-      Es el único caso de streaming que falta; mayor riesgo/menor valor (navegar un tar.gz enorme).
+- [ ] **Streaming en la apertura de tar comprimido** · **EN DISEÑO** (rama `feat/streaming-tar`,
+      doc `docs/diseno-streaming-tar.md`). Reencuadrado 2026-06-30: deja de ser "casi descartado".
+      Es la **única grieta** del principio memoria-constante del motor (abrir `.tar.gz`/`.xz`/`.bz2`
+      descomprime el tar entero en RAM, su `container`). Para una app de distribución general, usar
+      mal RAM (o disco con un temporal) no optimiza recursos. Solución: **índice incremental** (parsear
+      descomprimiendo una vez sin guardar bytes; cubre PAX/GNU) + **extracción por offset**, con
+      **extracción por lotes ordenada en un solo pase** para que listar/extraer-todo sigan siendo
+      óptimos (solo el acceso aleatorio repetido paga CPU, intrínseco). Esfuerzo **alto** / toca el
+      corazón del motor → abordar con diseño + tests exhaustivos, no improvisar. Ver el documento.
 - [ ] **Lectura de DMG** (imagen de disco de Mac) · **prioridad BAJA (opcional)**: libarchive
       no la maneja; sería vía `hdiutil` (montar/adjuntar) o parseo propio. Único formato Mac
       relevante que no leemos, pero es *scope creep* (imagen de disco, no archivo comprimido).
