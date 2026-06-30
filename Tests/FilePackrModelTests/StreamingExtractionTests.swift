@@ -72,4 +72,67 @@ final class StreamingExtractionTests: XCTestCase {
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: base.path)
         XCTAssertTrue(leftovers.allSatisfy { !$0.hasSuffix(".filepackr.tmp") }, "no debe quedar temporal")
     }
+
+    /// Cancelar **a mitad del segundo fichero** de un lote que va por un solo pase (`streamEntries`):
+    /// el primero, ya comprometido al empezar el segundo, debe quedar íntegro; el segundo no debe
+    /// aparecer (su temporal se descarta) y no debe quedar ningún `.filepackr.tmp`.
+    func testWriteContentsCancellationMidBatchKeepsCompletedDiscardsCurrent() throws {
+        let a = Data(repeating: 0x41, count: 200_000)
+        let b = Data(repeating: 0x42, count: 200_000)
+        let tar = Tar.write([
+            Tar.WriteItem(path: "a.bin", data: a, modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "b.bin", data: b, modifiedAt: nil, isDirectory: false),
+        ])
+        let result = try ArchiveFormat.tarGzip.codec.open(Gzip.compress(tar), fallbackName: "p")
+        func leaf(_ name: String) throws -> ExportPlan {
+            ExportPlan(name: name, payload: .archiveEntry(
+                entry: try entry(result.entries, name), archive: result.container, password: nil, format: .tarGzip))
+        }
+        let plan = ExportPlan(name: "root", payload: .folder([try leaf("a.bin"), try leaf("b.bin")]))
+
+        let base = tempDir(); defer { try? FileManager.default.removeItem(at: base) }
+        let dest = base.appendingPathComponent("root")
+
+        var written = 0
+        XCTAssertThrowsError(try plan.writeContents(to: dest,
+            onProgress: { _, bytes in written += Int(bytes) },
+            isCancelled: { written > a.count + 1000 }))   // ya dentro de b.bin
+
+        XCTAssertEqual(try Data(contentsOf: dest.appendingPathComponent("a.bin")), a, "el 1º debe quedar íntegro")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dest.appendingPathComponent("b.bin").path),
+                       "el 2º cancelado a medias no debe aparecer")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: dest.path)
+        XCTAssertTrue(leftovers.allSatisfy { !$0.hasSuffix(".filepackr.tmp") }, "no debe quedar temporal")
+    }
+
+    /// Una entrada de **fichero vacío** (0 bytes) en un lote debe crearse como fichero vacío: el
+    /// writer se abre, no recibe trozos y se confirma igualmente.
+    func testWriteContentsCreatesEmptyFileEntry() throws {
+        let tar = Tar.write([
+            Tar.WriteItem(path: "vacio.txt", data: Data(), modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "lleno.txt", data: Data("hola".utf8), modifiedAt: nil, isDirectory: false),
+        ])
+        let result = try ArchiveFormat.tarGzip.codec.open(Gzip.compress(tar), fallbackName: "p")
+        func leaf(_ name: String) throws -> ExportPlan {
+            ExportPlan(name: name, payload: .archiveEntry(
+                entry: try entry(result.entries, name), archive: result.container, password: nil, format: .tarGzip))
+        }
+        let plan = ExportPlan(name: "root", payload: .folder([try leaf("vacio.txt"), try leaf("lleno.txt")]))
+
+        let base = tempDir(); defer { try? FileManager.default.removeItem(at: base) }
+        let dest = base.appendingPathComponent("root")
+        try plan.writeContents(to: dest)
+
+        let vacio = dest.appendingPathComponent("vacio.txt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: vacio.path), "el fichero vacío debe crearse")
+        XCTAssertEqual(try Data(contentsOf: vacio), Data())
+        XCTAssertEqual(try Data(contentsOf: dest.appendingPathComponent("lleno.txt")), Data("hola".utf8))
+    }
+
+    private func tempDir() -> URL {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FilePackrTest-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }
 }

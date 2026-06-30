@@ -146,6 +146,32 @@ final class ArchiveCodecTests: XCTestCase {
         XCTAssertEqual(got["dir/grande.bin"], big)
     }
 
+    /// Paridad de la ruta nueva del codec (container comprimido + streaming por offset) para los
+    /// **otros dos envoltorios**: xz y bzip2, no solo gzip. Misma lógica parametrizada, pero así se
+    /// ejercita el cableado real de `streamDecompress` de cada formato.
+    func testTarXzAndBzip2KeepCompressedContainerAndRoundTrip() throws {
+        let big = Data(repeating: 0x42, count: 200 * 1024)   // muy compresible
+        let tar = Tar.write([
+            Tar.WriteItem(path: "uno.txt", data: hello, modifiedAt: nil, isDirectory: false),
+            Tar.WriteItem(path: "dir/grande.bin", data: big, modifiedAt: nil, isDirectory: false),
+        ])
+        let cases: [(ArchiveFormat, Data)] = [(.tarXz, Xz.compress(tar)), (.tarBzip2, Bzip2.compress(tar))]
+        for (format, compressed) in cases {
+            let result = try format.codec.open(compressed, fallbackName: "p")
+            XCTAssertEqual(result.format, format)
+            XCTAssertEqual(result.container, compressed, "\(format): el container debe ser el comprimido")
+            XCTAssertLessThan(result.container.count, tar.count / 4, "\(format): container ≪ tar inflado")
+            let codec = result.format.codec
+            for (path, expected) in [("uno.txt", hello), ("dir/grande.bin", big)] {
+                let entry = try XCTUnwrap(result.entries.first { $0.path == path })
+                XCTAssertEqual(try codec.entryData(for: entry, in: result.container, password: nil), expected, "\(format) \(path)")
+                var streamed = Data()
+                try codec.extract(entry, in: result.container, password: nil) { streamed.append($0) }
+                XCTAssertEqual(streamed, expected, "\(format) streaming \(path)")
+            }
+        }
+    }
+
     /// El otro lado de la decisión §10 #1: extraer **una sola** entrada no recorre todo el tar,
     /// usa `streamExtract` (corta tras la entrada). El espía debe ver un solo pase igualmente, pero
     /// la garantía importante (no inflar el resto) la cubre `TarStreamTests`; aquí basta el round-trip.
