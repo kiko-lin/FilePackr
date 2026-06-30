@@ -20,10 +20,22 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 ## Cómo trabajar (importante)
 
-- **Tests del motor**: `swift test` (rápido, sin Xcode). 83 tests.
-- **Tests de la app** (modelo `ArchiveDocument`): target `FilePackrTests` en Xcode,
-  se corren con **⌘U** (o `xcodebuild test`). NO los recoge `swift test` (viven en el
-  `.pbxproj`, no en el paquete). 6 tests.
+- **Tests**: `swift test` (rápido, sin Xcode) corre la **suite completa**: motor
+  (`ArchiveBrowserTests`) + modelo (`FilePackrModelTests`, el documento/coordinadores, en SPM
+  tras la 4ª auditoría). 158 tests. Ya **no** existe el target `FilePackrTests` en el `.pbxproj`.
+  - Las clases @MainActor de `FilePackrModelTests` usan `setUp`/`tearDown` **`async`** (no
+    síncronos) y **no llaman a `super`**: así compilan tanto en Xcode 26 como en el XCTest del
+    runner de CI (Xcode 16), donde esos métodos son `nonisolated` y enviar `self` no-Sendable da
+    error. No reintroducir setUp/tearDown síncronos.
+- **CI** (`.github/workflows/ci.yml`, runner `macos-15` / Xcode 16.4): dos jobs bloqueantes en
+  paralelo — `test` (`swift test`, motor + modelo) y `build-app` (`xcodebuild build` sin firma,
+  la capa de vistas). El scheme `FilePackr` está **compartido** (`xcshareddata/xcschemes`) para
+  que el runner lo encuentre; el paquete se referencia con `relativePath = ..` (robusto ante el
+  nombre de la carpeta de checkout).
+  - ⚠️ **Xcode 16 ignora `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`** (es de Xcode 26): en el
+    runner nada es @MainActor por defecto. Por eso las clases de glue de AppKit (delegados,
+    coordinadores) llevan `@MainActor` **explícito**. Si añades una clase NSObject/delegado nueva
+    y solo compila en Xcode 26, anótala `@MainActor` para no romper el CI.
 - **Tests de interop** (verifican compatibilidad con herramientas externas): llaman a
   un binario del sistema y se **saltan solos** (`XCTSkipUnless`) si no está, de modo que
   `swift test` siempre queda en verde sin instalar nada (exit 0; salen como *skipped*).
