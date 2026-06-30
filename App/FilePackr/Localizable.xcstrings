@@ -1484,6 +1484,7 @@
       }
     },
     "password.hide" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1516,22 +1517,6 @@
         }
       }
     },
-    "password.show" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Show password"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mostrar contraseña"
-          }
-        }
-      }
-    },
     "password.openTitle" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1545,6 +1530,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Contraseña para abrir el archivo"
+          }
+        }
+      }
+    },
+    "password.show" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show password"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar contraseña"
           }
         }
       }
