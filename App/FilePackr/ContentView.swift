@@ -389,11 +389,14 @@ struct ContentView: View {
                 Image(systemName: "lock.fill")
                     .foregroundStyle(.secondary)
                     .help(loc("doc.encrypted.help"))
+                    // `.help` es solo tooltip (VoiceOver no lo lee); el label hace anunciable el estado.
+                    .accessibilityLabel(loc("doc.encrypted.help"))
             }
             if doc.saveVolumeSize != nil {
                 Image(systemName: "rectangle.split.3x1")
                     .foregroundStyle(.secondary)
                     .help(loc("doc.volumes.help"))
+                    .accessibilityLabel(loc("doc.volumes.help"))
             }
             if doc.hasUnsavedChanges {
                 Text(loc("doc.unsaved"))
@@ -521,6 +524,14 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onTapGesture { addAction() }   // la zona de arrastre es también el punto de entrada (clic)
+        // Accesibilidad: con la app vacía esta zona es el punto de entrada principal, pero un
+        // `onTapGesture` no se expone como activable a VoiceOver. La presentamos como un único
+        // botón (label + pista + acción) para que sea anunciable y operable sin ratón.
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(loc("drop.title"))
+        .accessibilityHint(loc("drop.subtitle"))
+        .accessibilityAction { addAction() }
     }
 
     // MARK: - Acciones con paneles del sistema

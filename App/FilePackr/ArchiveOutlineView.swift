@@ -280,6 +280,9 @@ extension ArchiveOutlineView {
             cell.identifier = .nameColumn
             let image = NSImageView()
             image.translatesAutoresizingMaskIntoConstraints = false
+            // El icono es decorativo (carpeta o tipo de archivo): la columna «Clase» ya da el
+            // tipo en texto. Lo ocultamos a VoiceOver para que la fila no anuncie «imagen».
+            image.setAccessibilityElement(false)
             let text = NSTextField()
             text.translatesAutoresizingMaskIntoConstraints = false
             text.isBordered = false
