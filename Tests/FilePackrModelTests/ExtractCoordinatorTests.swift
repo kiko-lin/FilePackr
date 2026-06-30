@@ -18,20 +18,23 @@ final class ExtractCoordinatorTests: XCTestCase {
     private var settings: AppSettings!
     private var suiteName: String!
 
-    override func setUp() {
-        super.setUp()
+    // setUp/tearDown async: la clase es @MainActor y toca propiedades aisladas al actor
+    // principal. Las variantes síncronas son `nonisolated` en el XCTest del runner (Xcode 16) y
+    // no compilan; las async sí adoptan el aislamiento de la clase. Portable Xcode 16/26.
+    override func setUp() async throws {
+        try await super.setUp()
         tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         suiteName = "test.\(UUID().uuidString)"
         settings = AppSettings(defaults: UserDefaults(suiteName: suiteName)!)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         try? FileManager.default.removeItem(at: tempDir)
         UserDefaults().removePersistentDomain(forName: suiteName)
         tempDir = nil
         settings = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     // MARK: - Helpers

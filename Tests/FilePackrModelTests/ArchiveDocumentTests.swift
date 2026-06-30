@@ -15,10 +15,13 @@ final class ArchiveDocumentTests: XCTestCase {
 
     private var temps: [URL] = []
 
-    override func tearDown() {
+    // tearDown async: la clase es @MainActor y `temps` está aislada al actor principal. La
+    // variante síncrona es `nonisolated` en el XCTest del runner (Xcode 16); la async adopta el
+    // aislamiento de la clase. Portable Xcode 16/26.
+    override func tearDown() async throws {
         for url in temps { try? FileManager.default.removeItem(at: url) }
         temps = []
-        super.tearDown()
+        try await super.tearDown()
     }
 
     /// Escribe `data` en un fichero con nombre **limpio** `name`, dentro de una carpeta

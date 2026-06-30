@@ -13,16 +13,19 @@ final class SaveCoordinatorTests: XCTestCase {
     private var settings: AppSettings!
     private var suiteName: String!
 
-    override func setUp() {
-        super.setUp()
+    // setUp/tearDown async: la clase es @MainActor y toca propiedades aisladas al actor
+    // principal. Las variantes síncronas son `nonisolated` en el XCTest del runner (Xcode 16) y
+    // no compilan; las async sí adoptan el aislamiento de la clase. Portable Xcode 16/26.
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "test.\(UUID().uuidString)"
         settings = AppSettings(defaults: UserDefaults(suiteName: suiteName)!)
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         UserDefaults().removePersistentDomain(forName: suiteName)
         settings = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func waitUntil(_ condition: () -> Bool, timeout: TimeInterval = 3,
