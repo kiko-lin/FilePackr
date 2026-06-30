@@ -481,9 +481,17 @@ public struct ZipWriter: Sendable {
     private static func dosDateTime(_ date: Date?) -> (UInt16, UInt16) {
         guard let date else { return (0, 0) }
         let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        let year = min(127, max(0, (c.year ?? 1980) - 1980))
-        let dosDate = UInt16((year << 9) | ((c.month ?? 1) << 5) | (c.day ?? 1))
-        let dosTime = UInt16(((c.hour ?? 0) << 11) | ((c.minute ?? 0) << 5) | ((c.second ?? 0) / 2))
+        // Tipos explícitos en cada componente: sin ellos, el compilador (Swift más antiguo
+        // que el de desarrollo) se atasca al inferir esta expresión de bits ("unable to
+        // type-check this expression in reasonable time").
+        let year: Int = min(127, max(0, (c.year ?? 1980) - 1980))
+        let month: Int = c.month ?? 1
+        let day: Int = c.day ?? 1
+        let hour: Int = c.hour ?? 0
+        let minute: Int = c.minute ?? 0
+        let second: Int = c.second ?? 0
+        let dosDate = UInt16((year << 9) | (month << 5) | day)
+        let dosTime = UInt16((hour << 11) | (minute << 5) | (second / 2))
         return (dosTime, dosDate)
     }
 }
