@@ -106,6 +106,17 @@ struct ContentView: View {
             Text(loc("add.conflict.message", item.name))
         }
         .overlay { progressOverlay }
+        // Accesibilidad: el overlay de progreso aparece de golpe y un usuario de VoiceOver no se
+        // entera de que arrancó (ni del fin). Anunciamos la actividad al empezar o cambiar de fase
+        // (comprimir→cifrar→dividir) y un aviso neutro al terminar. Observamos solo `kind`, así que
+        // el avance del % (que no cambia kind) no genera anuncios repetidos.
+        .onChange(of: doc.progress?.kind) { _, kind in
+            if let kind {
+                AccessibilityNotification.Announcement(progressLabel(kind)).post()
+            } else {
+                AccessibilityNotification.Announcement(loc("a11y.operationFinished")).post()
+            }
+        }
         .sheet(isPresented: $saveCoord.showingOptions) {
             SaveOptionsSheet(coord: saveCoord,
                              allowSingleFileFormats: doc.isSingleFile,
@@ -311,9 +322,13 @@ struct ContentView: View {
                         ProgressView(value: fraction)
                             .progressViewStyle(.linear)
                             .frame(width: 240)
+                            // La barra ya expone el % a VoiceOver; el label le da contexto
+                            // ("Comprimiendo archivo.zip, 45 %") al enfocarla.
+                            .accessibilityLabel(progressLabel(progress.kind))
                     } else {
                         ProgressView()
                             .controlSize(.small)
+                            .accessibilityLabel(progressLabel(progress.kind))
                     }
                     // Botón "Cancelar" rojo con borde (destructivo), en cualquier operación
                     // larga cancelable: extracción o guardado/exportación.

@@ -4,6 +4,22 @@
     "" : {
 
     },
+    "a11y.operationFinished" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Operation finished"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Operación finalizada"
+          }
+        }
+      }
+    },
     "add.conflict.keepBoth" : {
       "extractionState" : "stale",
       "localizations" : {
