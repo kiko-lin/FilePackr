@@ -1,6 +1,13 @@
 import Foundation
 import ArchiveBrowser
 
+/// Errores de la extracción de un `ExportPlan`.
+public enum ExportError: Error, Equatable {
+    /// Una entrada intentaba escribir fuera de la carpeta destino (ZIP-Slip / path traversal).
+    /// El argumento es el nombre del componente que provocó el escape.
+    case pathEscapesDestination(String)
+}
+
 /// Instantánea inmutable y `Sendable` de un nodo para poder extraerlo en segundo
 /// plano (al soltar en el Finder) sin acceder al documento, que es `@MainActor`.
 public struct ExportPlan: Sendable {
@@ -56,12 +63,24 @@ public struct ExportPlan: Sendable {
         // formato por construcción (`exportPlan(for:)` usa el único documento abierto).
         var jobs: [(entry: ArchiveEntry, url: URL)] = []
         var archive: Data?, format: ArchiveFormat?, password: String?
+        // Seguridad (ZIP-Slip, 2ª defensa): nada puede escribirse fuera del árbol de `destination`,
+        // aunque un nombre con ".." se colara hasta aquí (la 1ª defensa los filtra en el árbol).
+        // Comparamos rutas estandarizadas: el destino debe ser la raíz o un descendiente suyo.
+        let root = destination.standardizedFileURL
+        func isContained(_ url: URL) -> Bool {
+            let path = url.standardizedFileURL.path
+            return path == root.path || path.hasPrefix(root.path + "/")
+        }
         func buildStructure(_ plan: ExportPlan, to dest: URL) throws {
             if isCancelled() { throw CancellationError() }
             switch plan.payload {
             case .folder(let children):
                 try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
-                for child in children { try buildStructure(child, to: dest.appendingPathComponent(child.name)) }
+                for child in children {
+                    let childDest = dest.appendingPathComponent(child.name)
+                    guard isContained(childDest) else { throw ExportError.pathEscapesDestination(child.name) }
+                    try buildStructure(child, to: childDest)
+                }
             case .diskFile(let url):
                 try FileManager.default.copyItem(at: url, to: dest)
                 onProgress(plan.name, Self.fileSize(url))   // copyItem no es por trozos: un salto al acabar

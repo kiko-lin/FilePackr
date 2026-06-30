@@ -13,9 +13,14 @@ enum ArchiveTreeBuilder {
         var index: [String: FileNode] = [:]
 
         for entry in entries.sorted(by: { $0.path < $1.path }) {
-            var parts = entry.path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-            if parts.first == "." { parts.removeFirst() }   // tar suele prefijar "./"
-            guard !parts.isEmpty else { continue }
+            let parts = entry.path.split(separator: "/", omittingEmptySubsequences: true)
+                .map(String.init)
+                .filter { $0 != "." }                        // descarta "." (incl. el típico "./" de tar)
+            // Seguridad (ZIP-Slip): una entrada con un componente ".." escaparía de la carpeta
+            // destino al extraer (`appendingPathComponent("..")` se resuelve contra el filesystem).
+            // No la incorporamos al árbol → no se muestra ni se extrae. 2ª defensa en
+            // `ExportPlan.writeContents` (guard de contención por si un nombre se colara hasta allí).
+            guard !parts.contains(".."), !parts.isEmpty else { continue }
 
             var accumulated = ""
             var parent: FileNode?
