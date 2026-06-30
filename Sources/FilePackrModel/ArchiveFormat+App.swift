@@ -23,8 +23,10 @@ extension ArchiveFormat {
         }
     }
 
-    /// Nombre del recurso de icono (asset catalog para la UI / `.icns` para el Finder).
-    /// Las tres variantes de tar comprimido reutilizan el icono de TAR.
+    /// Nombre del `.icns` del bundle (en Resources, no en el asset catalog: los campos
+    /// `CFBundleTypeIconFile`/`UTTypeIconFile` del Info.plist exigen un fichero por nombre).
+    /// El mismo fichero sirve al Finder (vía Info.plist) y a la UI (vía `NSImage(named:)`, que
+    /// también busca en Resources). Las tres variantes de tar comprimido reutilizan el de TAR.
     public var iconAssetName: String {
         switch self {
         case .zip: return "FormatIcon-ZIP"
