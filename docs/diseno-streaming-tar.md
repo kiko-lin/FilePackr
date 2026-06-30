@@ -232,8 +232,9 @@ comprimido serían N re-descompresiones. Falta **diseñar la integración** (dec
 - [x] Extraer **una** entrada suelta = `streamExtract` (offset), corta antes (Fase 4: `extractAll`
       con 1 entrada → `extract` → `streamExtract`).
 - [x] Sin regresión: `swift test` 150 verde + `xcodebuild` app SUCCEEDED.
-- [~] Limitaciones documentadas (Quick Look re-descomprime ✓; **sparse: documentado pero falta el
-      guard** que detecte type `'S'`/`GNU.sparse.*` y falle limpio — pendiente real).
+- [x] Limitaciones documentadas y aplicadas: Quick Look re-descomprime; **sparse no soportado con
+      guard real** — `listEntries` y `StreamIndexer` lanzan `TarError.unsupportedSparse` ante type
+      `'S'` (GNU antiguo) o claves `GNU.sparse.*` (PAX), nunca emiten basura (`TarStreamTests`).
 - [ ] Pulido pendiente: el buffer de `StreamIndexer` hace `Data(buffer)` tras cada `removeFirst`
       (re-basa índices; correcto pero copia) → cambiar a un índice de lectura.
 

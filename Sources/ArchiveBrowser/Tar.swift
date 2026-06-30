@@ -1,6 +1,11 @@
 import Foundation
 
-public enum TarError: Error, Equatable { case corrupt }
+public enum TarError: Error, Equatable {
+    case corrupt
+    /// TAR **sparse** (ficheros con huecos, extensión GNU): no soportado en v1. Se detecta y se
+    /// falla limpio en vez de emitir bytes mal alineados o saltarse la entrada en silencio (§10 #3).
+    case unsupportedSparse
+}
 
 /// Lectura/escritura de archivos **TAR** (ustar), el contenedor Unix. Sin compresión
 /// (se combina con gzip para `.tar.gz`). Lee ustar, cabeceras extendidas PAX (`x`) y
@@ -36,6 +41,7 @@ public enum Tar {
             switch type {
             case 0x78, 0x67:   // 'x' / 'g' — cabecera extendida PAX
                 let header = parsePax(data, start: dataStart, size: Int(size))
+                if header.sparse { throw TarError.unsupportedSparse }   // sparse PAX: no soportado (§10 #3)
                 pendingPath = header.path
                 pendingSize = header.size
                 pendingDate = header.mtime
@@ -45,6 +51,8 @@ public enum Tar {
                 pendingPath = string(data, dataStart, Int(size)).trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
                 p = dataStart + dataBlocks * blockSize
                 continue
+            case 0x53:         // 'S' — GNU sparse antiguo: no soportado, fallar limpio (§10 #3)
+                throw TarError.unsupportedSparse
             default:
                 break
             }
@@ -125,6 +133,8 @@ public enum Tar {
                 let type = buffer[b + 156]
                 let dataBlocks = (Int(size) + blockSize - 1) / blockSize
 
+                if type == 0x53 { throw TarError.unsupportedSparse }   // 'S' GNU sparse antiguo (§10 #3)
+
                 if type == 0x78 || type == 0x67 || type == 0x4C {   // PAX 'x'/'g' o GNU 'L'
                     let total = blockSize + dataBlocks * blockSize
                     guard buffer.count >= total else { return }     // espera los bloques de metadatos
@@ -133,6 +143,7 @@ public enum Tar {
                             .trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
                     } else {
                         let h = parsePax(buffer, start: b + blockSize, size: Int(size))
+                        if h.sparse { throw TarError.unsupportedSparse }   // sparse PAX: no soportado (§10 #3)
                         pendingPath = h.path; pendingSize = h.size; pendingDate = h.mtime
                     }
                     buffer.removeFirst(total); buffer = Data(buffer); consumed += total
@@ -388,11 +399,12 @@ public enum Tar {
     private static func dateFrom(_ epoch: UInt64) -> Date? {
         epoch == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(epoch))
     }
-    private static func parsePax(_ d: Data, start: Int, size: Int) -> (path: String?, size: UInt64?, mtime: Date?) {
+    private static func parsePax(_ d: Data, start: Int, size: Int)
+        -> (path: String?, size: UInt64?, mtime: Date?, sparse: Bool) {
         let end = min(start + size, d.endIndex)
-        guard start < end else { return (nil, nil, nil) }
+        guard start < end else { return (nil, nil, nil, false) }
         let text = String(decoding: d[start..<end], as: UTF8.self)
-        var path: String?; var sz: UInt64?; var mtime: Date?
+        var path: String?; var sz: UInt64?; var mtime: Date?; var sparse = false
         for line in text.split(separator: "\n") {
             guard let space = line.firstIndex(of: " ") else { continue }
             let kv = line[line.index(after: space)...]
@@ -402,9 +414,10 @@ public enum Tar {
             case "path": path = value
             case "size": sz = UInt64(value)
             case "mtime": mtime = Double(value).map { Date(timeIntervalSince1970: $0) }
-            default: break
+            default:
+                if key.hasPrefix("GNU.sparse") { sparse = true }   // formato sparse PAX (0.0/0.1/1.0)
             }
         }
-        return (path, sz, mtime)
+        return (path, sz, mtime, sparse)
     }
 }
