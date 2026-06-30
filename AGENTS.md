@@ -356,7 +356,8 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 > **Criterio de orden:** impacto en todos los usuarios × esfuerzo × riesgo de dejarlo sin hacer.
 > Los items de formato/streaming de pura completitud van al final, en este orden:
-> **DMG ≈ 7z-cifrado (baja) > tar-open (muy baja) > multinúcleo (solo si el rendimiento duele)**.
+> **DMG ≈ 7z-cifrado (baja) > multinúcleo (solo si el rendimiento duele)**.
+> (tar-open ya HECHO 2026-06-30.)
 
 - [x] ~~**Verificar en GUI los flujos del refactor de auditoría**~~ (HECHO 2026-06-30, verificación
       GUI por el usuario tras la 4ª auditoría + reestructuración a SPM): añadir con conflicto,
@@ -426,15 +427,17 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       streaming a un único fichero secuencial (habría que comprimir a temporales en paralelo y
       concatenar, o usar el LZMA SDK multihilo para 7z). Decidido priorizar memoria > velocidad;
       reevaluar si el rendimiento se vuelve un problema real. (revisión externa 2026-06-21)
-- [ ] **Streaming en la apertura de tar comprimido** · **EN DISEÑO** (rama `feat/streaming-tar`,
-      doc `docs/diseno-streaming-tar.md`). Reencuadrado 2026-06-30: deja de ser "casi descartado".
-      Es la **única grieta** del principio memoria-constante del motor (abrir `.tar.gz`/`.xz`/`.bz2`
-      descomprime el tar entero en RAM, su `container`). Para una app de distribución general, usar
-      mal RAM (o disco con un temporal) no optimiza recursos. Solución: **índice incremental** (parsear
-      descomprimiendo una vez sin guardar bytes; cubre PAX/GNU) + **extracción por offset**, con
-      **extracción por lotes ordenada en un solo pase** para que listar/extraer-todo sigan siendo
-      óptimos (solo el acceso aleatorio repetido paga CPU, intrínseco). Esfuerzo **alto** / toca el
-      corazón del motor → abordar con diseño + tests exhaustivos, no improvisar. Ver el documento.
+- [x] ~~**Streaming en la apertura de tar comprimido**~~ (HECHO y mergeado a `main` 2026-06-30;
+      rama `feat/streaming-tar` ya borrada; doc `docs/diseno-streaming-tar.md`). Cerrada la **única
+      grieta** del principio memoria-constante del motor: abrir `.tar.gz`/`.xz`/`.bz2` ya **no**
+      descomprime el tar entero en RAM. Solución implementada: **índice incremental** (`Tar.StreamIndexer`,
+      parsea descomprimiendo una vez sin guardar bytes; cubre PAX/GNU y rechaza sparse) + **extracción
+      por offset** (`Tar.streamExtract`) + **extracción por lotes ordenada en un solo pase**
+      (`Tar.streamEntries` → `ArchiveCodec.extractAll`, usado por `ExportPlan.writeContents`, así que
+      Extraer/arrastre Finder/Quick Look se benefician). El codec conserva el container **comprimido**
+      mapeado e indexa al abrir; solo el acceso aleatorio repetido paga CPU (intrínseco). **Verificado
+      ~154× menos RAM** (fixture .tar.gz con tar interno 1.07 GB: RSS pico 1.31 GB → 8.5 MB). Tests de
+      paridad xz/bz2, cancelación a mitad de lote y fichero vacío incluidos.
 - [ ] **Lectura de DMG** (imagen de disco de Mac) · **prioridad BAJA (opcional)**: libarchive
       no la maneja; sería vía `hdiutil` (montar/adjuntar) o parseo propio. Único formato Mac
       relevante que no leemos, pero es *scope creep* (imagen de disco, no archivo comprimido).
