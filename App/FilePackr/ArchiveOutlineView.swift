@@ -587,8 +587,8 @@ extension ArchiveOutlineView {
                         let fraction = min(1, Double(done) / Double(total))
                         guard throttle.shouldReport(fraction) else { return }
                         Task { @MainActor in
-                            doc.progress?.fraction = fraction
-                            doc.progress?.detail = name
+                            self.doc.progress?.fraction = fraction
+                            self.doc.progress?.detail = name
                         }
                     }, isCancelled: { token.isCancelled })
                 } else {

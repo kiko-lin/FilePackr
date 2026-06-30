@@ -152,10 +152,25 @@ Tres operaciones:
    de la 1ª auditoría) y "solo offset" (N re-descompresiones). Una entrada suelta sigue usando
    `streamExtract` (Fase 2); varias/todo usan el iterador. Pendiente de diseño en Fase 3-4: la
    integración del iterador con el flujo de extracción **async** del modelo (progreso/cancelación).
-2. ¿Caché de re-arranque para acceso aleatorio repetido, o se acepta el coste en v1?
-3. ¿Soporte de tar **sparse** o no-soportado documentado?
-4. ¿El `container` comprimido se mantiene **mapeado** todo el ciclo de vida del documento?
-5. Métrica de éxito de memoria: ¿test automatizado de RSS o verificación manual?
+2. ✅ **RESUELTA (2026-06-30) → aceptar el coste, sin caché.** Un `.tar.<x>` es un flujo: no
+   tiene acceso aleatorio (tar/libarchive re-leen desde el principio; las caché de re-arranque
+   tipo `zran`/`dictzip` son optimizaciones especializadas, con estado y memoria — justo lo que
+   esta feature evita). `entryData` **no desaparece** (lo usan la validación de contraseña en
+   `ArchiveDocument.provideEntryPassword` y el re-guardado en `SavePayloadBuilder.nodeData`): con el
+   container comprimido pasa a `streamExtract(offset:length:)`, que re-descomprime hasta el offset y
+   **corta**. Caché → solo si la verificación manual (#5) muestra un problema real.
+3. ✅ **RESUELTA (2026-06-30) → no soportar sparse en v1, pero detectar y no corromper.** Caso
+   exótico (GNU). Lo óptimo no es ignorarlo: **detectar** la cabecera GNU sparse (type `'S'`=`0x53`)
+   y las claves PAX `GNU.sparse.*`, y fallar limpio / documentar como limitación — **nunca** emitir
+   bytes mal alineados en silencio. Test: un tar sparse debe dar error claro, no datos basura.
+4. ✅ **RESUELTA (2026-06-30) → mantenerlo mapeado.** `openArchive` ya carga con `mappedIfSafe`, así
+   que el SO pagina los bytes comprimidos bajo demanda y la RAM no escala (equivalente a leer de un
+   `fd` como libarchive). Conservar **esos** bytes como `container`; no copiarlos a RAM.
+5. ✅ **RESUELTA (2026-06-30) → test estructural de streaming (no RSS).** Un test de RSS es frágil
+   entre máquinas/CI. Más robusto y determinista: un `streamDecompress` espía que afirme que se
+   procesa por trozos y que el indexer **nunca** acumula el flujo entero (pico de buffer acotado), y
+   aserción de que el `container` conservado es el **comprimido** (`container.count` ≈ tamaño del
+   `.gz`, no del tar inflado). Verificación manual con Instruments como complemento, no como prueba.
 
 ## 11. Retoma — arranque de la próxima sesión (Fases 3b y 4)
 
@@ -210,11 +225,15 @@ comprimido serían N re-descompresiones. Falta **diseñar la integración** (dec
   llamando al motor).
 
 ### Checklist de "hecho" (toda la feature)
-- [ ] Abrir+listar un `.tar.gz` grande **no** escala la RAM (verificado a mano).
-- [ ] Extraer **todo** = un solo pase de descompresión.
-- [ ] Extraer **una** entrada suelta = `streamExtract` (offset).
-- [ ] Sin regresión: `swift test` verde + `xcodebuild build` app verde + `ArchiveDocumentTests` ok.
-- [ ] Limitaciones documentadas (sparse no soportado; Quick Look re-descomprime).
+- [x] Abrir+listar un `.tar.gz` **no** infla el TAR en RAM — container comprimido + `StreamIndexer`
+      (Fase 3b). Test estructural en `ArchiveCodecTests`. Falta solo confirmar RSS a mano (§10 #5).
+- [x] Extraer **todo** = un solo pase de descompresión (Fase 4: `extractAll` → `streamEntries`;
+      test `testTarGzipExtractAllUsesSinglePass` afirma 1 pase).
+- [x] Extraer **una** entrada suelta = `streamExtract` (offset), corta antes (Fase 4: `extractAll`
+      con 1 entrada → `extract` → `streamExtract`).
+- [x] Sin regresión: `swift test` 150 verde + `xcodebuild` app SUCCEEDED.
+- [~] Limitaciones documentadas (Quick Look re-descomprime ✓; **sparse: documentado pero falta el
+      guard** que detecte type `'S'`/`GNU.sparse.*` y falle limpio — pendiente real).
 - [ ] Pulido pendiente: el buffer de `StreamIndexer` hace `Data(buffer)` tras cada `removeFirst`
       (re-basa índices; correcto pero copia) → cambiar a un índice de lectura.
 

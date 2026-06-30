@@ -49,31 +49,52 @@ public struct ExportPlan: Sendable {
     /// debe **acumular y coalescer** (p. ej. a saltos del 1 %): aquí se llama por cada trozo,
     /// que con ficheros grandes son muchos.
     nonisolated public func writeContents(to destination: URL,
-                                   onProgress: (_ name: String, _ bytes: Int64) -> Void = { _, _ in },
-                                   isCancelled: () -> Bool = { false }) throws {
-        if isCancelled() { throw CancellationError() }
-        switch payload {
-        case .folder(let children):
-            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-            for child in children {
-                try child.writeContents(to: destination.appendingPathComponent(child.name),
-                                        onProgress: onProgress, isCancelled: isCancelled)
+                                   onProgress: @escaping (_ name: String, _ bytes: Int64) -> Void = { _, _ in },
+                                   isCancelled: @escaping () -> Bool = { false }) throws {
+        // Fase 1: crear la estructura (carpetas), copiar los ficheros de disco y **recolectar** las
+        // entradas de archivo con su destino. Todas las entradas de un plan comparten archivo y
+        // formato por construcción (`exportPlan(for:)` usa el único documento abierto).
+        var jobs: [(entry: ArchiveEntry, url: URL)] = []
+        var archive: Data?, format: ArchiveFormat?, password: String?
+        func buildStructure(_ plan: ExportPlan, to dest: URL) throws {
+            if isCancelled() { throw CancellationError() }
+            switch plan.payload {
+            case .folder(let children):
+                try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+                for child in children { try buildStructure(child, to: dest.appendingPathComponent(child.name)) }
+            case .diskFile(let url):
+                try FileManager.default.copyItem(at: url, to: dest)
+                onProgress(plan.name, Self.fileSize(url))   // copyItem no es por trozos: un salto al acabar
+            case .archiveEntry(let entry, let arch, let pwd, let fmt):
+                jobs.append((entry, dest)); archive = arch; format = fmt; password = pwd
             }
-        case .diskFile(let url):
-            try FileManager.default.copyItem(at: url, to: destination)
-            onProgress(name, Self.fileSize(url))   // copyItem no es por trozos: un salto al acabar
-        case .archiveEntry(let entry, let archive, let password, let format):
-            // Extracción en **streaming**: la salida descomprimida no se materializa en RAM.
-            // Se escribe a un temporal y se mueve al final (atomicidad + limpieza si falla, p. ej.
-            // si el MAC de AES no cuadra a mitad, o si se **cancela**: el temporal se descarta).
-            try writeFileAtomically(to: destination) { handle in
-                try format.codec.extract(entry, in: archive, password: password,
-                                         sink: { chunk in
-                                             if isCancelled() { throw CancellationError() }
-                                             try handle.write(contentsOf: chunk)
-                                             onProgress(name, Int64(chunk.count))
-                                         })
+        }
+        try buildStructure(self, to: destination)
+        guard let format, let archive, !jobs.isEmpty else { return }
+
+        // Fase 2: un **solo recorrido** del archivo colocando cada entrada en su destino. Para tar
+        // comprimido con varias entradas = una sola descompresión (§10 #1); el resto va por entrada.
+        // Cada fichero se escribe atómicamente (temp + move) y se cierra al empezar el siguiente.
+        let destinations = Dictionary(jobs.map { ($0.entry.path, $0.url) }, uniquingKeysWith: { first, _ in first })
+        var writer: AtomicEntryWriter?
+        func commitCurrent() throws { try writer?.commit(); writer = nil }
+        do {
+            try format.codec.extractAll(jobs.map(\.entry), in: archive, password: password) { entry in
+                try commitCurrent()                                  // la entrada anterior queda completa
+                guard let url = destinations[entry.path] else { return nil }   // no seleccionada → saltar
+                let active = try AtomicEntryWriter(destination: url)
+                writer = active
+                let name = url.lastPathComponent   // nombre del fichero para la etiqueta de progreso
+                return { chunk in
+                    if isCancelled() { throw CancellationError() }
+                    try active.write(chunk)
+                    onProgress(name, Int64(chunk.count))
+                }
             }
+            try commitCurrent()                                      // última entrada
+        } catch {
+            writer?.discard()                                        // temporal a medias: descartar
+            throw error
         }
     }
 }
