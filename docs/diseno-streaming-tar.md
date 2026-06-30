@@ -135,7 +135,15 @@ Tres operaciones:
 
 ## 10. Decisiones abiertas (para resolver en el plan)
 
-1. **Dónde vive la extracción por lotes** (codec batch vs `ExportPlan`) — cruce motor↔modelo.
+1. ✅ **RESUELTA (2026-06-30) → Opción A: iterador secuencial en el motor** (estilo libarchive/tar).
+   El motor ofrece "recorrer el tar comprimido en **un solo pase**, entregando cada entrada y sus
+   bytes en streaming"; el modelo coloca cada una (a su destino) o la salta. Es el patrón canónico
+   (tar `xzf` y libarchive `archive_read_next_header`/`archive_read_data`), el más óptimo (un pase +
+   memoria constante) y coherente con lo que el proyecto **ya hace** para 7z/rar vía `LibArchive`.
+   Descartadas: payload especial en `ExportPlan` (ensucia la abstracción neutral, contra el item 3
+   de la 1ª auditoría) y "solo offset" (N re-descompresiones). Una entrada suelta sigue usando
+   `streamExtract` (Fase 2); varias/todo usan el iterador. Pendiente de diseño en Fase 3-4: la
+   integración del iterador con el flujo de extracción **async** del modelo (progreso/cancelación).
 2. ¿Caché de re-arranque para acceso aleatorio repetido, o se acepta el coste en v1?
 3. ¿Soporte de tar **sparse** o no-soportado documentado?
 4. ¿El `container` comprimido se mantiene **mapeado** todo el ciclo de vida del documento?
