@@ -493,17 +493,19 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 - [ ] **Ampliar cobertura de tests** (huecos detectados en la evaluación 2026-07-01; prioridad
       media, nada bloquea). El motor está bien cubierto (158 tests, interop real con zip/unzip/
       pyzipper/tar), pero faltan:
-  - **Robustez ante corrupción** (lo más valioso): ficheros truncados, CRC32 que no cuadra tras
-    descomprimir, cabecera tar con checksum inválido, central directory dañado. Hoy toda la suite
-    asume input bien formado → no se prueba que un archivo roto falle limpio (sin crash ni datos
-    a medias).
+  - **Robustez ante corrupción**: **cubierto lo básico** (`RobustnessTests`, 2026-07-01): truncado
+    y magic inválido en gz/xz/bz2, cuerpo DEFLATE alterado, no-zip y zip sin EOCD, tar truncado y
+    con `size` corrupto → todos fallan limpio (0 bugs). Queda por cubrir (opcional): CRC32 explícito
+    que no cuadra en ZIP, central directory parcialmente dañado (recuperación), checksum de cabecera
+    tar (hoy no se valida al leer — leniencia conocida, no bug).
   - **Anti-DoS**: cota anti-bomba en gzip/xz/bz2 **HECHA** (`DecompressionLimit`, commit
     2026-07-01, con tests). Queda: cota **agregada** en ZIP (muchas entradas declaradas enormes
     sumando TB; hoy solo hay ratio por entrada en `Deflate`) y su test.
   - **Formatos libarchive**: 7z/xar/iso solo tienen round-trip básico; **RAR/CAB/CPIO/LHA: cero
     tests** (aunque estén en el UI). Faltan fixtures reales de esos formatos.
-  - **Cifrado AES 128/192**: solo se prueba AES-256. El motor escribe las tres fuerzas
-    (`ZipAES`), pero 128/192 no tienen cobertura de round-trip/interop.
+  - **Cifrado AES 128/192**: **cubierto** el round-trip de las tres fuerzas + wrong-password
+    (`RobustnessTests`, 2026-07-01). Queda por cubrir (opcional): **interop** externa de 128/192
+    (pyzipper), no solo round-trip interno.
   - **Multivolumen**: `VolumeStore` cubre nombrado + descubrimiento + join; faltan edge cases
     (>999 partes y su formato de índice, recuperación de un juego con una parte ausente).
   - **`streamEntries` (un solo pase)**: cubierto el skip y casos básicos; falta sucesión de
