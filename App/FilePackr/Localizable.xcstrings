@@ -977,13 +977,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Would you like FilePackr to open compressed files by default? You can choose which formats next."
+            "value": "FilePackr will become the default app for the formats it can create (ZIP, 7-Zip, tar, gzip and more). You can fine-tune this in Settings ▸ Files."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "¿Quieres que FilePackr abra los archivos comprimidos por defecto? Después podrás elegir qué formatos."
+            "value": "FilePackr se hará la app por defecto de los formatos que puede crear (ZIP, 7-Zip, tar, gzip y más). Podrás afinarlo en Ajustes ▸ Archivos."
           }
         }
       }
@@ -1011,13 +1011,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yes"
+            "value": "Use FilePackr"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sí"
+            "value": "Usar FilePackr"
           }
         }
       }

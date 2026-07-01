@@ -132,6 +132,26 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 ## Hecho
 
+- **Sesión 2026-07-01 (c) — asociación de archivos que se aplica de verdad en el 1er arranque**:
+  el usuario reportó que, tras instalar (build ad-hoc), FilePackr no se hacía app por defecto de
+  ningún tipo. Diagnóstico: el aviso de primer arranque **solo abría Ajustes** (no asociaba nada) y
+  el default `associatedFormats` premarcaba casillas que **nunca** llamaban a `DefaultHandler.apply`
+  (asociación fantasma). Arreglado:
+  - `AppSettings.defaultAssociatedFormats` = **solo formatos editables** (`ArchiveFormat.allCases.filter(\.isWritable)`,
+    i.e. todo salvo rar/cpio/lha/cab). Antes incluía `.rar` (solo lectura) y omitía varios editables.
+    Decisión de alcance del usuario: reclamar solo lo que puede **crear**, no lo que solo lee.
+  - **Init honesto**: instalación nueva → `associatedFormats = []` (antes = el default premarcado sin
+    aplicar). Las casillas de Ajustes reflejan ahora la asociación REAL.
+  - **1er arranque**: `ContentView.promptDefaultCompressorIfNeeded` → al aceptar («Usar FilePackr»)
+    llama a `DefaultHandler.apply(defaultAssociatedFormats)` en el acto (como Keka), en vez de abrir
+    Ajustes. Retirado el código muerto `openFilesSettings`/`@Environment(\.openSettings)`.
+  - Textos `firstrun.message`/`firstrun.yes` reformulados (EN+ES). Test `DefaultAssociationTests`
+    (4) fija el alcance editable-only + el init vacío. **swift test 196→200**; app compila 0/0.
+  - **Nota macOS**: la asociación de un tipo con handler del sistema (zip→Utilidad de Archivo) NO es
+    automática al declararse; hay que llamar a `NSWorkspace.setDefaultApplication` (lo hace
+    `DefaultHandler`). Los tipos sin handler (7z/rar/…) sí se toman al registrarse. Y los Servicios
+    del Finder necesitan `lsregister -f` + `pbs -update` + relanzar Finder tras instalar.
+
 - **Sesión 2026-07-01 (b) — fixtures de formatos solo-lectura + UX de RAR cifrado** (commit
   `feat(rar)+test`): cerrado el último hueco de tests (RAR/CAB/CPIO/LHA sin cobertura por ser
   read-only sin round-trip posible).

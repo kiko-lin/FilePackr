@@ -8,7 +8,6 @@ import FilePackrModel
 /// central (zona de arrastre cuando está vacío, o el navegador `NSOutlineView`).
 struct ContentView: View {
     @EnvironmentObject private var settings: AppSettings
-    @Environment(\.openSettings) private var openSettings
     @StateObject private var doc = ArchiveDocument()
     /// Máquinas de estado de las colas de añadir y extraer (cola + diálogo de conflicto).
     @StateObject private var addCoord = AddCoordinator()
@@ -195,8 +194,9 @@ struct ContentView: View {
         if let n = untitledNumber { UntitledNumbering.release(n); untitledNumber = nil }
     }
 
-    /// Primer arranque: ofrece (una sola vez) hacer de FilePackr el compresor por defecto.
-    /// Si el usuario acepta, abre Ajustes en la pestaña Archivos para elegir formatos.
+    /// Primer arranque: ofrece (una sola vez) hacer de FilePackr la app por defecto de los
+    /// formatos que puede crear. Si el usuario acepta, la asociación se **aplica en el acto**
+    /// (como los demás compresores); luego puede afinarla en Ajustes ▸ Archivos.
     private func promptDefaultCompressorIfNeeded() {
         guard !settings.firstRunPromptShown else { return }
 
@@ -211,24 +211,26 @@ struct ContentView: View {
             alert.messageText = loc("firstrun.title")
             alert.informativeText = loc("firstrun.message")
             alert.alertStyle = .informational
-            alert.addButton(withTitle: loc("firstrun.yes"))     // 1º → por defecto (Intro)
+            alert.addButton(withTitle: loc("firstrun.yes"))     // 1º → asociar (Intro)
             let later = alert.addButton(withTitle: loc("firstrun.later"))
             later.keyEquivalent = "\u{1b}"                       // Escape pospone
 
+            let handle: (NSApplication.ModalResponse) -> Void = { response in
+                if response == .alertFirstButtonReturn { useFilePackrByDefault() }
+            }
             if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
-                alert.beginSheetModal(for: window) { if $0 == .alertFirstButtonReturn { openFilesSettings() } }
-            } else if alert.runModal() == .alertFirstButtonReturn {
-                openFilesSettings()
+                alert.beginSheetModal(for: window, completionHandler: handle)
+            } else {
+                handle(alert.runModal())
             }
         }
     }
 
-    /// Abre la ventana de Ajustes de la app en la pestaña Archivos. Usa la acción oficial
-    /// `openSettings` del entorno (fiable, a diferencia del selector privado que podía abrir
-    /// los Ajustes del Sistema). El salto de run loop deja cerrarse antes la hoja.
-    private func openFilesSettings() {
-        settings.selectedSettingsTab = .files
-        DispatchQueue.main.async { openSettings() }
+    /// Registra FilePackr como app por defecto (en la preferencia y en Launch Services) de los
+    /// formatos que puede crear —`AppSettings.defaultAssociatedFormats`, los editables—.
+    private func useFilePackrByDefault() {
+        settings.associatedFormats = AppSettings.defaultAssociatedFormats
+        DefaultHandler.apply(settings.associatedFormats)
     }
 
     /// Muestra la hoja para introducir la contraseña del archivo cifrado.

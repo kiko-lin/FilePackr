@@ -132,8 +132,11 @@ public final class AppSettings: ObservableObject {
     /// la fija en `.files` antes de abrir Ajustes).
     @Published public var selectedSettingsTab: SettingsTab = .general
 
-    /// Formatos premarcados por defecto: los más habituales (ZIP > RAR > 7Z + Unix).
-    public static let defaultAssociatedFormats: Set<ArchiveFormat> = [.zip, .sevenZip, .rar, .tarGzip, .gzip, .tar]
+    /// Formatos que FilePackr se ofrece a reclamar en el primer arranque: los que puede
+    /// **crear** (editables). Los de solo lectura (rar/cpio/lha/cab) se excluyen a propósito
+    /// —ahí FilePackr es visor, no editor, y no tiene sentido ser su app por defecto.
+    public static let defaultAssociatedFormats: Set<ArchiveFormat> =
+        Set(ArchiveFormat.allCases.filter(\.isWritable))
 
     private let defaults: UserDefaults
 
@@ -157,7 +160,10 @@ public final class AppSettings: ObservableObject {
         if let raw = defaults.array(forKey: "associatedFormats") as? [String] {
             associatedFormats = Set(raw.compactMap(ArchiveFormat.init(rawValue:)))
         } else {
-            associatedFormats = Self.defaultAssociatedFormats
+            // Instalación nueva: sin ninguna asociación hasta que el usuario la acepte en el
+            // primer arranque o marque formatos en Ajustes ▸ Archivos. Así las casillas de
+            // Ajustes reflejan la asociación REAL, no una sugerencia sin aplicar.
+            associatedFormats = []
         }
     }
 }
