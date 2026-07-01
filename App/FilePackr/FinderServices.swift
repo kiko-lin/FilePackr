@@ -93,8 +93,8 @@ final class FinderServicesProvider: NSObject {
     private func presentError(_ error: Error, for url: URL) {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = loc("error.title")
-        alert.informativeText = "\(url.lastPathComponent): \(localizedErrorMessage(error))"
+        alert.messageText = localizedErrorMessage(error)   // el problema concreto, en negrita (HIG)
+        alert.informativeText = url.lastPathComponent      // qué fichero falló
         alert.addButton(withTitle: loc("button.ok"))
         alert.runModal()
     }

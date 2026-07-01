@@ -63,12 +63,14 @@ struct ContentView: View {
                                 // (la ventana se va): el aviso conservar/eliminar es para la X del
                                 // overlay, que mantiene la ventana abierta.
                                 onCancel: { doc.cancelCurrentOperation(); extractCoord.cancelBatch() }))
-        .alert(loc("error.title"),
+        // El título (línea en negrita) es la propia descripción del error: es lo informativo y
+        // basta por sí solo (HIG de macOS). Antes el título era genérico y el detalle iba debajo,
+        // al revés de lo recomendado.
+        .alert(errorMessage ?? "",
                isPresented: Binding(get: { errorMessage != nil },
-                                    set: { if !$0 { errorMessage = nil } }),
-               presenting: errorMessage) { _ in
+                                    set: { if !$0 { errorMessage = nil } })) {
             Button(loc("button.ok")) {}
-        } message: { Text($0) }
+        }
         .confirmationDialog(
             extractCoord.conflict.map { loc("conflict.title", $0.destination.lastPathComponent) } ?? "",
             isPresented: Binding(get: { extractCoord.conflict != nil },

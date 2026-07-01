@@ -665,23 +665,6 @@
         }
       }
     },
-    "error.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The operation could not be completed"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se pudo completar la operación"
-          }
-        }
-      }
-    },
     "error.unsupportedEncryption" : {
       "extractionState" : "stale",
       "localizations" : {
