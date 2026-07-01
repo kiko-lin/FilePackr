@@ -29,7 +29,8 @@ public struct ZipReader: Sendable {
     /// Lista las entradas de un ZIP en memoria. Para no copiar el fichero entero
     /// (que puede ser de varios GB), sólo lee la **cola** (EOCD + ZIP64) y la
     /// región del **central directory**; lo demás no se toca.
-    public func listEntries(in data: Data, progress: ((Double) -> Void)? = nil) throws -> [ArchiveEntry] {
+    public func listEntries(in data: Data, progress: ((Double) -> Void)? = nil,
+                            limit: DecompressionLimit = .standard) throws -> [ArchiveEntry] {
         let fileSize = data.count
         guard fileSize >= 22 else { throw ArchiveError.notZipArchive }
 
@@ -125,6 +126,19 @@ public struct ZipReader: Sendable {
             ))
             p = nameStart + nameLen + extraLen + commentLen
             if let progress, entryCount > 0 { progress(Double(index + 1) / Double(entryCount)) }
+        }
+
+        // Cota anti-bomba **agregada**: el central directory puede DECLARAR un total descomprimido
+        // desproporcionado (p. ej. millones de entradas "gigantes") para reventar RAM/disco al
+        // extraer, aun cumpliendo cada entrada la cota por-entrada de `Deflate`. Lo rechazamos aquí,
+        // al abrir, comparando el total declarado con el tamaño del archivo (mismo criterio que
+        // `DecompressionLimit`). Reutiliza el error para dar el mensaje de bomba ya localizado.
+        let ceiling = UInt64(fileSize) * UInt64(limit.maxRatio) + UInt64(limit.floor)
+        var totalDeclared: UInt64 = 0
+        for entry in entries {
+            let (sum, overflow) = totalDeclared.addingReportingOverflow(entry.uncompressedSize)
+            if overflow || sum > ceiling { throw DecompressionLimitError.bombDetected }
+            totalDeclared = sum
         }
         return entries
     }
