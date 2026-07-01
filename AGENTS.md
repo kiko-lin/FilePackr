@@ -22,7 +22,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 - **Tests**: `swift test` (rápido, sin Xcode) corre la **suite completa**: motor
   (`ArchiveBrowserTests`) + modelo (`FilePackrModelTests`, el documento/coordinadores, en SPM
-  tras la 4ª auditoría). 158 tests. Ya **no** existe el target `FilePackrTests` en el `.pbxproj`.
+  tras la 4ª auditoría). 196 tests. Ya **no** existe el target `FilePackrTests` en el `.pbxproj`.
   - Las clases @MainActor de `FilePackrModelTests` usan `setUp`/`tearDown` **`async`** (no
     síncronos) y **no llaman a `super`**: así compilan tanto en Xcode 26 como en el XCTest del
     runner de CI (Xcode 16), donde esos métodos son `nonisolated` y enviar `self` no-Sendable da
@@ -130,6 +130,21 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     (`archiveBaseName`, `localizedErrorMessage`).
 
 ## Hecho
+
+- **Sesión 2026-07-01 (b) — fixtures de formatos solo-lectura + UX de RAR cifrado** (commit
+  `feat(rar)+test`): cerrado el último hueco de tests (RAR/CAB/CPIO/LHA sin cobertura por ser
+  read-only sin round-trip posible).
+  - **Fixtures reales versionados** (`Tests/**/Fixtures/`, generadores en `docs/fixtures/`):
+    cpio (`/usr/bin/cpio -H newc`), cab/lha/rar4 fabricados a mano offline (MSCF store / cabecera
+    nivel 0 `-lh0-` / RAR 4.x método 0x30), y **RAR5 reales** con `rar` 7.23 (comprimido + 2
+    cifrados). `LibArchiveFixtureTests` (11 tests: list + extract por formato).
+  - **Hallazgo verificado**: la libarchive del sistema **no descifra RAR** (ni RAR4 ni RAR5, ni con
+    la clave correcta) — solo el `unrar` propietario. RAR sin cifrar sí se lee/extrae (incl. RAR5
+    comprimido). Tests fijan la limitación. Ver `docs/fixtures/README.md` y sección Notas de formato.
+  - **UX de RAR cifrado**: nuevo `ArchiveDocumentError.encryptionUnsupported(format:)`; al abrir
+    (cabeceras cifradas) o extraer (solo datos) un RAR cifrado se muestra «Actualmente FilePackr no
+    puede leer archivos cifrados de tipo RAR» en vez de un bucle de contraseña o un error confuso.
+    `RarEncryptionTests` (3). Suite 196/0 + xcodebuild app OK.
 
 - **Sesión 2026-06-28 — i18n al idioma del sistema + dos items de UX del TODO**:
   - **i18n idiomática** (commit `refactor(i18n)`): la app sigue el idioma del **sistema** vía
@@ -461,7 +476,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       cero-deps. ZIP+AES-256 ya cubre "archivo seguro". Confirmado en revisión externa (2026-06-21).
 - [x] ~~**CI: ampliar cobertura (tests de modelo + app)**~~ (HECHO 2026-07-01, sin esperar runner
       macOS 26: se hizo el código **portable a Xcode 16**, el del runner `macos-15`). El CI tiene
-      ahora dos jobs bloqueantes: `test` = `swift test` (suite completa **motor + modelo, 158**) y
+      ahora dos jobs bloqueantes: `test` = `swift test` (suite completa **motor + modelo, 196**) y
       `build-app` = `xcodebuild build` sin firma (la capa de vistas). Cómo se desbloqueó cada parte:
       (a) **`FilePackrModelTests`**: `setUp`/`tearDown` pasados a **`async`** y sin llamar a `super`
       (eliminado el mecanismo `FILEPACKR_SKIP_MODEL_TESTS`). (b) **App**: `@MainActor` explícito en las
