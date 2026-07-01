@@ -490,26 +490,26 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       cabecera ya era lineal y correcto → no se tocó. **PENDIENTE**: verificación manual con VoiceOver
       (⌘F5), la hace el usuario. Descartado por riesgo>valor: mover el foco al overlay
       (`@AccessibilityFocusState`).
-- [ ] **Ampliar cobertura de tests** (huecos detectados en la evaluación 2026-07-01; prioridad
-      media, nada bloquea). El motor está bien cubierto (158 tests, interop real con zip/unzip/
-      pyzipper/tar), pero faltan:
-  - **Robustez ante corrupción**: **cubierto lo básico** (`RobustnessTests`, 2026-07-01): truncado
-    y magic inválido en gz/xz/bz2, cuerpo DEFLATE alterado, no-zip y zip sin EOCD, tar truncado y
-    con `size` corrupto → todos fallan limpio (0 bugs). Queda por cubrir (opcional): CRC32 explícito
-    que no cuadra en ZIP, central directory parcialmente dañado (recuperación), checksum de cabecera
-    tar (hoy no se valida al leer — leniencia conocida, no bug).
-  - **Anti-DoS**: cota anti-bomba en gzip/xz/bz2 **HECHA** (`DecompressionLimit`, commit
-    2026-07-01, con tests). Queda: cota **agregada** en ZIP (muchas entradas declaradas enormes
-    sumando TB; hoy solo hay ratio por entrada en `Deflate`) y su test.
-  - **Formatos libarchive**: 7z/xar/iso solo tienen round-trip básico; **RAR/CAB/CPIO/LHA: cero
-    tests** (aunque estén en el UI). Faltan fixtures reales de esos formatos.
-  - **Cifrado AES 128/192**: **cubierto** el round-trip de las tres fuerzas + wrong-password
-    (`RobustnessTests`, 2026-07-01). Queda por cubrir (opcional): **interop** externa de 128/192
-    (pyzipper), no solo round-trip interno.
-  - **Multivolumen**: `VolumeStore` cubre nombrado + descubrimiento + join; faltan edge cases
-    (>999 partes y su formato de índice, recuperación de un juego con una parte ausente).
-  - **`streamEntries` (un solo pase)**: cubierto el skip y casos básicos; falta sucesión de
-    varias entradas grandes y "saltar entrada → continuar sin desincronizar".
+- [~] **Ampliar cobertura de tests** (huecos de la evaluación 2026-07-01). **Casi todo HECHO**
+      (suite 158→182); solo restan piezas que necesitan fixtures externos o son de bajo valor:
+  - **Robustez ante corrupción** — ✅ HECHO lo básico (`RobustnessTests`): truncado + magic inválido
+    en gz/xz/bz2, cuerpo DEFLATE alterado, no-zip y zip sin EOCD, tar truncado y con `size` corrupto
+    → todos fallan limpio (0 bugs). Opcional pendiente: **ZIP no valida CRC32 al extraer** (a
+    diferencia de gzip; leniencia — podría añadirse verificación) y recuperación de central directory
+    parcialmente dañado.
+  - **Anti-DoS** — ✅ HECHO: cota por-flujo en gzip/xz/bz2 (`DecompressionLimit`) **y** cota
+    **agregada** en ZIP (`ZipReader.listEntries` rechaza total declarado desproporcionado), ambas
+    con tests.
+  - **Cifrado AES 128/192** — ✅ HECHO el round-trip de las tres fuerzas + wrong-password. Opcional:
+    **interop** externa (pyzipper) de 128/192, no solo round-trip interno.
+  - **Multivolumen** — ✅ HECHO edge cases (naming >999 con índice de 4 dígitos + round-trip, rechazo
+    de no-continuación, split/join con 1667 partes y nombres únicos). Nota: la recuperación ante una
+    parte ausente es de `VolumeStore` (disco), no cubierta aún.
+  - **`streamEntries`** — ✅ HECHO: entradas grandes multi-trozo en un pase y saltar una grande sin
+    desincronizar (confirmado 0 bugs).
+  - **Formatos libarchive** — ⛔ PENDIENTE (bloqueado por fixtures): **RAR/CAB/CPIO/LHA sin tests**
+    (read-only, propietarios → hacen falta ficheros de muestra reales); 7z/xar/iso solo round-trip
+    básico. Único sub-item que no se puede cerrar sin material externo.
 - [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
       notarización, `.dmg`. Aplazado a propósito, no por bajo valor.
