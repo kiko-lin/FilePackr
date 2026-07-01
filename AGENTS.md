@@ -52,7 +52,8 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     adjuntarse: falta `get-task-allow`). Para verificación usa un DerivedData aparte:
     `xcodebuild … -derivedDataPath /tmp/fp-verify CODE_SIGNING_ALLOWED=NO build`.
     Si ya se ensució: recompila firmado (sin esa flag) o el usuario hace Clean Build
-    Folder (⇧⌘K) y ▶. Firma: automática, equipo `J5HQ9TN2HX`, bundle `com.kiko.FilePackr`.
+    Folder (⇧⌘K) y ▶. Firma: automática, equipo `969HQC97L9` (el de `kikolincor@gmail.com`;
+    antes figuraba `J5HQ9TN2HX`, que no correspondía a la cuenta), bundle `com.kiko.FilePackr`.
   - **Índice de SourceKit**: al crear ficheros nuevos por fuera de Xcode (grupos
     sincronizados, objectVersion 77) el editor puede mostrar "Cannot find X in scope"
     aunque compile; se arregla borrando el DerivedData del proyecto y reabriendo.
@@ -545,9 +546,29 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     `Localizable.xcstrings`, con `%@` = acrónimo del formato): «Actualmente FilePackr no puede leer
     archivos cifrados de tipo RAR.» Tests: `Tests/FilePackrModelTests/RarEncryptionTests.swift`
     (3: abrir cabeceras, extraer datos, y control RAR sin cifrar intacto).
-- [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
-      reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
-      notarización, `.dmg`. Aplazado a propósito, no por bajo valor.
+- [~] **Distribución directa (Developer ID + notarización)** — **INFRAESTRUCTURA HECHA
+      2026-07-01, falta el paso con cuenta de desarrollador** (lo hace el usuario). Canal
+      elegido: **directa fuera de la App Store** (la GPL-3.0 es incompatible en la práctica
+      con la Store, y así no hay que reactivar sandbox + security-scoped bookmarks). Hecho en
+      el repo: **`LICENSE` GPL-3.0** (copyright Francisco Javier Linares); **Hardened Runtime
+      activado** (`ENABLE_HARDENED_RUNTIME = YES` en Debug y Release del pbxproj) — verificado
+      `BUILD SUCCEEDED` en Release; **copyright** en el «Acerca de»
+      (`INFOPLIST_KEY_NSHumanReadableCopyright`); **sin `.entitlements`** (la app no lo necesita:
+      no subprocesos/`dlopen`/JIT, solo enlaza libs del sistema); **pipeline de release**
+      (`scripts/release.sh` + `scripts/ExportOptions.plist`, método `developer-id`): archive →
+      export firmado → notarizar app → grapar → `.dmg` → notarizar dmg → grapar → validar con
+      `spctl`. Guía completa en `docs/distribution.md`. **PENDIENTE (usuario, requiere Apple
+      Developer Program):** (1) certificado *Developer ID Application* en el llavero;
+      (2) `xcrun notarytool store-credentials "FilePackr" …` con contraseña específica de app;
+      (3) `scripts/release.sh`; (4) prueba en frío del `.dmg`; (5) publicar (p. ej. GitHub
+      Releases). App Sandbox sigue **OFF** a propósito (solo haría falta para la App Store).
+      **Vía GRATUITA añadida (2026-07-01)**: `scripts/release.sh --unsigned` genera un `.dmg`
+      con firma **ad-hoc** (sin certificado ni cuenta de pago), verificado aquí (BUILD SUCCEEDED
+      + `.dmg` de 4,4 MB, app `valid on disk`); el usuario final lo autoriza con «Abrir
+      igualmente» / `xattr -d com.apple.quarantine`. Instrucciones en `docs/distribution.md`.
+      **Team ID corregido**: el real de `kikolincor@gmail.com` es **`969HQC97L9`** (no
+      `J5HQ9TN2HX`, que daba 403 en notarytool); actualizado en pbxproj + ExportOptions. Falta
+      confirmar si esa cuenta está en el **programa de pago** (si no, solo la vía `--unsigned`).
 
 > Lo ya realizado vive en la sección **Hecho** (arriba) y en el historial de git; aquí solo
 > quedan objetivos **pendientes**.

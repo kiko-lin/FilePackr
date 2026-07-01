@@ -1,6 +1,7 @@
 # FilePackr
 
 [![CI](https://github.com/kiko-lin/FilePackr/actions/workflows/ci.yml/badge.svg)](https://github.com/kiko-lin/FilePackr/actions/workflows/ci.yml)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 Gestor de archivos comprimidos para **macOS**: abre y navega archivos **sin
 descomprimirlos**, edita (añadir, borrar, renombrar, mover, crear carpetas), extrae,
@@ -117,6 +118,24 @@ Cada PR (y push) a `main` dispara [GitHub Actions](.github/workflows/ci.yml) en 
 macOS, con dos jobs en paralelo: **`swift test`** (suite completa, motor + modelo) y
 **`xcodebuild build`** (compila la app, la capa de vistas). Si algo no compila o un test falla,
 el PR queda en rojo. Ver [`AGENTS.md`](AGENTS.md) para el detalle.
+
+## Distribución
+
+Se distribuye de forma **directa** (fuera de la Mac App Store), con dos vías:
+
+- **Gratuita** — `scripts/release.sh --unsigned` genera un `.dmg` con firma ad-hoc (sin
+  coste ni cuenta de pago); el usuario lo autoriza la primera vez desde *Ajustes del Sistema
+  → Privacidad y seguridad*. Al ser open source, cualquiera puede además **compilarla desde
+  el código** (⌘R en Xcode) y correrla sin avisos.
+- **Notarizada** — `scripts/release.sh` produce un `.dmg` firmado con **Developer ID** y
+  **notarizado** (doble clic, sin avisos); requiere el Apple Developer Program.
+
+El hardened runtime ya está activado y el pipeline listo. Guía paso a paso en
+[`docs/distribution.md`](docs/distribution.md).
+
+## Licencia
+
+[GPL-3.0-or-later](LICENSE) © 2026 Francisco Javier Linares.
 
 ## Estado y pendientes
 

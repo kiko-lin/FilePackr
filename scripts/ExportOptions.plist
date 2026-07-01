@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Opciones de exportación para distribución DIRECTA (fuera de la Mac App Store).
+  Las usa `xcodebuild -exportArchive` en scripts/release.sh.
+
+  method = developer-id  → firma con el certificado "Developer ID Application"
+  (el que exige la notarización). No es "mac-application" (App Store) ni
+  "development" (solo pruebas locales).
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>developer-id</string>
+
+	<key>teamID</key>
+	<string>969HQC97L9</string>
+
+	<!-- Firma automática: Xcode elige el certificado Developer ID Application
+	     de la cuenta y gestiona el perfil. Requiere el certificado instalado
+	     en el llavero (ver docs/distribution.md). -->
+	<key>signingStyle</key>
+	<string>automatic</string>
+
+	<!-- Exportar a una carpeta local (no subir a ningún sitio). -->
+	<key>destination</key>
+	<string>export</string>
+</dict>
+</plist>
