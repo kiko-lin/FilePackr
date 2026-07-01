@@ -84,7 +84,7 @@ if [ "$UNSIGNED" = "1" ]; then
   VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist" 2>/dev/null || echo 1.0)"
   DMG="$BUILD_DIR/FilePackr-$VERSION-unsigned.dmg"
 
-  log "2/2  Construyendo $DMG…"
+  log "2/2  Construyendo ${DMG}…"
   make_dmg "$APP" "$DMG"
 
   log "✓ Listo (SIN notarizar): $DMG"
@@ -157,7 +157,7 @@ else
 fi
 
 # --- 5. Construir el .dmg ---------------------------------------------------
-log "5/7  Construyendo $DMG…"
+log "5/7  Construyendo ${DMG}…"
 make_dmg "$APP" "$DMG"
 
 if [ "$SKIP_NOTARIZE" != "1" ]; then
