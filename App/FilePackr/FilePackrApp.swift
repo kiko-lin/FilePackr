@@ -13,11 +13,36 @@ struct FilePackrApp: App {
                 .environmentObject(AppSettings.shared)
         }
         .windowStyle(.hiddenTitleBar)   // sin barra de título "FilePackr"; el contenido sube
+        .commands { HelpCommands() }    // menú Ayuda (⌘?) → ventana de Ayuda
 
         // Ajustes en el menú de la app (⌘,), accesible siempre (también con la app vacía).
         Settings {
             SettingsView()
                 .environmentObject(AppSettings.shared)
+        }
+
+        // Ventana de Ayuda: una sola instancia, la abre `HelpCommands` con `openWindow`.
+        // `.commandsRemoved()` retira el ítem de menú que SwiftUI añade por su cuenta para
+        // esta escena (saldría duplicado en el menú Ventana); la única entrada es la del menú
+        // Ayuda que pone `HelpCommands`.
+        Window(loc("help.title"), id: HelpCommands.windowID) {
+            HelpView()
+        }
+        .windowResizability(.contentSize)
+        .commandsRemoved()
+    }
+}
+
+/// Sustituye el ítem por defecto del menú **Ayuda** («Ayuda de FilePackr», ⌘?) por uno que
+/// abre nuestra ventana `HelpView` en vez de la Ayuda de macOS (que no existe para esta app).
+struct HelpCommands: Commands {
+    static let windowID = "help"
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .help) {
+            Button(loc("help.title")) { openWindow(id: Self.windowID) }
+                .keyboardShortcut("?", modifiers: .command)
         }
     }
 }

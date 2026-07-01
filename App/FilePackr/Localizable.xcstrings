@@ -4,7 +4,11 @@
     "" : {
 
     },
+    "•" : {
+
+    },
     "a11y.operationFinished" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -599,6 +603,7 @@
       }
     },
     "error.bomb" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1256,6 +1261,329 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ZIP"
+          }
+        }
+      }
+    },
+    "help.edit.body" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add: drag files or folders (several at once), or use the **+** button.\nRename, Delete, New folder, and move by dragging onto a folder.\nMultiple selection to drag or delete in bulk.\nIf a name already exists: Overwrite · Keep both · Cancel."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadir: arrastra ficheros o carpetas (varios a la vez), o usa el botón **+**.\nRenombrar, Eliminar, Crear carpeta, y mover arrastrando sobre una carpeta.\nSelección múltiple para arrastrar o borrar en lote.\nSi un nombre ya existe: Sobrescribir · Conservar ambos · Cancelar."
+          }
+        }
+      }
+    },
+    "help.edit.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Editar"
+          }
+        }
+      }
+    },
+    "help.extract.body" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extract the selected item (or several): button, context menu, or by dragging to the Finder.\n**Extract all** to unpack the whole archive into a folder.\nOn conflicts: Overwrite · Keep both · Cancel."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extrae el elemento (o varios) seleccionados: botón, menú contextual o arrastrando al Finder.\n**Extraer todo** el archivo a una carpeta.\nAnte conflictos: Sobrescribir · Conservar ambos · Cancelar."
+          }
+        }
+      }
+    },
+    "help.extract.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extract"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extraer"
+          }
+        }
+      }
+    },
+    "help.footer" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your changes are safe: closing or quitting with unsaved changes always prompts you (Save · Close without saving · Cancel)."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tus cambios no se pierden: al cerrar o salir con cambios sin guardar, FilePackr siempre avisa (Guardar · Cerrar sin guardar · Cancelar)."
+          }
+        }
+      }
+    },
+    "help.navigate.body" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder-style view with sortable columns: Name, Date, Size, Kind and Compressed.\nSpace bar: preview with Quick Look.\nThe status bar shows the number of files and their real and compressed size."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista tipo Finder con columnas ordenables: Nombre, Fecha, Tamaño, Clase y Comprimido.\nBarra espaciadora: previsualizar con Quick Look.\nLa barra de estado muestra el nº de ficheros y su tamaño real y comprimido."
+          }
+        }
+      }
+    },
+    "help.navigate.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Browse"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Navegar"
+          }
+        }
+      }
+    },
+    "help.open.body" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drag a file onto the window, or click to choose one.\nFrom the Finder: double-click, or right-click → **Open in FilePackr**.\nRight-click in the Finder → **Extract here** unpacks to a sibling folder without opening the app.\nOpens: .zip · .7z · .rar · .tar (.gz/.xz/.bz2) · .gz · .xz · .bz2 · .iso · .xar/.pkg · .cpio · .cab · .lha.\nDropping a normal file creates a new archive from it."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arrastra un archivo a la ventana, o haz clic para elegirlo.\nDesde el Finder: doble clic, o clic derecho → **Abrir en FilePackr**.\nClic derecho en el Finder → **Descomprimir aquí** extrae a una carpeta hermana sin abrir la app.\nAbre: .zip · .7z · .rar · .tar (.gz/.xz/.bz2) · .gz · .xz · .bz2 · .iso · .xar/.pkg · .cpio · .cab · .lha.\nArrastrar un fichero normal crea un archivo nuevo con él."
+          }
+        }
+      }
+    },
+    "help.open.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open an archive"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir un archivo"
+          }
+        }
+      }
+    },
+    "help.password.body" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When you open an encrypted archive, FilePackr asks for the password and validates it.\nIt stays in memory while the archive is open; it is forgotten when you close it.\nAn encrypted archive with no password opens read-only."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al abrir un archivo cifrado, FilePackr pide la clave y la valida.\nSe mantiene en memoria mientras el archivo está abierto; al cerrarlo se olvida.\nUn archivo cifrado sin contraseña se abre en solo lectura."
+          }
+        }
+      }
+    },
+    "help.password.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passwords"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contraseñas"
+          }
+        }
+      }
+    },
+    "help.save.body" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**Save** (⌘S): write the changes back into the same archive.\n**Export**: save a separate copy without touching the open document, choosing format, compression level, encryption and split into volumes.\nEncryption: None · Weak (compatible) · **Strong (AES-256)**."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "**Guardar** (⌘S): escribe los cambios en el mismo archivo.\n**Exportar**: guarda una copia aparte sin tocar el documento abierto, eligiendo formato, nivel de compresión, cifrado y división en volúmenes.\nCifrado: No cifrado · Débil (compatible) · **Fuerte (AES-256)**."
+          }
+        }
+      }
+    },
+    "help.save.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save and export"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar y exportar"
+          }
+        }
+      }
+    },
+    "help.settings.body" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Appearance: Light · Dark · Match system.\nDefaults: format, level, encryption and extraction folder.\nFiles: which formats FilePackr opens by default."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apariencia: Claro · Oscuro · Según el sistema.\nValores por defecto: formato, nivel, cifrado y carpeta de extracción.\nArchivos: qué formatos abre FilePackr por defecto."
+          }
+        }
+      }
+    },
+    "help.settings.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings (⌘,)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajustes (⌘,)"
+          }
+        }
+      }
+    },
+    "help.shortcuts.body" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘S Save · Space Quick Look · ⌘, Settings · ⌘W Close · ⌘Q Quit."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "⌘S Guardar · Espacio Quick Look · ⌘, Ajustes · ⌘W Cerrar · ⌘Q Salir."
+          }
+        }
+      }
+    },
+    "help.shortcuts.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shortcuts"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atajos"
+          }
+        }
+      }
+    },
+    "help.subtitle" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open and edit compressed archives, and extract everything or just what you pick, without unpacking the whole archive."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre y edita archivos comprimidos, y extrae todo o solo lo que elijas, sin necesidad de descomprimir el archivo completo."
+          }
+        }
+      }
+    },
+    "help.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FilePackr Help"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayuda de FilePackr"
           }
         }
       }
