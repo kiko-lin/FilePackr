@@ -1,0 +1,31 @@
+#!/bin/sh
+# Hook pre-push: bloquea el push si la suite de tests falla, para no subir a `main`
+# código en rojo. Es la red de seguridad "no empujes lo que rompe" para el flujo en
+# solitario con push directo (sin PR).
+#
+# Activación (una vez por clon):  git config core.hooksPath .githooks
+# Saltárselo puntualmente:         git push --no-verify
+#
+# Solo corre `swift test` (motor + modelo, ~segundos). NO compila la app (xcodebuild es
+# lento); el CI ya cubre la capa de vistas. Para añadirla en local, descomenta el bloque
+# de más abajo.
+
+echo "▶ pre-push: swift test (motor + modelo)…"
+if ! swift test; then
+    echo ""
+    echo "✗ swift test falló → push ABORTADO."
+    echo "  Arregla los tests, o usa 'git push --no-verify' para saltarte esta comprobación."
+    exit 1
+fi
+
+# --- Opcional: compilar también la app (más lento, ~1-2 min). Descomenta si lo quieres. ---
+# echo "▶ pre-push: xcodebuild build (app)…"
+# if ! xcodebuild build -project App/FilePackr.xcodeproj -scheme FilePackr \
+#       -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+#       CODE_SIGN_IDENTITY="" -quiet; then
+#     echo "✗ el build de la app falló → push ABORTADO."
+#     exit 1
+# fi
+
+echo "✓ tests verdes → push permitido."
+exit 0

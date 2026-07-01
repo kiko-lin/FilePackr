@@ -468,8 +468,15 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       clases de glue de AppKit (`AppDelegate`, los dos `Coordinator`, `init` nonisolated en
       `FinderServicesProvider`), porque **Xcode 16 ignora `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`**;
       + scheme compartido + ruta de paquete `relativePath = ..`. Verificado verde en el runner.
-      PENDIENTE menor (opcional): activar **branch protection** en `main` (exigir el check verde antes
-      de mergear).
+- [ ] **Branch protection en `main`** · **CONGELADO** — retomar en un momento de mayor estabilidad
+      del proyecto (o cuando se trabaje con PRs). Objetivo: exigir el check verde del CI antes de
+      integrar. Matiz por el que se congela: el CI corre **después** del push, así que "required
+      status checks" sin PR bloquea el push directo (huevo-y-gallina) → no encaja con el flujo actual
+      en solitario. Mientras tanto, la red de seguridad local es el **hook `pre-push`**
+      (`.githooks/pre-push`, activado con `git config core.hooksPath .githooks`): corre `swift test`
+      y aborta el push si falla (`git push --no-verify` para saltárselo). Cuando se retome: GitHub →
+      Settings → Branches → regla sobre `main` → "Require status checks to pass" con los checks
+      `swift test (motor + modelo)` y `build app (xcodebuild)`; con PRs si el equipo crece.
 - [x] ~~**Accesibilidad / VoiceOver** (Tier 1 + 2 + 3)~~ (HECHO 2026-07-01). Tier 1 (operabilidad):
       la **zona de arrastre** del estado vacío (antes `onTapGesture`, no activable por VoiceOver) se
       expone como botón con label/pista/acción. Tier 2 (estado anunciado): **iconos de cabecera**
