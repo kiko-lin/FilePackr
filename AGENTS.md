@@ -365,7 +365,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   i18n (auditoría item 4): emite tokens (`ProgressKind`) y las vistas traducen. **Para añadir texto**:
   nueva entrada en `Localizable.xcstrings` (Xcode) con EN+ES. **No hay selector de idioma en Ajustes.**
 
-## TODO (objetivos pendientes, ordenados por importancia — revisión 2026-06-26)
+## TODO (objetivos pendientes, ordenados por importancia — revisión 2026-07-01)
 
 > **Criterio de orden:** impacto en todos los usuarios × esfuerzo × riesgo de dejarlo sin hacer.
 > Los items de formato/streaming de pura completitud van al final, en este orden:
