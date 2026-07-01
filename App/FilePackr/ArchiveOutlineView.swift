@@ -647,7 +647,7 @@ extension ArchiveOutlineView {
                 qlMaterializing.insert(index)
                 promiseQueue.addOperation {
                     let url = (try? plan.materialize()) ?? URL(fileURLWithPath: "/dev/null")
-                    OperationQueue.main.addOperation {
+                    Task { @MainActor in
                         self.qlCache[index] = url
                         self.qlMaterializing.remove(index)
                         QLPreviewPanel.shared()?.reloadData()
