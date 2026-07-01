@@ -151,6 +151,15 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     automática al declararse; hay que llamar a `NSWorkspace.setDefaultApplication` (lo hace
     `DefaultHandler`). Los tipos sin handler (7z/rar/…) sí se toman al registrarse. Y los Servicios
     del Finder necesitan `lsregister -f` + `pbs -update` + relanzar Finder tras instalar.
+  - **Casillas de Ajustes ▸ Archivos que reflejan la REALIDAD** (no la intención): `DefaultHandler`
+    gana `isDefault` (consulta `NSWorkspace.urlForApplication(toOpen:)`), `clearDefault` (desmarcar
+    = reasignar el tipo a otra app que lo abra, vía `urlsForApplications(toOpen:)`; Utilidad de
+    Archivo para zip/tar/gz/bz2/xz/cpio; imposible para 7z/rar/xar/lha/cab → no hay otra app) y
+    `canClearDefault`. `FileFormatsSettingsView` pasa a un `@State [ArchiveFormat: Bool]` releído de
+    macOS en `onAppear` y tras cada cambio (asíncrono por el aviso de consentimiento de macOS 26).
+    Cierra el desajuste "casilla marcada sin aplicar" también cuando el usuario **declina** el aviso.
+    `associatedFormats` queda vestigial (lo escribe el 1er arranque; la UI ya no lo lee). Texto
+    `settings.files.note` reformulado (EN+ES). App compila 0/0; suite 200.
 
 - **Sesión 2026-07-01 (b) — fixtures de formatos solo-lectura + UX de RAR cifrado** (commit
   `feat(rar)+test`): cerrado el último hueco de tests (RAR/CAB/CPIO/LHA sin cobertura por ser

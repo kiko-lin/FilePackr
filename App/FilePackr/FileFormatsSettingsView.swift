@@ -3,13 +3,19 @@ import AppKit
 import ArchiveBrowser
 import FilePackrModel
 
-/// Pestaña "Archivos" de Ajustes: lista de formatos que FilePackr puede abrir, cada uno
-/// con su icono y un check para hacerse app por defecto en el Finder (vía `DefaultHandler`).
+/// Pestaña "Archivos" de Ajustes: lista de formatos que FilePackr puede abrir, cada uno con su
+/// icono y una casilla para hacerse (o dejar de ser) la app por defecto en el Finder.
+///
+/// Las casillas reflejan la **realidad del sistema** (consultada a `DefaultHandler`), no una
+/// preferencia interna: marcada = FilePackr es AHORA el predeterminado del tipo. Así se evita
+/// el desajuste "marcada pero sin aplicar" (p. ej. si el usuario declina el aviso de macOS 26).
 struct FileFormatsSettingsView: View {
-    @EnvironmentObject var settings: AppSettings
+    /// Estado real "¿FilePackr es el predeterminado?" por formato. Se relee de macOS al abrir
+    /// y tras cada cambio (los cambios son asíncronos: median un aviso de confirmación del SO).
+    @State private var isDefault: [ArchiveFormat: Bool] = [:]
 
     private let formats = ArchiveFormat.allCases
-    private var allSelected: Bool { settings.associatedFormats.count == formats.count }
+    private var allSelected: Bool { formats.allSatisfy { isDefault[$0] == true } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -45,29 +51,35 @@ struct FileFormatsSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 12)
         }
+        .onAppear(perform: refreshStates)
     }
 
-    /// Pertenencia del formato al conjunto; al marcar, lo registra como handler por defecto.
+    /// Relee de macOS quién es el predeterminado de cada tipo. Se llama al abrir y tras cada
+    /// cambio (asíncrono), para que las casillas reflejen la asociación REAL.
+    private func refreshStates() {
+        var map: [ArchiveFormat: Bool] = [:]
+        for format in formats { map[format] = DefaultHandler.isDefault(format) }
+        isDefault = map
+    }
+
+    /// Marcar → FilePackr se hace el predeterminado. Desmarcar → se lo devuelve a otra app que
+    /// abra el tipo (si la hay). En ambos casos macOS 26 pide confirmación; al terminar se relee
+    /// el estado real, así que si el usuario declina, la casilla vuelve a su sitio.
     private func binding(for format: ArchiveFormat) -> Binding<Bool> {
         Binding(
-            get: { settings.associatedFormats.contains(format) },
+            get: { isDefault[format] ?? false },
             set: { on in
-                if on {
-                    settings.associatedFormats.insert(format)
-                    DefaultHandler.setAsDefault(format)
-                } else {
-                    settings.associatedFormats.remove(format)
-                }
+                if on { DefaultHandler.setAsDefault(format, completion: refreshStates) }
+                else  { DefaultHandler.clearDefault(format, completion: refreshStates) }
             }
         )
     }
 
     private func toggleAll() {
-        if allSelected {
-            settings.associatedFormats = []
-        } else {
-            settings.associatedFormats = Set(formats)
-            DefaultHandler.apply(settings.associatedFormats)
+        let turnOn = !allSelected
+        for format in formats {
+            if turnOn { DefaultHandler.setAsDefault(format, completion: refreshStates) }
+            else      { DefaultHandler.clearDefault(format, completion: refreshStates) }
         }
     }
 }

@@ -2541,13 +2541,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unchecking a format doesn't hand it back to another app; change “Open with → Change All” in Finder to pick a different default."
+            "value": "Checking a format makes FilePackr its default app; unchecking hands it back to another app that can open it. Some formats (7z, RAR…) have no other app, so they can't be unchecked. macOS asks you to confirm each change."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Desmarcar un formato no se lo devuelve a otra app; usa «Abrir con → Cambiar todos» en el Finder para elegir otra app por defecto."
+            "value": "Marcar un formato hace de FilePackr su app por defecto; desmarcarlo se lo devuelve a otra app que pueda abrirlo. Algunos formatos (7z, RAR…) no tienen otra app, así que no se pueden desmarcar. macOS te pedirá confirmar cada cambio."
           }
         }
       }
