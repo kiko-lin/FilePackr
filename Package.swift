@@ -26,7 +26,8 @@ let targets: [Target] = [
     // síncronos) para compilar tanto en Xcode 26 como en el XCTest del runner de CI (Xcode 16).
     .testTarget(
         name: "FilePackrModelTests",
-        dependencies: ["FilePackrModel"]
+        dependencies: ["FilePackrModel"],
+        resources: [.copy("Fixtures")]
     ),
 ]
 

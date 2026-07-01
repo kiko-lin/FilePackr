@@ -507,9 +507,29 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     parte ausente es de `VolumeStore` (disco), no cubierta aún.
   - **`streamEntries`** — ✅ HECHO: entradas grandes multi-trozo en un pase y saltar una grande sin
     desincronizar (confirmado 0 bugs).
-  - **Formatos libarchive** — ⛔ PENDIENTE (bloqueado por fixtures): **RAR/CAB/CPIO/LHA sin tests**
-    (read-only, propietarios → hacen falta ficheros de muestra reales); 7z/xar/iso solo round-trip
-    básico. Único sub-item que no se puede cerrar sin material externo.
+  - **Formatos libarchive** — ✅ HECHO (2026-07-01): **RAR/CAB/CPIO/LHA con tests de lectura**
+    (`LibArchiveFixtureTests.swift`, 11 tests: list + extract por formato). Fixtures en
+    `Tests/ArchiveBrowserTests/Fixtures/`. Almacenados (sin compresión), fabricados **offline**: cpio
+    con `/usr/bin/cpio -H newc`; cab/lha/rar4 a mano (scripts en `docs/fixtures/`, MSCF store /
+    cabecera nivel 0 `-lh0-` / RAR 4.x método 0x30). **RAR5 reales** generados con `rar` 7.23:
+    `comp-rar5.rar` (comprimido sin cifrar — libarchive lo descomprime de verdad, verificado) y dos
+    cifrados (`enc-rar5-headers`/`enc-rar5-data`, clave real "clave123").
+  - **⚠️ LIMITACIÓN VERIFICADA (2026-07-01): la libarchive del sistema NO descifra RAR** (ni RAR4 ni
+    RAR5), solo el `unrar` propietario. Empírico: un RAR5 cifrado con la clave **correcta** sigue
+    dando error (`passphraseRequired`/`wrongPassword`); `unrar` con la misma clave sí extrae. Además,
+    en RAR5 con solo datos cifrados libarchive **ni marca** las entradas como cifradas (`isEncrypted
+    = false`) → la app no pediría clave. Tests `testRar5Encrypted*NotDecryptable/NotExtractable` fijan
+    esta conducta (saltarán si un macOS futuro añade descifrado RAR). RAR **sin cifrar** sí se lee y
+    extrae (incl. RAR5 comprimido). Ver `docs/fixtures/README.md`.
+  - **UX de RAR cifrado — ✅ RESUELTO (2026-07-01)**: nuevo `ArchiveDocumentError.encryptionUnsupported(format:)`.
+    Caso A (cabeceras cifradas): `openArchive` lo lanza al detectar `.passphraseRequired` en un `.rar`
+    (antes → bucle de contraseña con la clave correcta rechazada). Caso B (solo datos cifrados,
+    indetectable al abrir porque libarchive no marca cifrado): `performExtraction` mapea el
+    `wrongPassword`/`passphraseRequired` de un RAR a ese error (antes → "contraseña incorrecta"
+    confuso). La vista lo traduce a `error.encryptionUnsupported` (clave nueva EN+ES en
+    `Localizable.xcstrings`, con `%@` = acrónimo del formato): «Actualmente FilePackr no puede leer
+    archivos cifrados de tipo RAR.» Tests: `Tests/FilePackrModelTests/RarEncryptionTests.swift`
+    (3: abrir cabeceras, extraer datos, y control RAR sin cifrar intacto).
 - [ ] **Distribución** (APLAZADO — lo último de todo, por ahora no se distribuye):
       reactivar App Sandbox (paneles de guardado + security-scoped bookmarks),
       notarización, `.dmg`. Aplazado a propósito, no por bajo valor.
@@ -553,6 +573,10 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   extraer una entrada concreta se re-abre desde memoria y se itera hasta su ruta
   (no hay acceso aleatorio). 7z firma `37 7A BC AF 27 1C`. Riesgo bajo (API 3.x
   estable; Apple la actualiza). NO soportado: multivolumen nativo 7z (`.7z.001`).
+  **RAR cifrado NO soportado** (verificado 2026-07-01): libarchive lee/descomprime RAR4/RAR5
+  **sin cifrar**, pero **no descifra** RAR con contraseña —ni con la clave correcta— porque no
+  incorpora el `unrar` propietario de RARLAB. Sí descifra ZIP (ZipCrypto/AES) y 7z. En RAR5 con
+  solo datos cifrados libarchive ni siquiera reporta `isEncrypted`. Ver `docs/fixtures/README.md`.
 - Volúmenes: división **por bytes** (no spanning PKWARE nativo). La primera parte
   conserva el nombre base (`nombre.zip`) y las siguientes llevan `_NNN` antes de la
   extensión (`nombre_001.zip`, `nombre_002.zip`…). Reconstrucción = concatenar en

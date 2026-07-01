@@ -1,5 +1,6 @@
 import Foundation
 import ArchiveBrowser
+import FilePackrModel
 
 /// Nombre base de un archivo sin su extensión conocida (zip/tar/tar.gz/tgz/gz). Para el resto
 /// cae a `deletingPathExtension`. Compartido por la vista y los Servicios del Finder.
@@ -16,6 +17,9 @@ func archiveBaseName(_ name: String) -> String {
 /// Compartido por la vista y los Servicios del Finder.
 func localizedErrorMessage(_ error: Error) -> String {
     switch error {
+    case ArchiveDocumentError.encryptionUnsupported(let format):
+        // <TIPO> = acrónimo del formato (mismo en todo idioma): "RAR", etc.
+        return loc("error.encryptionUnsupported", format.fileExtension.uppercased())
     case let e as ExtractError:
         switch e {
         case .needsPassword: return loc("error.needsPassword")

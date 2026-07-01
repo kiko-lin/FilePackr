@@ -15,6 +15,15 @@ public enum LockState: Equatable {
     case needsEntryPassword
 }
 
+/// Errores propios del documento (no del motor); la capa de vista los traduce.
+public enum ArchiveDocumentError: Error {
+    /// No podemos abrir/extraer un archivo **cifrado** de este formato. Hoy solo se da con **RAR**:
+    /// la libarchive del sistema no descifra RAR (ni RAR4 ni RAR5), solo el `unrar` propietario de
+    /// RARLAB, así que pedir contraseña no serviría (la correcta también falla). Ver `docs/fixtures/`.
+    /// Lleva el formato para que el mensaje diga de qué tipo se trata.
+    case encryptionUnsupported(format: ArchiveFormat)
+}
+
 /// Documento de trabajo: el árbol de elementos que acabará siendo un ZIP.
 /// Mantiene, si se abrió un ZIP existente, sus bytes originales para poder
 /// extraer o copiar entradas sin recomprimir.
@@ -166,7 +175,10 @@ public final class ArchiveDocument: ObservableObject {
             result = loaded.0
             joinedTemp = loaded.1
         } catch let error as LibArchiveError where error == .passphraseRequired {
-            // 7z con cabeceras cifradas: hay que pedir contraseña para abrir.
+            // RAR con cabeceras cifradas: libarchive NO descifra RAR (ni con la clave correcta),
+            // así que pedir contraseña sería un bucle sin salida. Avisar de que no se soporta.
+            if detected == .rar { throw ArchiveDocumentError.encryptionUnsupported(format: detected) }
+            // 7z con cabeceras cifradas: sí sabemos descifrar → pedir contraseña para abrir.
             lockState = .needsOpenPassword(url)
             return
         }
@@ -482,23 +494,30 @@ public final class ArchiveDocument: ObservableObject {
 
         // Tarea separada (fondo): la descompresión consulta el token en cada trozo y lanza
         // `CancellationError` al cancelar. Coalescemos progreso/nombre a saltos del ~1%.
-        try await Task.detached(priority: .userInitiated) {
-            guard total > 0 else {
-                try plan.writeContents(to: destination, isCancelled: { token.isCancelled })
-                return
-            }
-            var done: Int64 = 0
-            var throttle = ProgressThrottle()
-            try plan.writeContents(to: destination, onProgress: { name, bytes in
-                done += bytes
-                let fraction = min(1, Double(done) / Double(total))
-                guard throttle.shouldReport(fraction) else { return }
-                Task { @MainActor in
-                    self.progress?.fraction = fraction
-                    self.progress?.detail = name
+        do {
+            try await Task.detached(priority: .userInitiated) {
+                guard total > 0 else {
+                    try plan.writeContents(to: destination, isCancelled: { token.isCancelled })
+                    return
                 }
-            }, isCancelled: { token.isCancelled })
-        }.value
+                var done: Int64 = 0
+                var throttle = ProgressThrottle()
+                try plan.writeContents(to: destination, onProgress: { name, bytes in
+                    done += bytes
+                    let fraction = min(1, Double(done) / Double(total))
+                    guard throttle.shouldReport(fraction) else { return }
+                    Task { @MainActor in
+                        self.progress?.fraction = fraction
+                        self.progress?.detail = name
+                    }
+                }, isCancelled: { token.isCancelled })
+            }.value
+        } catch let e as LibArchiveError where format == .rar && (e == .wrongPassword || e == .passphraseRequired) {
+            // RAR con solo los datos cifrados (cabeceras en claro): se abrió y listó sin señal de
+            // cifrado, pero libarchive no descifra RAR → falla aquí. Mensaje claro en vez de
+            // "contraseña incorrecta" (que confunde: el usuario nunca escribió ninguna).
+            throw ArchiveDocumentError.encryptionUnsupported(format: format)
+        }
     }
 
     /// Crea un plan de exportación ligero (sin tocar disco) para arrastrar al
