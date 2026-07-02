@@ -52,7 +52,7 @@ Gatekeeper lo acepta en cualquier Mac sin avisos.
 > La Mac App Store queda descartada a propósito: la app usa la licencia **GPL-3.0**,
 > incompatible en la práctica con los términos de la App Store, y el sandbox de la
 > Store exigiría re-cablear el acceso a ficheros (security-scoped bookmarks). Ver el
-> item «Distribución» en [`../AGENTS.md`](../AGENTS.md).
+> punto «Distribución» en [`../AGENTS.md`](../AGENTS.md).
 
 ## Qué ya está hecho en el repo
 

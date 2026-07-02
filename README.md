@@ -3,13 +3,32 @@
 [![CI](https://github.com/kiko-lin/FilePackr/actions/workflows/ci.yml/badge.svg)](https://github.com/kiko-lin/FilePackr/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-Gestor de archivos comprimidos para **macOS**: abre y navega archivos **sin
+Gestor de archivos comprimidos para **macOS**: abre y explora archivos **sin
 descomprimirlos**, edita (añadir, borrar, renombrar, mover, crear carpetas), extrae,
 previsualiza con Quick Look, **convierte entre formatos** y **cifra con contraseña**
 (estándar ZIP, interoperable con Finder/Keka/WinZip/7‑Zip).
 
 Interfaz nativa (SwiftUI + AppKit) con un navegador de ficheros tipo Finder
 (`NSOutlineView`).
+
+## Entrega (TFM)
+
+Proyecto Final del Máster — Francisco Javier Linares (`kikolincor@gmail.com`).
+
+| Entregable | Enlace |
+|---|---|
+| **Código fuente** | https://github.com/kiko-lin/FilePackr |
+| **Despliegue / descarga** (app en funcionamiento) | _Release: https://github.com/kiko-lin/FilePackr/releases/tag/v1.0_ ⏳ |
+| **Presentación (slides)** | _pendiente_ ⏳ |
+| **Vídeo explicativo** | _pendiente_ ⏳ |
+| **Usuario y contraseña de prueba** | N/A — la aplicación no tiene login |
+
+> **Nota sobre el «despliegue»:** FilePackr es una **aplicación de escritorio nativa
+> de macOS**, no un servicio web, por lo que su publicación en funcionamiento es un
+> **GitHub Release** con la app empaquetada en un `.dmg` descargable
+> ([notas de la versión](docs/release-notes-v1.0.md)). El evaluador puede **descargarla y
+> usarla** directamente, o **compilarla desde el código** (`⌘R` en Xcode) al ser open source.
+> Requisitos: macOS 14 (Sonoma) o superior · Intel y Apple Silicon (binario universal).
 
 ## Formatos
 
@@ -50,7 +69,8 @@ Abrir un archivo en un formato y **guardarlo en otro** reconstruye el contenido.
 - **Aviso de cambios sin guardar** al cerrar/salir, con tres opciones **Guardar /
   Cerrar sin guardar / Cancelar** (Guardar ejecuta el guardado y luego cierra);
   **sin pestañas** (una ventana por archivo); **Ajustes** en el menú de la app (⌘,):
-  tema, idioma (EN/ES), formato y cifrado por defecto, destino de extracción.
+  tema, formato y cifrado por defecto, destino de extracción, política de ficheros ocultos.
+  El **idioma sigue al del sistema** (la app está traducida ES/EN; no hay selector propio).
 
 Ver [`docs/architecture.md`](docs/architecture.md) y [`docs/encryption.md`](docs/encryption.md).
 
@@ -74,7 +94,7 @@ FilePackr/                            (raíz del repo; remoto: github.com/kiko-l
 │   │   ├── ArchiveSaver / SavePayloadBuilder   codifica el SavePayload a disco (streaming)
 │   │   ├── FileNode / ExportPlan      nodo del árbol / instantánea Sendable para extraer
 │   │   ├── OperationCoordinators.swift  coordinadores de añadir / extraer / guardar
-│   │   └── AppSettings.swift          ajustes (tema, idioma, formato/cifrado por defecto)
+│   │   └── AppSettings.swift          ajustes (tema, formato/cifrado por defecto; idioma = el del sistema)
 │   └── Cbz2 / Carchive / Cz / Clzma  systemLibrary → libbz2 / libarchive / zlib / liblzma del sistema
 ├── Tests/
 │   ├── ArchiveBrowserTests/          tests del motor (swift test; interop opcional zip/unzip, pyzipper)

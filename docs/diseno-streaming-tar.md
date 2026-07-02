@@ -17,11 +17,11 @@ Las dos alternativas "baratas" se descartaron por no optimizar recursos:
 - *Tar entero en RAM* (actual): gasta RAM siempre, incluso para solo listar.
 - *Tar entero en disco temporal mapeado*: gasta disco/E-S siempre, incluso para solo listar.
 
-## 2. El trade-off intrínseco (a tener presente)
+## 2. El compromiso intrínseco (a tener presente)
 
 gzip/xz/bz2 **no tienen acceso aleatorio**: para llegar al byte N hay que descomprimir 0…N.
 Por tanto, para acceso aleatorio a un tar comprimido solo hay tres palancas — **guardar**
-(RAM/disco), **re-descomprimir** (CPU), o limitar el patrón de acceso. No existe una vía que
+(RAM/disco), **re-descomprimir** (CPU) o limitar el patrón de acceso. No existe una vía que
 optimice las tres a la vez. La estrategia elegida minimiza RAM y disco a cambio de CPU en el
 acceso aleatorio **repetido**, y evita ese coste en los flujos comunes con un diseño cuidadoso.
 
@@ -113,7 +113,7 @@ Tres operaciones:
    - 3a. ✅ **HECHO** — **Iterador del motor** `Tar.streamEntries(decompressing:with:selecting:)`:
      recorre el tar comprimido en **un solo pase** y, por cada entrada, el llamador devuelve un
      sink (emitir su cuerpo en streaming) o `nil` (saltarla). Se generalizó `StreamIndexer` para
-     soportarlo (indexar = recorrer descartando; mismo núcleo, sin duplicar la máquina de parseo).
+     soportarlo (indexar = recorrer descartando; mismo núcleo, sin duplicar la máquina de análisis).
      Tests: extraer-todo en un pase == `entryData` por entrada; saltar selectivo en un pase. La
      paridad de Fase 1 sigue verde (el refactor no rompió nada).
    - 3b. ⏳ **PENDIENTE — cableado del codec:** `TarCodec`/`SingleFileCodec` conservan el container
@@ -148,7 +148,7 @@ Tres operaciones:
    bytes en streaming"; el modelo coloca cada una (a su destino) o la salta. Es el patrón canónico
    (tar `xzf` y libarchive `archive_read_next_header`/`archive_read_data`), el más óptimo (un pase +
    memoria constante) y coherente con lo que el proyecto **ya hace** para 7z/rar vía `LibArchive`.
-   Descartadas: payload especial en `ExportPlan` (ensucia la abstracción neutral, contra el item 3
+   Descartadas: payload especial en `ExportPlan` (ensucia la abstracción neutral, contra el ítem 3
    de la 1ª auditoría) y "solo offset" (N re-descompresiones). Una entrada suelta sigue usando
    `streamExtract` (Fase 2); varias/todo usan el iterador. Pendiente de diseño en Fase 3-4: la
    integración del iterador con el flujo de extracción **async** del modelo (progreso/cancelación).

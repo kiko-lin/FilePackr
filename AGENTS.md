@@ -45,7 +45,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     con `XCTSkipUnless` al principio del test, nunca asumir que la herramienta está.
 - **Compilar la app**: `xcodebuild -project App/FilePackr.xcodeproj -scheme FilePackr -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build`.
   - El agente **no puede ejecutar la GUI** ni verificar comportamiento visual:
-    solo compilar. El usuario prueba en Xcode (⌘R) y reporta.
+    solo compilar. El usuario prueba en Xcode (⌘R) y da su valoración.
   - ⚠️ **No compiles con `CODE_SIGNING_ALLOWED=NO` en el DerivedData de Xcode**:
     deja el `.app` sin firmar y al pulsar ▶ en Xcode falla con *"Unable to obtain a
     task name port right … (os/kern) failure 0x5"* (el depurador no puede
@@ -113,27 +113,27 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     `NSOutlineView` — selección, columnas ordenables, arrastre (mover/extraer/
     añadir), Quick Look (barra espaciadora), renombrado en línea, menú contextual.
   - `ContentView`: la interfaz, **sin barra de título** (`hiddenTitleBar`, el contenido
-    sube). Con archivo abierto: **cabecera** (nombre del archivo + 🔒/volúmenes/“sin
-    guardar”, y a la derecha `Extraer todo · Cerrar · Exportar · Guardar`), **columna
+    sube). Con archivo abierto: **cabecera** (nombre del archivo + 🔒/volúmenes/«sin
+    guardar», y a la derecha `Extraer todo · Cerrar · Exportar · Guardar`), **columna
     vertical** de acciones de interior a la izquierda (Añadir/Crear carpeta/Eliminar/
     Extraer, icono+etiqueta), el visor (`ArchiveOutlineView`) y una **barra de estado**
     inferior (nº de ficheros + tamaño + comprimido). Estado vacío: zona de arrastre
     **clicable**. Diálogos: conflicto de extracción, contraseña (entrada/apertura),
     opciones de guardar/exportar, extraer, y el aviso unificado de cambios sin guardar.
-  - `WindowGuard` (`WindowGuard.swift`): `UnsavedChangesAlert` (aviso único de “cambios
-    sin guardar”) + delegado de `NSWindow` para interceptar el cierre de ventana; el
+  - `WindowGuard` (`WindowGuard.swift`): `UnsavedChangesAlert` (aviso único de «cambios
+    sin guardar») + delegado de `NSWindow` para interceptar el cierre de ventana; el
     salir (⌘Q) lo cubre el `AppDelegate` (`FilePackrApp.swift`). **Sin pestañas de
     ventana** (`allowsAutomaticWindowTabbing = false`): cada archivo en su ventana.
   - `FinderServicesProvider` (`FinderServices.swift`): los **Servicios de macOS** del menú
     contextual del Finder («Abrir en FilePackr» / «Descomprimir aquí»). Declarados en
     `Info.plist` (`NSServices`), registrados por `AppDelegate`. «Descomprimir aquí» extrae sin
-    UI reusando `ExportPlan.writeContents`. Helpers compartidos en `AppHelpers.swift`
+    UI reutilizando `ExportPlan.writeContents`. Helpers compartidos en `AppHelpers.swift`
     (`archiveBaseName`, `localizedErrorMessage`).
 
 ## Hecho
 
 - **Sesión 2026-07-01 (c) — asociación de archivos que se aplica de verdad en el 1er arranque**:
-  el usuario reportó que, tras instalar (build ad-hoc), FilePackr no se hacía app por defecto de
+  el usuario informó de que, tras instalar (build ad-hoc), FilePackr no se hacía app por defecto de
   ningún tipo. Diagnóstico: el aviso de primer arranque **solo abría Ajustes** (no asociaba nada) y
   el default `associatedFormats` premarcaba casillas que **nunca** llamaban a `DefaultHandler.apply`
   (asociación fantasma). Arreglado:
@@ -185,7 +185,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     `AppSettings.lastUsedExtractFolder`, fijada en `ExtractCoordinator.confirm` y usada en
     `prepareDestination`. Visible en Ajustes (informativa).
   - **Servicios del Finder** (`FinderServices.swift`, `Info.plist` `NSServices`): «Abrir en
-    FilePackr» y «Descomprimir aquí» (extracción headless reusando `ExportPlan.writeContents`).
+    FilePackr» y «Descomprimir aquí» (extracción headless reutilizando `ExportPlan.writeContents`).
     Helpers `archiveBaseName`/`localizedErrorMessage` extraídos a `AppHelpers.swift`. Ver TODO
     para la verificación en GUI pendiente (registro de Servicios + títulos en inglés).
   - **Título de ventana**: `.navigationTitle(documentDisplayName)` en `ContentView`; el menú Ventana
@@ -207,7 +207,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 - **Tercera auditoría (2026-06-22, rama `refactor/auditoria-2026-06-22`)** — informe en
   `docs/auditoria-2026-06-22.md`. Sin hallazgos críticos; 4 MEDIO + 4 BAJO resueltos en 5 commits:
   - **M-A**: nomenclatura neutral en el árbol (`NodeSource.zipEntry`→`.entry`, `FileNode.zipDate`→
-    `entryDate`); cierra el item 3 a nivel de app (las entradas de cualquier formato ya eran neutrales).
+    `entryDate`); cierra el ítem 3 a nivel de app (las entradas de cualquier formato ya eran neutrales).
   - **M-B**: `ArchiveSaver` escribe **directo** al temporal de trabajo; se retiró la atomicidad interna
     (redundante: el documento ya coloca `work`→`url` atómicamente). `writeFileAtomically` queda solo
     para la extracción a una ruta real del Finder (`ExportPlan`).
@@ -327,7 +327,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   La app detecta el formato al abrir y reconstruye el contenido al guardar en otro.
 - **xz / tar.xz (Tier 2)**: lectura y escritura en Swift puro vía la *Compression
   framework* (`COMPRESSION_LZMA`, cuya salida es `.xz` estándar). `Xz.swift`
-  (compress/decompress en streaming + parseo del Index para el tamaño). Interop
+  (compress/decompress en streaming + análisis del Index para el tamaño). Interop
   **bidireccional** verificada: `.xz` contra `python3 lzma` (liblzma) y `.tar.xz`
   contra `bsdtar -J` (liblzma 5.4.3).
 - **bzip2 / tar.bz2 (Tier 3)**: enlaza la **`libbz2` del sistema** (target SwiftPM
@@ -407,7 +407,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   hace falta código propio para el menú. Uso en vistas/AppKit: `loc("clave")` / `loc("clave", arg)`,
   ahora **funciones globales** (en `Localization.swift`) sobre `NSLocalizedString` (sin
   `ObservableObject`/`@EnvironmentObject`, porque el idioma no cambia en caliente). El modelo no usa
-  i18n (auditoría item 4): emite tokens (`ProgressKind`) y las vistas traducen. **Para añadir texto**:
+  i18n (auditoría ítem 4): emite tokens (`ProgressKind`) y las vistas traducen. **Para añadir texto**:
   nueva entrada en `Localizable.xcstrings` (Xcode) con EN+ES. **No hay selector de idioma en Ajustes.**
 
 ## TODO (objetivos pendientes, ordenados por importancia — revisión 2026-07-01)
@@ -446,7 +446,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       tendría más sentido —ahí el destino es la decisión— pero tampoco hay demanda real.
       Reconsiderar solo si el uso lo pide. Análisis técnico original (por si se retoma): hoy son
       `Button` en un `HStack` custom (`documentBar`, `ContentView`); pasar a `Menu` de SwiftUI es
-      directo y reusa `SaveCoordinator`/la hoja preseleccionando el formato. Esfuerzo bajo.
+      directo y reutiliza `SaveCoordinator`/la hoja preseleccionando el formato. Esfuerzo bajo.
 - [x] ~~**Limpieza de extracciones parciales al cancelar un lote**~~ (HECHO 2026-06-28, pendiente
       verificación GUI): `ExtractCoordinator` rastrea `extractedURLs` (ítems escritos con éxito;
       `Perform` ahora devuelve `Bool`); `cancelBatch`/`cancelConflict` las devuelven al cancelar.
@@ -464,7 +464,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     gz/xz/bz2 (pull, sin tocar su código; lo envuelve `SavePayloadBuilder`). `ArchiveSaver.encode` lo
     propaga; `writeArchive` crea el `CancelToken` y, al cancelar, descarta el `work` (destino atómico
     → intacto).
-  - **Progreso** (paso 1): `WriteProgress` (`WriteProgress.swift`, struct) reporta **bytes de entrada
+  - **Progreso** (paso 1): `WriteProgress` (`WriteProgress.swift`, struct) informa de los **bytes de entrada
     + fichero** desde los escritores (ZIP por entrada/intra-fichero, `Tar.reader` expone el fichero en
     curso —incluido tar—, libarchive por entrada, gz/xz/bz2 de un fichero vía el lector). `encode`
     acumula contra `total` (= `contentSize`) y emite `(fracción, fichero)` coalescido al ~1%; el
@@ -497,7 +497,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       ~154× menos RAM** (fixture .tar.gz con tar interno 1.07 GB: RSS pico 1.31 GB → 8.5 MB). Tests de
       paridad xz/bz2, cancelación a mitad de lote y fichero vacío incluidos.
 - [ ] **Lectura de DMG** (imagen de disco de Mac) · **prioridad BAJA (opcional)**: libarchive
-      no la maneja; sería vía `hdiutil` (montar/adjuntar) o parseo propio. Único formato Mac
+      no la maneja; sería vía `hdiutil` (montar/adjuntar) o análisis propio. Único formato Mac
       relevante que no leemos, pero es *scope creep* (imagen de disco, no archivo comprimido).
       Señalado en revisión externa (2026-06-21).
 - [ ] **7z cifrado al escribir** · **prioridad BAJA**: libarchive no lo soporta (escribe 7z
@@ -641,7 +641,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   **RAR cifrado NO soportado** (verificado 2026-07-01): libarchive lee/descomprime RAR4/RAR5
   **sin cifrar**, pero **no descifra** RAR con contraseña —ni con la clave correcta— porque no
   incorpora el `unrar` propietario de RARLAB. Sí descifra ZIP (ZipCrypto/AES) y 7z. En RAR5 con
-  solo datos cifrados libarchive ni siquiera reporta `isEncrypted`. Ver `docs/fixtures/README.md`.
+  solo datos cifrados libarchive ni siquiera indica `isEncrypted`. Ver `docs/fixtures/README.md`.
 - Volúmenes: división **por bytes** (no spanning PKWARE nativo). La primera parte
   conserva el nombre base (`nombre.zip`) y las siguientes llevan `_NNN` antes de la
   extensión (`nombre_001.zip`, `nombre_002.zip`…). Reconstrucción = concatenar en

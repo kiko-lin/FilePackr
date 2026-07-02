@@ -6,10 +6,10 @@ Se prueban contra **fixtures reales** en `Tests/ArchiveBrowserTests/Fixtures/`, 
 por `LibArchiveFixtureTests.swift`.
 
 Todos los fixtures usan la variante **almacenada** (sin compresión): basta para validar el
-*parseo* del contenedor por libarchive; la descompresión propietaria no la ejercitamos (ni la
+*análisis* del contenedor por libarchive; la descompresión propietaria no la ejercitamos (ni la
 usamos). Contenido conocido y determinista para poder afirmar bytes exactos en los tests.
 
-## Cómo se generaron (offline, sin dependencias externas)
+## Cómo se generaron (sin conexión, sin dependencias externas)
 
 | Fixture        | Cómo                                                      |
 |----------------|----------------------------------------------------------|
@@ -48,4 +48,4 @@ de RARLAB (contraseña real `clave123` donde aplica):
 >
 > Nota: RAR 7 ya **no crea** archivos RAR4 (`-ma4` retirado); por eso el fixture RAR4 se fabrica
 > a mano. Y crear estos requiere el `rar` de RARLAB (no viene con macOS, no reproducible del todo
-> offline) — quedan versionados en el repo precisamente para no depender de él en CI.
+> sin conexión) — quedan versionados en el repo precisamente para no depender de él en CI.

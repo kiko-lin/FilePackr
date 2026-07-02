@@ -62,7 +62,7 @@ Lectores/escritores por formato:
   (volúmenes sobre disco: descubrir partes, trocear un fichero ya escrito, y
   `joinToTemporaryFile` —concatena las partes a un temporal mapeado sin cargarlas en RAM).
 
-Tests en `Tests/`: `ArchiveBrowserTests` (engine + codec + formatos + volúmenes + metadatos +
+Tests en `Tests/`: `ArchiveBrowserTests` (motor + codec + formatos + volúmenes + metadatos +
 detección + cifrado), con interop **opcional** (se salta si la herramienta no está): `zip`/`unzip`
 para ZipCrypto, `pyzipper` para AES‑256. Y `FilePackrModelTests` (documento + coordinadores de
 añadir/extraer/guardar). **Todo corre con un solo `swift test`** (125 tests).

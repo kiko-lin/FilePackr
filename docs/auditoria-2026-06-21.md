@@ -62,7 +62,7 @@ propios; (b) encapsular las colas en coordinadores `@Observable` (`AddCoordinato
 
 ### MEDIO
 
-**M-1 · Bug de precedencia en parseo de FEXTRA de gzip. _(verificado)_**
+**M-1 · Bug de precedencia en el análisis de FEXTRA de gzip. _(verificado)_**
 `Gzip.swift:126`: `p += 2 + Int(bytes[p]) | (Int(bytes[p+1]) << 8)`. En Swift `|` tiene
 `AdditionPrecedence` (igual que `+`), así que esto es `(2+low) | (high<<8)` — incorrecto.
 La versión correcta, con paréntesis, está en la misma clase justo arriba (`:89`). Solo
@@ -71,7 +71,7 @@ afecta a `storedFilename` (nombre mostrado de un `.gz`) y solo si FEXTRA mide >2
 
 **M-2 · Tres `walk(_:prefix:)` casi calcados.** `ArchiveDocument.swift:647-727`.
 `makeTarItems`/`makeLibArchiveItems`/`makeSaveInputs` repiten el recorrido del árbol
-(carpeta / `.diskFile` / `.zipEntry`); solo varía el tipo de item destino. Riesgo: un fix
+(carpeta / `.diskFile` / `.zipEntry`); solo varía el tipo de ítem destino. Riesgo: un fix
 aplicado a uno y no a los otros. **Fix:** un `walk` genérico parametrizado por una closure
 `(node, path) -> Item?`, o un recorrido a representación intermedia neutra.
 
@@ -155,7 +155,7 @@ entrada de cada ventana indefinidamente (fuga lenta y acotada; la closure es `[w
   cabeceras), responsabilidad única por método.
 
 **App:**
-- Desacople de localización modelo/vista **se mantiene limpio** (item 4 previo): el modelo
+- Desacople de localización modelo/vista **se mantiene limpio** (ítem 4 previo): el modelo
   emite tokens `ProgressKind`, la vista traduce. `AppSettings`/`Localizer` no aparecen en el modelo.
 - Concurrencia sólida: `@MainActor` ensambla `Sendable`, `Task.detached` hace el trabajo
   pesado, progreso vuelve al main sin capturar `self`. Sin races.

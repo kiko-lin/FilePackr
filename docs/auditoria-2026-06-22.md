@@ -21,8 +21,8 @@ Lo que queda es **deuda menor de coherencia** (decisiones aplicadas a medias) y 
 
 ## MEDIO
 
-### M-A · Deuda de nomenclatura «zip» en la capa de app — devalúa el item 3 (ArchiveEntry neutral)
-La auditoría de 2026-06-20 (item 3) hizo `ArchiveEntry` **neutral** para todos los formatos.
+### M-A · Deuda de nomenclatura «zip» en la capa de app — devalúa el ítem 3 (ArchiveEntry neutral)
+La auditoría de 2026-06-20 (ítem 3) hizo `ArchiveEntry` **neutral** para todos los formatos.
 Pero la capa de app sigue llamando «zip» a lo que ya es genérico:
 - `FileNode.zipEntry(ArchiveEntry)` (`FileNode.swift:8`) — envuelve entradas de **tar/7z/gz/…**,
   no solo ZIP. El propio comentario lo admite: «(zip/tar/gz)».
@@ -121,7 +121,7 @@ La rama de cancelar sí lo limpia. Limpiarlo también tras un intento fallido.
 - **Higiene**: `.gitignore` completo, sin ficheros basura rastreados, 83 tests verdes.
 
 ## Orden sugerido de ataque (si se abordan)
-1. **M-A** (renombrado mecánico, cierra el item 3 del todo).
+1. **M-A** (renombrado mecánico, cierra el ítem 3 del todo).
 2. **M-B** (quita un rename redundante y unifica los 4 casos del saver).
 3. **B-A/B-C/B-D** (quick wins de coherencia, sin riesgo).
 4. **M-C** (`SaveCoordinator`: refactor de UI, verificar en GUI).
