@@ -8,8 +8,9 @@ struct FilePackrApp: App {
 
     var body: some Scene {
         WindowGroup {
+            // El tamaño mínimo lo pone `ContentView` (modo normal); en modo «Descomprimir aquí» la
+            // ventana es compacta, por eso no se fija aquí.
             ContentView()
-                .frame(minWidth: 760, minHeight: 480)
                 .environmentObject(AppSettings.shared)
         }
         .windowStyle(.hiddenTitleBar)   // sin barra de título "FilePackr"; el contenido sube
@@ -56,21 +57,17 @@ struct HelpCommands: Commands {
 /// infiere; el SDK de Xcode 16 (CI) no, y sin esto la app no compila allí.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Proveedor de los Servicios del Finder («Abrir en FilePackr» / «Descomprimir aquí»).
-    /// Lo retenemos aquí porque `NSApp.servicesProvider` no lo conserva con fuerza.
-    private let servicesProvider = FinderServicesProvider()
-
     /// Sin pestañas de ventana: cada archivo abre en su propia ventana independiente.
     /// Esto también retira los ítems de menú de pestañas (Mostrar barra/Combinar ventanas…).
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
-        // Registra los Servicios de macOS (menú contextual del Finder / menú «Servicios»).
-        NSApp.servicesProvider = servicesProvider
-        NSUpdateDynamicServices()
     }
+
 
     /// Cerrar la última ventana cierra la app (utilidad de una sola ventana): evita que el
     /// proceso quede vivo de fondo, p. ej. con una extracción aún corriendo.
+    /// Cerrar la última ventana cierra la app (utilidad de una sola ventana). La ventana compacta de
+    /// «Descomprimir aquí» también cuenta: al cerrarse (extracción hecha o cancelada), la app sale.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     /// Al salir, borra los temporales de guardados que siguieran en curso (cerrar la última

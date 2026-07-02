@@ -2,7 +2,6 @@
   "sourceLanguage": "en",
   "strings": {
     "": {},
-    "•": {},
     "a11y.operationFinished": {
       "extractionState": "stale",
       "localizations": {
@@ -118,6 +117,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cerrar"
+          }
+        }
+      }
+    },
+    "button.continue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuar"
           }
         }
       }
@@ -632,6 +647,22 @@
         }
       }
     },
+    "error.encryptionUnsupported": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FilePackr can’t currently read encrypted %@ archives."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualmente FilePackr no puede leer archivos cifrados de tipo %@."
+          }
+        }
+      }
+    },
     "error.needsPassword": {
       "extractionState": "stale",
       "localizations": {
@@ -645,22 +676,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Este archivo está protegido con contraseña. Introdúcela para continuar."
-          }
-        }
-      }
-    },
-    "error.encryptionUnsupported": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "FilePackr can’t currently read encrypted %@ archives."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Actualmente FilePackr no puede leer archivos cifrados de tipo %@."
           }
         }
       }
@@ -950,6 +965,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Extraer archivo seleccionado"
+          }
+        }
+      }
+    },
+    "finderext.conflict.exists": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file already exists"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El archivo ya existe"
+          }
+        }
+      }
+    },
+    "finderext.extract.opening": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abriendo…"
+          }
+        }
+      }
+    },
+    "finderext.extract.password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password for “%@”"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contraseña de «%@»"
+          }
+        }
+      }
+    },
+    "finderext.extract.progress": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extracting “%@”…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extrayendo «%@»…"
+          }
+        }
+      }
+    },
+    "finderext.extract.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract Here"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descomprimir aquí"
           }
         }
       }
@@ -2654,6 +2749,22 @@
         }
       }
     },
+    "settings.revealAfterExtract": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reveal extracted folder in Finder"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar la carpeta extraída en el Finder"
+          }
+        }
+      }
+    },
     "settings.section.defaults": {
       "extractionState": "stale",
       "localizations": {
@@ -3061,7 +3172,8 @@
           }
         }
       }
-    }
+    },
+    "•": {}
   },
   "version": "1.0"
 }

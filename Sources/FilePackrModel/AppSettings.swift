@@ -117,6 +117,12 @@ public final class AppSettings: ObservableObject {
         didSet { defaults.set(addHiddenPolicy.rawValue, forKey: "addHiddenPolicy") }
     }
 
+    /// Tras «Descomprimir aquí» (extensión del Finder), revelar la carpeta extraída en el Finder.
+    /// Desactivado por defecto: se extrae en la misma ubicación que el usuario ya está viendo.
+    @Published public var revealAfterExtract: Bool {
+        didSet { defaults.set(revealAfterExtract, forKey: "revealAfterExtract") }
+    }
+
     /// Formatos de los que FilePackr se ofrece como app por defecto en el Finder
     /// (pestaña Archivos de Ajustes). Se persisten como lista de `rawValue`.
     @Published public var associatedFormats: Set<ArchiveFormat> {
@@ -156,6 +162,7 @@ public final class AppSettings: ObservableObject {
         fixedExtractFolder = defaults.string(forKey: "fixedExtractFolder").map { URL(fileURLWithPath: $0) }
         lastUsedExtractFolder = defaults.string(forKey: "lastUsedExtractFolder").map { URL(fileURLWithPath: $0) }
         addHiddenPolicy = AddHiddenPolicy(rawValue: defaults.string(forKey: "addHiddenPolicy") ?? "") ?? .excludeSystemFiles
+        revealAfterExtract = defaults.bool(forKey: "revealAfterExtract")   // por defecto false
         firstRunPromptShown = defaults.bool(forKey: "firstRunPromptShown")
         if let raw = defaults.array(forKey: "associatedFormats") as? [String] {
             associatedFormats = Set(raw.compactMap(ArchiveFormat.init(rawValue:)))

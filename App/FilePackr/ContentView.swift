@@ -26,6 +26,11 @@ struct ContentView: View {
     /// La app se lanzó abriendo un archivo desde el Finder: no es momento de ofrecer el
     /// diálogo de "compresor por defecto".
     @State private var openingExternalFile = false
+    /// Cuando esta ventana se abre para un `filepackr://extract` (extensión Finder Sync), muestra la
+    /// UI compacta de contraseña/progreso en vez del navegador; al terminar se cierra sola.
+    @State private var extractSession: ExtractSession?
+    /// Para cerrar esta ventana al terminar la extracción.
+    @Environment(\.dismiss) private var dismiss
     /// Aviso discreto en la barra de estado (p. ej. "Se excluyeron N archivos de sistema"),
     /// con un token para que un auto-descarte antiguo no borre un aviso más reciente.
     @State private var exclusionNotice: String?
@@ -35,6 +40,39 @@ struct ContentView: View {
     @State private var untitledNumber: Int?
 
     var body: some View {
+        Group {
+            if let session = extractSession {
+                // Ventana compacta: solo contraseña/progreso de «Descomprimir aquí».
+                ExtractCompactView(session: session)
+            } else {
+                normalBody
+                    .frame(minWidth: 760, minHeight: 480)
+            }
+        }
+        .preferredColorScheme(settings.theme.colorScheme)
+        .onOpenURL { url in
+            // La extensión Finder Sync reenvía por filepackr://open|extract (rutas en base64, «p»).
+            // El doble clic del Finder llega como file://.
+            if url.scheme == "filepackr" {
+                let fileURLs = FilePackrURL.paths(in: url).map { URL(fileURLWithPath: $0) }
+                guard !fileURLs.isEmpty else { return }
+                if url.host == "extract" {
+                    let session = ExtractSession(archives: fileURLs)
+                    session.onFinish = { dismiss() }     // al acabar/cancelar, cerrar esta ventana
+                    extractSession = session
+                    session.start()
+                } else {
+                    openingExternalFile = true
+                    handleOpen(fileURLs)
+                }
+            } else if url.isFileURL {
+                openingExternalFile = true
+                handleOpen([url])
+            }
+        }
+    }
+
+    private var normalBody: some View {
         VStack(spacing: 0) {
             if doc.isEmpty {
                 content
@@ -159,10 +197,6 @@ struct ContentView: View {
                 openPasswordWrong = false
                 showingOpenPassword = true
             }
-        }
-        .onOpenURL { url in
-            openingExternalFile = true
-            handleOpen([url])
         }
         .onAppear {
             promptDefaultCompressorIfNeeded()

@@ -10,16 +10,47 @@
 		A97D1DD22FDEC223004667A6 /* ArchiveBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = A97D1DD12FDEC223004667A6 /* ArchiveBrowser */; };
 		A97D1DE12FDEC4C6004667A6 /* ArchiveBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = A97D1DE02FDEC4C6004667A6 /* ArchiveBrowser */; };
 		A9FE17000000000000000002 /* FilePackrModel in Frameworks */ = {isa = PBXBuildFile; productRef = A9FE17000000000000000001 /* FilePackrModel */; };
+		FE00000000000000000000B1 /* FilePackrFinderExt.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = FE00000000000000000000A9 /* FilePackrFinderExt.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		FE00000000000000000000B3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A97D1DB62FDEC134004667A6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FE00000000000000000000A1;
+			remoteInfo = FilePackrFinderExt;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		FE00000000000000000000B0 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				FE00000000000000000000B1 /* FilePackrFinderExt.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A97D1DBE2FDEC134004667A6 /* FilePackr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FilePackr.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FE00000000000000000000A9 /* FilePackrFinderExt.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FilePackrFinderExt.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A97D1DC02FDEC134004667A6 /* FilePackr */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = FilePackr;
+			sourceTree = "<group>";
+		};
+		FE00000000000000000000A8 /* FinderExt */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FinderExt;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -35,6 +66,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FE00000000000000000000A6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -42,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				A97D1DC02FDEC134004667A6 /* FilePackr */,
+				FE00000000000000000000A8 /* FinderExt */,
 				A9D45B002FE6F1C800242ADD /* Frameworks */,
 				A97D1DBF2FDEC134004667A6 /* Products */,
 			);
@@ -51,6 +90,7 @@
 			isa = PBXGroup;
 			children = (
 				A97D1DBE2FDEC134004667A6 /* FilePackr.app */,
+				FE00000000000000000000A9 /* FilePackrFinderExt.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -72,10 +112,12 @@
 				A97D1DBA2FDEC134004667A6 /* Sources */,
 				A97D1DBB2FDEC134004667A6 /* Frameworks */,
 				A97D1DBC2FDEC134004667A6 /* Resources */,
+				FE00000000000000000000B0 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				FE00000000000000000000B2 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A97D1DC02FDEC134004667A6 /* FilePackr */,
@@ -90,6 +132,28 @@
 			productReference = A97D1DBE2FDEC134004667A6 /* FilePackr.app */;
 			productType = "com.apple.product-type.application";
 		};
+		FE00000000000000000000A1 /* FilePackrFinderExt */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FE00000000000000000000A2 /* Build configuration list for PBXNativeTarget "FilePackrFinderExt" */;
+			buildPhases = (
+				FE00000000000000000000A5 /* Sources */,
+				FE00000000000000000000A6 /* Frameworks */,
+				FE00000000000000000000A7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				FE00000000000000000000A8 /* FinderExt */,
+			);
+			name = FilePackrFinderExt;
+			packageProductDependencies = (
+			);
+			productName = FilePackrFinderExt;
+			productReference = FE00000000000000000000A9 /* FilePackrFinderExt.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -101,6 +165,9 @@
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					A97D1DBD2FDEC134004667A6 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					FE00000000000000000000A1 = {
 						CreatedOnToolsVersion = 26.5;
 					};
 				};
@@ -124,12 +191,20 @@
 			projectRoot = "";
 			targets = (
 				A97D1DBD2FDEC134004667A6 /* FilePackr */,
+				FE00000000000000000000A1 /* FilePackrFinderExt */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A97D1DBC2FDEC134004667A6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FE00000000000000000000A7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -146,7 +221,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FE00000000000000000000A5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		FE00000000000000000000B2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FE00000000000000000000A1 /* FilePackrFinderExt */;
+			targetProxy = FE00000000000000000000B3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A97D1DC72FDEC135004667A6 /* Debug */ = {
@@ -333,6 +423,82 @@
 			};
 			name = Release;
 		};
+		FE00000000000000000000A3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = FinderExt/FinderExt.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 969HQC97L9;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FinderExt/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FilePackr;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Francisco Javier Linares. GPL-3.0-or-later.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					FinderSync,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kiko.FilePackr.FinderExt;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		FE00000000000000000000A4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = FinderExt/FinderExt.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 969HQC97L9;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FinderExt/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = FilePackr;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Francisco Javier Linares. GPL-3.0-or-later.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-framework",
+					FinderSync,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.kiko.FilePackr.FinderExt;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -350,6 +516,15 @@
 			buildConfigurations = (
 				A97D1DCA2FDEC135004667A6 /* Debug */,
 				A97D1DCB2FDEC135004667A6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FE00000000000000000000A2 /* Build configuration list for PBXNativeTarget "FilePackrFinderExt" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FE00000000000000000000A3 /* Debug */,
+				FE00000000000000000000A4 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

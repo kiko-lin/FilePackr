@@ -89,6 +89,7 @@ struct SettingsView: View {
                         Spacer()
                     }
                 }
+                Toggle(loc("settings.revealAfterExtract"), isOn: $settings.revealAfterExtract)
                 Picker(loc("settings.addHidden"), selection: $settings.addHiddenPolicy) {
                     ForEach(AddHiddenPolicy.allCases) { Text(loc($0.nameKey)).tag($0) }
                 }
