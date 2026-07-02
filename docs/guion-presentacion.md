@@ -379,4 +379,7 @@ acertadas.
   de ejemplo. Ensaya el paso de **exportar a 7z + AES-256** para que salga fluido.
 - Reparto orientativo: ~40 % recorrido/demo, ~50 % arquitectura y decisiones, ~10 % calidad/cierre.
 - Si te alargas, lo más recortable es parte de **11 (Distribución)** y **13 (Futuro)**.
-- Grabación en macOS: **QuickTime Player** (Archivo → Nueva grabación de pantalla) o `⇧⌘5`.
+- Grabación con **OBS Studio**: una *Source* de **Display/Screen Capture** (pantalla) + **Audio Input
+  Capture** (micro) para la narración; opcionalmente una *Video Capture Device* (webcam) en una esquina
+  si quieres mostrar tu cara. Graba con **Start Recording** (exporta a `.mp4`/`.mkv`). Recuerda dar a OBS
+  permiso de **Grabación de pantalla** en Ajustes del Sistema → Privacidad y seguridad la primera vez.
