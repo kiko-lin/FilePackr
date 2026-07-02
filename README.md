@@ -18,8 +18,8 @@ Proyecto Final del Máster — Francisco Javier Linares (`kikolincor@gmail.com`)
 | Entregable | Enlace |
 |---|---|
 | **Código fuente** | https://github.com/kiko-lin/FilePackr |
-| **Despliegue / descarga** (app en funcionamiento) | _Release: https://github.com/kiko-lin/FilePackr/releases/tag/v1.0_ ⏳ |
-| **Presentación (slides)** | _pendiente_ ⏳ |
+| **Despliegue / descarga** (app en funcionamiento) | [Release v1.0](https://github.com/kiko-lin/FilePackr/releases/tag/v1.0) (con el `.dmg`) |
+| **Presentación (slides)** | [`docs/FilePackr-presentacion.pptx`](docs/FilePackr-presentacion.pptx) · [PDF](docs/FilePackr-presentacion.pdf) _(URL pública pendiente)_ |
 | **Vídeo explicativo** | _pendiente_ ⏳ |
 | **Usuario y contraseña de prueba** | N/A — la aplicación no tiene login |
 
