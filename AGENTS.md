@@ -132,6 +132,46 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 ## Hecho
 
+- **Sesión 2026-08-03 (c) — volúmenes en 7z: NO era un fallo (verificado en la app)**:
+  el usuario informó de que «al crear un 7z dividido en lotes los lotes no se realizan, se
+  comprime un único archivo». **No se ha reproducido por debajo de la interfaz**: verificado de
+  extremo a extremo que 7z sí se trocea (`VolumeSplitSaveTests`, nuevo) —por la vía del modelo,
+  por la de `SaveCoordinator` (la hoja real) y reabriendo el juego de partes—, y que lo mismo
+  vale para zip/tar/tar.gz/xar. El troceo es **genérico y posterior** a escribir el temporal
+  (`VolumeStore.split` en `writeArchive`), así que el formato no influye. Había un **hueco de
+  cobertura**: `VolumesTests` probaba el troceo por bytes, pero **ningún test** guardaba un
+  documento con volúmenes por formato. Hipótesis vivas para el caso del usuario: (a) **el
+  ratio** — 7z comprime mucho más que zip (medido 689 B vs 9149 B con texto repetitivo), así que
+  con el tamaño de volumen por defecto (**100 MB**) el mismo contenido puede partirse en zip y
+  caber en una sola parte en 7z, que es lo correcto; (b) **`saveDocument` no reabre la hoja**
+  cuando el documento ya tiene `sourceURL` y el formato es escribible: re-guarda en el sitio con
+  los ajustes previos, así que tras un primer guardado (o al abrir un 7z existente) **no hay
+  forma de activar los volúmenes desde «Guardar»** — hay que usar «Exportar».
+  **Cerrado**: probado por el usuario en la app real (build de DerivedData, con dos ficheros
+  de 5 MB —ruido incompresible y texto repetido— y volúmenes de 1 MB) → **funciona**. Era (a),
+  el tamaño. Queda como **mejora pendiente de UX**, abajo: la app acepta «dividir en volúmenes»
+  y lo ignora en silencio cuando el archivo cabe en una parte, que es indistinguible de un fallo.
+  Nota de entorno: al lanzar la build de desarrollo, macOS levanta **también** la copia instalada
+  en `/Applications` (mismo bundle ID) — dos ventanas iguales; cerrar una antes de probar.
+
+- **Sesión 2026-08-03 (b) — extracción por lotes en 7z: de cuadrática a un solo recorrido**:
+  hallazgo **colateral** mientras se buscaba lo anterior (el reporte del usuario iba de
+  volúmenes, no de esto; se interpretó mal «por lotes»). Aun así es un fallo real y medido:
+  `LibArchiveCodec` no sobreescribía `extractAll`, así que caía en el
+  por-defecto del protocolo —un `extractEntry` por entrada—, y cada uno **re-abre** el
+  archivo y **re-itera** desde el principio. La API de libarchive es un **iterador
+  secuencial** (no acceso aleatorio, al contrario de lo que decía el comentario del
+  protocolo) y 7z comprime en **bloques sólidos**: saltar hasta la entrada *k* re-descomprime
+  todo lo anterior → coste **O(n²)**. Medido con un 7z de 300 entradas / 60 MB: **171,6 s**
+  para «Extraer todo» frente a **1,15 s** de un solo pase. Con miles de ficheros la app
+  aparenta estar colgada. Arreglo: `LibArchive.extractEntries` (un recorrido, coloca las
+  entradas pedidas, salta el resto y **corta** en cuanto no queda ninguna pendiente) +
+  `LibArchiveCodec.extractAll` que lo usa — la misma decisión de §10 #1 que ya tenía el tar
+  comprimido. Mismo 7z tras el arreglo: **1,10 s (155×)**. Afecta a todo lo que pasa por
+  `ExportPlan.writeContents`: Extraer/Extraer todo, arrastre al Finder y «Descomprimir aquí».
+  Tests: recorrido único (estructural: se piden en orden inverso y llegan en orden de
+  archivo) y `entryNotFound` si falta una entrada pedida. **206 verdes** (con los de volúmenes).
+
 - **Sesión 2026-08-03 — el tema se aplica a toda la app (`NSApp.appearance`), no por ventana**:
   el usuario informó de que al cambiar a **Claro** y volver a **Según el sistema** (sistema en
   oscuro) la ventana quedaba con **fondo oscuro y texto oscuro** en la zona de arrastre, y se
@@ -490,6 +530,13 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     (>1 h) de la carpeta al abrir un archivo (restos de un cierre forzado anterior).
   - Tests del motor (`CompressionCancellationTests` + `WriteProgressTests`): cancelación por entrada
     y a mitad de fichero (ZIP/gz/xz/bz2/libarchive) y reporte de bytes+nombre (ZIP, tar). **93 verdes.**
+- [ ] **Avisar cuando «dividir en volúmenes» no llega a dividir** · **prioridad MEDIA (UX)**:
+      hoy la hoja acepta la opción y, si el archivo comprimido cabe en un volumen, escribe un
+      único fichero **sin decir nada** — indistinguible de un fallo (reporte del usuario del
+      2026-08-03, sesión (c)). Agravado por el defecto de **100 MB** y por lo bien que comprime
+      7z. Opciones: avisar al terminar («no hizo falta dividir: 3 MB < 100 MB»), o advertir en
+      la propia hoja comparando el volumen con el tamaño del contenido. El comportamiento del
+      motor es correcto; esto es solo señalización.
 - [ ] **Opciones de fuerza AES** (128/192) además de 256; ZipCrypto ya está. Nicho de
       seguridad — ZIP+AES-256 ya cubre el caso principal.
 - [ ] **(VALORAR) Compresión multinúcleo** · **solo si el rendimiento es queja real**: hoy
