@@ -171,7 +171,8 @@ struct RevealableSecureField: View {
                 }
             }
             .textFieldStyle(.plain)
-            .focused($focused)
+            .labelsHidden()          // dentro de un Form macOS dibujaría el título como etiqueta
+            .focused($focused)       // externa y descuadraría el texto; aquí es solo placeholder
             .onSubmit(onSubmit)
 
             Button {
