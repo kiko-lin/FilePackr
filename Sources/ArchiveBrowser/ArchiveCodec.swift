@@ -42,8 +42,9 @@ public protocol ArchiveCodec: Sendable {
     /// que el llamador pueda cerrar/colocar cada fichero secuencialmente.
     ///
     /// Por defecto: una llamada a `extract` por entrada (óptimo en formatos de **acceso aleatorio**
-    /// —ZIP, `.tar` puro, libarchive—). `TarCodec` comprimido lo hace en **un solo pase** cuando
-    /// hay varias entradas (re-descomprime una vez con `streamEntries`).
+    /// —ZIP, `.tar` puro—). Lo sobreescriben los formatos **secuenciales**, donde ir entrada a
+    /// entrada re-descomprime lo anterior cada vez: `TarCodec` comprimido (un pase con
+    /// `streamEntries`) y `LibArchiveCodec` (7z sólido y compañía, un pase con `extractEntries`).
     func extractAll(_ entries: [ArchiveEntry], in container: Data, password: String?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws
 }
@@ -264,5 +265,18 @@ struct LibArchiveCodec: ArchiveCodec {
     func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
                  sink: (Data) throws -> Void) throws {
         try LibArchive.extractEntry(path: entry.path, in: container, passphrase: password, sink: sink)
+    }
+
+    /// Un **solo recorrido** para todo el lote. libarchive es un iterador secuencial (no acceso
+    /// aleatorio) y 7z comprime en bloques **sólidos**: extraer entrada a entrada re-abre y
+    /// re-descomprime todo lo anterior cada vez → coste cuadrático (§10 #1, igual que tar
+    /// comprimido). Con una sola entrada da lo mismo: el recorrido corta al colocarla.
+    func extractAll(_ entries: [ArchiveEntry], in container: Data, password: String?,
+                    place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
+        let byPath = Dictionary(entries.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+        try LibArchive.extractEntries(Array(byPath.keys), in: container, passphrase: password) { path in
+            guard let entry = byPath[path] else { return nil }
+            return try place(entry)
+        }
     }
 }

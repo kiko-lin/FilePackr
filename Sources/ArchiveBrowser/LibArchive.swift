@@ -81,6 +81,40 @@ public enum LibArchive {
         }
     }
 
+    /// Extrae **varias** entradas en un **único recorrido** del archivo. Por cada ruta pedida que
+    /// aparece, `place(path)` devuelve el sink donde volcar su contenido (en streaming) o `nil`
+    /// para saltarla; las demás entradas se saltan. Corta en cuanto no queda ninguna pendiente.
+    ///
+    /// El recorrido único no es una optimización menor: la API de libarchive es un **iterador
+    /// secuencial**, no acceso aleatorio, y 7z comprime en **bloques sólidos**. Re-abrir por
+    /// entrada obliga a re-descomprimir todo lo anterior cada vez (coste cuadrático: un 7z de
+    /// unos cientos de ficheros tarda minutos y aparenta estar colgado).
+    public static func extractEntries(_ paths: [String], in data: Data, passphrase: String? = nil,
+                                      place: (String) throws -> ((Data) throws -> Void)?) throws {
+        guard !paths.isEmpty else { return }
+        var remaining = Set(paths)
+        try data.withUnsafeBytes { raw in
+            let a = try open(raw, passphrase: passphrase)
+            defer { archive_read_free(a) }
+
+            var entry: OpaquePointer?
+            while !remaining.isEmpty {
+                let r = archive_read_next_header(a, &entry)
+                if r == EOFCODE { break }
+                guard r == OK, let entry else { throw classifyHeaderFailure(a, passphrase: passphrase) }
+                let path = String(cString: archive_entry_pathname(entry))
+                // No pedida, o pedida pero el llamador la descarta → saltar sus datos y seguir.
+                guard remaining.remove(path) != nil, let sink = try place(path) else {
+                    archive_read_data_skip(a)
+                    continue
+                }
+                try streamData(a, sink: sink)
+            }
+            // Alguna ruta pedida no estaba en el archivo: mismo error que la vía de una entrada.
+            if !remaining.isEmpty { throw LibArchiveError.entryNotFound }
+        }
+    }
+
     // MARK: - Escritura (7z)
 
     public struct WriteItem: Sendable {

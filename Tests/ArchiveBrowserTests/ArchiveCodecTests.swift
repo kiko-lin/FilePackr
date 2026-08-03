@@ -188,4 +188,68 @@ final class ArchiveCodecTests: XCTestCase {
         }
         XCTAssertEqual(got, hello)
     }
+
+    // MARK: 7z / libarchive (§10 #1 para formatos secuenciales)
+
+    /// libarchive es un **iterador secuencial** y 7z comprime en bloques **sólidos**: un lote no
+    /// puede ir entrada por entrada (cada `extractEntry` re-abre y re-descomprime lo anterior →
+    /// coste cuadrático; un 7z de unos cientos de ficheros tardaba minutos y parecía colgado).
+    ///
+    /// La prueba de que es **un solo recorrido** es estructural y determinista: se piden las
+    /// entradas en orden **inverso** y `place` debe recibirlas en el orden **del archivo** (el del
+    /// recorrido), no en el de la petición. Con una pasada por entrada saldrían al revés.
+    func testSevenZipExtractAllUsesSinglePass() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("lote.7z")
+
+        let big = Data((0..<50_000).map { UInt8($0 & 0xFF) })
+        try LibArchive.write([
+            .init(path: "uno.txt", data: hello, modifiedAt: nil, isDirectory: false),
+            .init(path: "dir/dos.txt", data: Data("dos".utf8), modifiedAt: nil, isDirectory: false),
+            .init(path: "dir/grande.bin", data: big, modifiedAt: nil, isDirectory: false),
+            .init(path: "tres.txt", data: Data("tres".utf8), modifiedAt: nil, isDirectory: false),
+        ], to: url)
+
+        let result = try ArchiveFormat.sevenZip.codec.open(try Data(contentsOf: url), fallbackName: "lote")
+        let wanted = ["uno.txt", "dir/dos.txt", "dir/grande.bin"]           // "tres.txt" NO se pide
+        let entries = wanted.reversed().compactMap { path in result.entries.first { $0.path == path } }
+        XCTAssertEqual(entries.count, wanted.count)
+
+        var order: [String] = []
+        var got: [String: Data] = [:]
+        try result.format.codec.extractAll(entries, in: result.container, password: nil) { entry in
+            let path = entry.path
+            order.append(path)
+            got[path] = Data()
+            return { got[path, default: Data()].append($0) }
+        }
+
+        XCTAssertEqual(order, wanted, "un solo recorrido: llegan en el orden del archivo, no en el pedido")
+        XCTAssertEqual(got["uno.txt"], hello)
+        XCTAssertEqual(got["dir/dos.txt"], Data("dos".utf8))
+        XCTAssertEqual(got["dir/grande.bin"], big)
+        XCTAssertNil(got["tres.txt"], "la entrada no pedida no debe colocarse")
+    }
+
+    /// Una entrada pedida que no está en el archivo falla igual que por la vía de una sola
+    /// (`entryNotFound`), en vez de terminar en silencio dejando el fichero sin escribir.
+    func testSevenZipExtractAllReportsMissingEntry() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("falta.7z")
+        try LibArchive.write([
+            .init(path: "a.txt", data: hello, modifiedAt: nil, isDirectory: false),
+        ], to: url)
+
+        let result = try ArchiveFormat.sevenZip.codec.open(try Data(contentsOf: url), fallbackName: "falta")
+        let fantasma = ArchiveEntry(path: "no-existe.txt", compressedSize: 0, uncompressedSize: 0,
+                                    isDirectory: false, modificationDate: nil, isEncrypted: false)
+        XCTAssertThrowsError(try result.format.codec.extractAll(result.entries + [fantasma],
+                                                                in: result.container, password: nil) { _ in
+            { _ in }
+        }) { XCTAssertEqual($0 as? LibArchiveError, .entryNotFound) }
+    }
 }
