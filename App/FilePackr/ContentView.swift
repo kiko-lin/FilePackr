@@ -49,7 +49,6 @@ struct ContentView: View {
                     .frame(minWidth: 760, minHeight: 480)
             }
         }
-        .preferredColorScheme(settings.theme.colorScheme)
         .onOpenURL { url in
             // La extensión Finder Sync reenvía por filepackr://open|extract (rutas en base64, «p»).
             // El doble clic del Finder llega como file://.
@@ -91,7 +90,6 @@ struct ContentView: View {
             }
         }
         .ignoresSafeArea(.container, edges: .top)   // el contenido sube a la zona del título
-        .preferredColorScheme(settings.theme.colorScheme)
         .background(WindowGuard(edited: doc.hasUnsavedChanges,
                                 extracting: doc.cancellable && !doc.isWriting,
                                 writing: doc.isWriting,

@@ -1,4 +1,3 @@
-import SwiftUI
 import AppKit
 import Combine
 import ArchiveBrowser
@@ -8,11 +7,18 @@ public enum AppTheme: String, CaseIterable, Identifiable {
     case system, light, dark
     public var id: String { rawValue }
     public var nameKey: String { "theme.\(rawValue)" }
-    public var colorScheme: ColorScheme? {
+
+    /// Apariencia AppKit del tema (`nil` = seguir al sistema). Se aplica a **toda** la app
+    /// (`NSApp.appearance`), no con `preferredColorScheme` en la vista: ese modificador solo
+    /// viste la ventana que lo lleva —Ajustes, Ayuda y los paneles/alertas del sistema se
+    /// quedaban con la apariencia del sistema— y al volver a "Según el sistema" dejaba la
+    /// ventana con el fondo ya revertido pero el `colorScheme` del entorno SwiftUI obsoleto
+    /// (texto oscuro sobre fondo oscuro) hasta que algo forzaba un redibujado.
+    public var nsAppearance: NSAppearance? {
         switch self {
         case .system: return nil
-        case .light: return .light
-        case .dark: return .dark
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
         }
     }
 }

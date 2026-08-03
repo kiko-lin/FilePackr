@@ -1,6 +1,7 @@
 import SwiftUI
 import FilePackrModel
 import AppKit
+import Combine
 
 @main
 struct FilePackrApp: App {
@@ -57,10 +58,25 @@ struct HelpCommands: Commands {
 /// infiere; el SDK de Xcode 16 (CI) no, y sin esto la app no compila allí.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Mantiene `NSApp.appearance` al día con el tema de Ajustes mientras la app vive.
+    private var themeObserver: AnyCancellable?
+
     /// Sin pestañas de ventana: cada archivo abre en su propia ventana independiente.
     /// Esto también retira los ítems de menú de pestañas (Mostrar barra/Combinar ventanas…).
+    ///
+    /// El **tema** se aplica aquí, a toda la app (`NSApp.appearance`), y no con
+    /// `preferredColorScheme` en la vista: así lo siguen todas las ventanas (principal,
+    /// Ajustes, Ayuda) y los paneles y alertas del sistema, y el cambio recorre la vía normal
+    /// de AppKit —`effectiveAppearance`—, la misma que ya funcionaba al cambiar el modo del
+    /// sistema. Antes, volver a "Según el sistema" revertía el fondo de la ventana pero dejaba
+    /// obsoleto el `colorScheme` de SwiftUI (texto oscuro sobre fondo oscuro) hasta perder el
+    /// foco. Se fija antes de que aparezca ninguna ventana para no arrancar con un parpadeo.
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
+
+        let settings = AppSettings.shared
+        NSApp.appearance = settings.theme.nsAppearance
+        themeObserver = settings.$theme.sink { NSApp.appearance = $0.nsAppearance }
     }
 
 

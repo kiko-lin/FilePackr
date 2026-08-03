@@ -132,6 +132,20 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 ## Hecho
 
+- **Sesión 2026-08-03 — el tema se aplica a toda la app (`NSApp.appearance`), no por ventana**:
+  el usuario informó de que al cambiar a **Claro** y volver a **Según el sistema** (sistema en
+  oscuro) la ventana quedaba con **fondo oscuro y texto oscuro** en la zona de arrastre, y se
+  arreglaba sola al perder el foco o al cerrar Ajustes. Causa: `preferredColorScheme` en
+  `ContentView`. Al volver a `nil`, AppKit devuelve la ventana a la apariencia del sistema
+  (fondo ya oscuro) pero el `colorScheme` del entorno SwiftUI se queda **obsoleto** en claro
+  hasta que algo fuerza un redibujado. Verificado que la vía de AppKit **sí** funcionaba:
+  alternar el modo del sistema 22 veces con la app abierta no reproduce el fallo (ni crash log
+  ni stderr). Arreglo: `AppTheme.colorScheme` → `AppTheme.nsAppearance`, y `AppDelegate.
+  applicationWillFinishLaunching` fija `NSApp.appearance` y se suscribe a `AppSettings.$theme`
+  (Combine) para mantenerlo. Se retiran los dos `preferredColorScheme` de `ContentView`.
+  **Efecto extra**: el tema ahora lo siguen **todas** las ventanas (Ajustes, Ayuda, la compacta
+  de «Descomprimir aquí») y las alertas/paneles del sistema; antes solo la principal.
+
 - **Sesión 2026-07-01 (c) — asociación de archivos que se aplica de verdad en el 1er arranque**:
   el usuario informó de que, tras instalar (build ad-hoc), FilePackr no se hacía app por defecto de
   ningún tipo. Diagnóstico: el aviso de primer arranque **solo abría Ajustes** (no asociaba nada) y
@@ -393,7 +407,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 - **Ajustes** (`SettingsView.swift` + `AppSettings.swift`): en el **menú nativo de la
   app** (⌘,, escena `Settings`), no en la interfaz. `AppSettings` (@MainActor,
   ObservableObject, UserDefaults, en caliente): **tema** (sistema/claro/oscuro →
-  `preferredColorScheme`), **formato por defecto**, **cifrado por defecto** (se aplican
+  `NSApp.appearance`, ver abajo), **formato por defecto**, **cifrado por defecto** (se aplican
   a documentos nuevos en `saveDocument`) y **destino de extracción** (carpeta del archivo
   o carpeta fija, se aplica en `extract`). El idioma sigue en `Localizer`.
 - **Icono de app**: único, generado desde un SVG (diamante) a `AppIcon.appiconset`
