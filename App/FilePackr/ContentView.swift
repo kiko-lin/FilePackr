@@ -38,6 +38,14 @@ struct ContentView: View {
     /// Número de esta ventana mientras es un documento sin guardar («Sin título N»). Lo reparte
     /// `UntitledNumbering` entre ventanas; `nil` cuando hay un archivo con nombre real.
     @State private var untitledNumber: Int?
+    /// El overlay de progreso solo se muestra si `doc.progress` sigue activo pasado este umbral
+    /// (ver `.task(id:)` más abajo). Leer el índice de un ZIP es puro cálculo en memoria: incluso
+    /// determinado (con fracción), el central directory se recorre tan rápido que el hilo principal
+    /// nunca llega a pintar un fotograma intermedio — SwiftUI solo repinta cuando el run loop vuelve
+    /// a esperar, y aquí nunca lo hace a tiempo. El resultado percibido es la barra "saltando" de
+    /// una fracción mínima a ocultarse. Como mostrarla de verdad no es viable para algo tan rápido,
+    /// la escondemos del todo si termina antes del umbral (operaciones lentas sí la ven aparecer).
+    @State private var showProgressOverlay = false
 
     var body: some View {
         Group {
@@ -153,6 +161,15 @@ struct ContentView: View {
             } else {
                 AccessibilityNotification.Announcement(loc("a11y.operationFinished")).post()
             }
+        }
+        // Umbral antes de enseñar el overlay: si `doc.progress` deja de estar activo antes de
+        // que pase el `sleep`, `.task(id:)` cancela este hijo sin haber llegado a `showProgressOverlay
+        // = true` — la operación queda invisible, como debe ser para algo casi instantáneo.
+        .task(id: doc.progress != nil) {
+            guard doc.progress != nil else { showProgressOverlay = false; return }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            showProgressOverlay = true
         }
         .sheet(isPresented: $saveCoord.showingOptions) {
             SaveOptionsSheet(coord: saveCoord,
@@ -335,7 +352,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var progressOverlay: some View {
-        if let progress = doc.progress {
+        if let progress = doc.progress, showProgressOverlay {
             ZStack {
                 // Atenúa la app de fondo (sigue viéndose, sin taparla por completo).
                 Color.black.opacity(0.4).ignoresSafeArea()

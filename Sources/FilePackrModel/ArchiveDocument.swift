@@ -163,8 +163,12 @@ public final class ArchiveDocument: ObservableObject {
         let explicitFormat = ArchiveFormat.detectByExtension(baseURL)
             ?? peekHeader(baseURL).flatMap(ArchiveFormat.detectByMagic)
         let detected = explicitFormat ?? .zip
-        progress = ProgressState(kind: .opening(baseURL.lastPathComponent),
-                                 fraction: detected == .zip ? 0 : nil)
+        // Indeterminado siempre: leer el índice es pura CPU en memoria (imperceptible, confirmado
+        // por benchmark) salvo que el disco sea lento (externo/red), en cuyo caso el tiempo real se
+        // va en una única lectura del central directory *antes* de que el bucle por entrada pueda
+        // reportar nada — un % ahí no reflejaría el tiempo real, solo daría la falsa impresión de
+        // que se ha quedado colgada. Ver `ZipReader.listEntries`.
+        progress = ProgressState(kind: .opening(baseURL.lastPathComponent), fraction: nil)
         defer { progress = nil }
         incompleteVolumes = false   // no arrastrar el aviso de una apertura anterior
 
@@ -173,7 +177,6 @@ public final class ArchiveDocument: ObservableObject {
         // Red defensiva: restos de un guardado interrumpido por un cierre forzado anterior.
         WorkFile.cleanStale(in: baseURL.deletingLastPathComponent())
         let fallbackName = baseURL.deletingPathExtension().lastPathComponent
-        let report = makeProgressReporter()
         let result: ArchiveReadResult
         let joinedTemp: URL?
         let incompleteVolumesResult: Bool
@@ -190,19 +193,13 @@ public final class ArchiveDocument: ObservableObject {
                 // en vez de cargar todas las partes en RAM (Volumes.join). Mono-volumen: mapear directo.
                 let temp = parts.count == 1 ? nil : try VolumeStore.joinToTemporaryFile(parts)
                 let data = try Data(contentsOf: temp ?? parts[0], options: .mappedIfSafe)
-                // Solo ZIP reporta progreso por fracción; el throttle limita los saltos a la UI
-                // (cada ~1%) para no inundar el hilo principal.
-                var throttle = ProgressThrottle()
-                let progress: ((Double) -> Void)? = detected == .zip ? { fraction in
-                    if throttle.shouldReport(fraction) { report(fraction) }
-                } : nil
                 // .rar suelto cuya propia cabecera dice pertenecer a un conjunto multivolumen
                 // (nombre no reconocido por `RarVolumes`, o hueco en la secuencia): distingue más
                 // abajo entre "falló del todo" (nada que mostrar) y "abrió parcial" (aviso suave).
                 let isVolumePart = detected == .rar && RarVolumes.isMultiVolumePart(data)
                 do {
                     let r = try detected.codec.open(data, fallbackName: fallbackName,
-                                                    passphrase: passphrase, progress: progress)
+                                                    passphrase: passphrase, progress: nil)
                     return (r, temp, isVolumePart)
                 } catch {
                     if let temp { try? FileManager.default.removeItem(at: temp) }
@@ -756,26 +753,6 @@ public final class ArchiveDocument: ObservableObject {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         return try? handle.read(upToCount: 512)
-    }
-
-    /// Reporter `@Sendable` para actualizar la barra de progreso desde tareas en
-    /// segundo plano sin capturar `self` directamente en el código concurrente.
-    ///
-    /// Bloquea el hilo de fondo hasta que la actualización se aplica en el actor principal
-    /// (en vez de lanzar un `Task` sin esperar): leer el índice de un ZIP es puro cálculo en
-    /// memoria, sin E/S que lo frene, así que sin este freno el bucle encola cientos de tareas
-    /// en una ráfaga más rápida de lo que la vista llega a repintar — @Published las coalesce
-    /// y en pantalla solo se ve el primer y el último valor, es decir, la barra "salta" de un
-    /// pelín a ocultarse. Al esperar cada tira, el ritmo de fondo queda acompasado al del actor.
-    private func makeProgressReporter() -> @Sendable (Double) -> Void {
-        { fraction in
-            let semaphore = DispatchSemaphore(value: 0)
-            Task { @MainActor in
-                self.progress?.fraction = fraction
-                semaphore.signal()
-            }
-            semaphore.wait()
-        }
     }
 
     /// Resumen del contenido para la barra de estado (recalculado al cambiar la
