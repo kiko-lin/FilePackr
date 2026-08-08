@@ -22,6 +22,15 @@ public enum ArchiveDocumentError: Error {
     /// RARLAB, así que pedir contraseña no serviría (la correcta también falla). Ver `docs/fixtures/`.
     /// Lleva el formato para que el mensaje diga de qué tipo se trata.
     case encryptionUnsupported(format: ArchiveFormat)
+    /// Un `.rar` suelto declara en su propia cabecera (`MHD_VOLUME`) que es parte de un conjunto
+    /// multivolumen, pero no se encontraron las demás partes (ni por nombre reconocido — ver
+    /// `RarVolumes` — ni ninguna) y la apertura falló del todo. Si hubiera abierto parcialmente,
+    /// no se lanza esto: se marca `ArchiveDocument.incompleteVolumes` y se muestra lo que haya.
+    case rarVolumeSetIncomplete
+    /// Ni la extensión ni la firma (magic bytes) del fichero coinciden con ningún formato
+    /// soportado. Se lanza solo si, además, la apertura como ZIP (el valor por defecto) falla —
+    /// si por casualidad abre bien, se deja pasar sin avisar.
+    case unrecognizedFormat
 }
 
 /// Documento de trabajo: el árbol de elementos que acabará siendo un ZIP.
@@ -71,6 +80,13 @@ public final class ArchiveDocument: ObservableObject {
     private var entryPassword: String?
 
     public private(set) var sourceArchive: ArchiveContainer?
+
+    /// El documento abierto es un `.rar` cuya cabecera declara ser parte de un conjunto
+    /// multivolumen, pero no se encontraron (todas) las demás partes: `roots` puede estar
+    /// incompleto. La vista muestra un aviso persistente no bloqueante mientras sea `true` (a
+    /// diferencia de `ArchiveDocumentError.rarVolumeSetIncomplete`, que se lanza cuando no hay
+    /// NADA que mostrar). Modelo emite el token, no el texto — mismo criterio que `ProgressActivity`.
+    @Published public private(set) var incompleteVolumes: Bool = false
 
     /// Temporal con las partes de un multivolumen (esquema propio de FilePackr) concatenadas,
     /// mapeado en `sourceArchive`. Se borra al cerrar o al abrir otro archivo. Los volúmenes RAR
@@ -141,13 +157,16 @@ public final class ArchiveDocument: ObservableObject {
         // orden; la primera (nombre.zip) da el nombre base y el formato.
         let parts = rarVolumes == nil ? VolumeStore.parts(for: url) : []
         let baseURL = rarVolumes?.first ?? parts.first ?? url
-        // Por extensión y, si no la reconoce, por la firma (magic bytes) de la cabecera.
-        let detected = ArchiveFormat.detectByExtension(baseURL)
+        // Por extensión y, si no la reconoce, por la firma (magic bytes) de la cabecera. `nil`
+        // si NINGUNA de las dos reconoce nada — distinto de "explícitamente .zip" para poder
+        // avisar de formato no reconocido en vez de fingir que es un zip roto (más abajo).
+        let explicitFormat = ArchiveFormat.detectByExtension(baseURL)
             ?? peekHeader(baseURL).flatMap(ArchiveFormat.detectByMagic)
-            ?? .zip
+        let detected = explicitFormat ?? .zip
         progress = ProgressState(kind: .opening(baseURL.lastPathComponent),
                                  fraction: detected == .zip ? 0 : nil)
         defer { progress = nil }
+        incompleteVolumes = false   // no arrastrar el aviso de una apertura anterior
 
         // Si venía troceado (esquema propio), limpiamos cualquier temporal de una apertura anterior.
         discardJoinedVolumesTemp()
@@ -157,13 +176,15 @@ public final class ArchiveDocument: ObservableObject {
         let report = makeProgressReporter()
         let result: ArchiveReadResult
         let joinedTemp: URL?
+        let incompleteVolumesResult: Bool
         do {
-            let loaded = try await Task.detached(priority: .userInitiated) { () -> (ArchiveReadResult, URL?) in
+            let loaded = try await Task.detached(priority: .userInitiated) { () -> (ArchiveReadResult, URL?, Bool) in
                 if let rarVolumes {
-                    // Sin fichero temporal: la lista de volúmenes ya es el "container".
+                    // Sin fichero temporal: la lista de volúmenes ya es el "container". Se
+                    // reconoció el conjunto completo por nombre, nunca queda incompleto.
                     let (entries, _) = try LibArchive.listEntries(volumes: rarVolumes, passphrase: passphrase)
                     let result = ArchiveReadResult(format: .rar, container: .rarVolumes(rarVolumes), entries: entries)
-                    return (result, nil)
+                    return (result, nil, false)
                 }
                 // Multivolumen (esquema propio): concatenar las partes a un temporal y **mapearlo**,
                 // en vez de cargar todas las partes en RAM (Volumes.join). Mono-volumen: mapear directo.
@@ -175,17 +196,24 @@ public final class ArchiveDocument: ObservableObject {
                 let progress: ((Double) -> Void)? = detected == .zip ? { fraction in
                     if throttle.shouldReport(fraction) { report(fraction) }
                 } : nil
+                // .rar suelto cuya propia cabecera dice pertenecer a un conjunto multivolumen
+                // (nombre no reconocido por `RarVolumes`, o hueco en la secuencia): distingue más
+                // abajo entre "falló del todo" (nada que mostrar) y "abrió parcial" (aviso suave).
+                let isVolumePart = detected == .rar && RarVolumes.isMultiVolumePart(data)
                 do {
                     let r = try detected.codec.open(data, fallbackName: fallbackName,
                                                     passphrase: passphrase, progress: progress)
-                    return (r, temp)
+                    return (r, temp, isVolumePart)
                 } catch {
                     if let temp { try? FileManager.default.removeItem(at: temp) }
+                    if isVolumePart { throw ArchiveDocumentError.rarVolumeSetIncomplete }
+                    if explicitFormat == nil { throw ArchiveDocumentError.unrecognizedFormat }
                     throw error
                 }
             }.value
             result = loaded.0
             joinedTemp = loaded.1
+            incompleteVolumesResult = loaded.2
         } catch let error as LibArchiveError where error == .passphraseRequired {
             // RAR con cabeceras cifradas: libarchive NO descifra RAR (ni con la clave correcta),
             // así que pedir contraseña sería un bucle sin salida. Avisar de que no se soporta.
@@ -199,6 +227,7 @@ public final class ArchiveDocument: ObservableObject {
         format = result.format
         sourceArchive = result.container
         roots = ArchiveTreeBuilder.build(from: result.entries)
+        incompleteVolumes = incompleteVolumesResult
         selectedIDs = []
         sourceURL = baseURL
         documentName = baseURL.lastPathComponent
@@ -424,6 +453,7 @@ public final class ArchiveDocument: ObservableObject {
         roots = []
         selectedIDs = []
         sourceArchive = nil
+        incompleteVolumes = false
         sourceURL = nil
         documentName = ""
         hasActiveDocument = false

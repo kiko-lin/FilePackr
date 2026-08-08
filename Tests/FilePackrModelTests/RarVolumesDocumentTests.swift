@@ -70,6 +70,24 @@ final class RarVolumesDocumentTests: XCTestCase {
     /// El camino real de "Extraer"/"Extraer todo"/arrastrar al Finder (`ExportPlan.writeContents`
     /// → `LibArchiveCodec.extractAll`) también debe funcionar, incluida la entrada que cruza el
     /// límite de volumen — es el que fallaba en el bug original (no solo listar).
+    /// Si falta el segundo volumen (nombre no reconocido al lado, o borrado, o lo que sea), el
+    /// documento no debe fingir que está completo: `incompleteVolumes` avisa y `roots` refleja
+    /// solo lo que de verdad se pudo leer del volumen 1 (verificado empíricamente: con este
+    /// fixture RAR4, abrir solo la primera parte lista la entrada que cabe en ella —"partido.txt",
+    /// aunque truncada— pero no "entero.txt", que vive entera en la segunda parte).
+    func testOpeningOnlyFirstVolumeMarksIncomplete() async throws {
+        let src = try XCTUnwrap(
+            Bundle.module.url(forResource: "volumes.part1", withExtension: "rar", subdirectory: "Fixtures"))
+        let dst = tempDir.appendingPathComponent("solo.part1.rar")
+        try Data(contentsOf: src).write(to: dst)
+
+        let doc = ArchiveDocument()
+        try await doc.openArchive(dst)
+
+        XCTAssertTrue(doc.incompleteVolumes)
+        XCTAssertEqual(Set(doc.roots.map(\.name)), ["partido.txt"])
+    }
+
     func testExtractsAcrossVolumeBoundary() async throws {
         let url = try copyVolumes(vol1Name: "x.part1.rar", vol2Name: "x.part2.rar")
         let doc = ArchiveDocument()

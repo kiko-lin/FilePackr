@@ -120,4 +120,53 @@ final class RarVolumesTests: XCTestCase {
     func testUnrelatedFileReturnsNil() {
         XCTAssertNil(RarVolumes.parts(for: URL(fileURLWithPath: "/tmp/foo.zip")))
     }
+
+    // MARK: - isMultiVolumePart: ¿declara la propia cabecera pertenecer a un conjunto?
+
+    private func fixture(_ name: String) throws -> Data {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "rar", subdirectory: "Fixtures"))
+        return try Data(contentsOf: url)
+    }
+
+    func testIsMultiVolumePartRAR4Positive() throws {
+        // volumes.part1.rar/.part2.rar (docs/fixtures/make_rar_volumes.py) llevan MHD_VOLUME.
+        XCTAssertTrue(RarVolumes.isMultiVolumePart(try fixture("volumes.part1")))
+        XCTAssertTrue(RarVolumes.isMultiVolumePart(try fixture("volumes.part2")))
+    }
+
+    func testIsMultiVolumePartRAR4Negative() throws {
+        // sample.rar (docs/fixtures/make_rar.py) no lleva la bandera: flags 0x0000.
+        XCTAssertFalse(RarVolumes.isMultiVolumePart(try fixture("sample")))
+    }
+
+    /// Cabecera RAR5 mínima fabricada a mano (no un archivo válido — solo lo justo para ejercitar
+    /// el parseo de vints): marcador(8) + CRC32 dummy(4) + vint HeaderSize + vint HeaderType(1) +
+    /// vint HeaderFlags(0, sin área extra) + vint ArchiveFlags.
+    private func rar5Header(archiveFlags: UInt8, headerType: UInt8 = 1) -> Data {
+        var bytes: [UInt8] = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00]   // marcador
+        bytes += [0, 0, 0, 0]        // CRC32 (no se valida)
+        bytes += [0x05]              // vint HeaderSize (valor arbitrario, no se valida)
+        bytes += [headerType]        // vint HeaderType
+        bytes += [0x00]              // vint HeaderFlags (sin área extra)
+        bytes += [archiveFlags]      // vint ArchiveFlags
+        return Data(bytes)
+    }
+
+    func testIsMultiVolumePartRAR5Positive() {
+        XCTAssertTrue(RarVolumes.isMultiVolumePart(rar5Header(archiveFlags: 0x01)))   // primer volumen
+        XCTAssertTrue(RarVolumes.isMultiVolumePart(rar5Header(archiveFlags: 0x03)))   // continuación
+    }
+
+    func testIsMultiVolumePartRAR5Negative() {
+        XCTAssertFalse(RarVolumes.isMultiVolumePart(rar5Header(archiveFlags: 0x00)))
+        // Bloque tipo distinto de "cabecera principal" (1): no es donde vive MHD_VOLUME.
+        XCTAssertFalse(RarVolumes.isMultiVolumePart(rar5Header(archiveFlags: 0x01, headerType: 2)))
+    }
+
+    func testIsMultiVolumePartNeverThrowsOnBadInput() {
+        XCTAssertFalse(RarVolumes.isMultiVolumePart(Data()))
+        XCTAssertFalse(RarVolumes.isMultiVolumePart(Data([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00])))   // solo marcador RAR5
+        XCTAssertFalse(RarVolumes.isMultiVolumePart(Data([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00])))          // solo marcador RAR4
+        XCTAssertFalse(RarVolumes.isMultiVolumePart(Data(repeating: 0xFF, count: 40)))   // basura, no-RAR
+    }
 }

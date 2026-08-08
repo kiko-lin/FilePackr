@@ -252,6 +252,6 @@ final class ArchiveCodecTests: XCTestCase {
         XCTAssertThrowsError(try result.format.codec.extractAll(result.entries + [fantasma],
                                                                 in: result.container, password: nil) { _ in
             { _ in }
-        }) { XCTAssertEqual($0 as? LibArchiveError, .entryNotFound) }
+        }) { XCTAssertEqual($0 as? LibArchiveError, .entryNotFound(path: "no-existe.txt")) }
     }
 }

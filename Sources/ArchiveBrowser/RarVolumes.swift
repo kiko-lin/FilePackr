@@ -86,4 +86,60 @@ public enum RarVolumes {
         }
         return result.count > 1 ? result : nil
     }
+
+    // MARK: - ¿Es este archivo parte de un conjunto multivolumen?
+
+    private static let rar4Marker: [UInt8] = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00]
+    private static let rar5Marker: [UInt8] = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00]
+
+    /// `true` si la cabecera del propio archivo (`MAIN_HEAD`, bit `MHD_VOLUME`) declara que es
+    /// parte de un conjunto multivolumen — independiente del nombre del fichero. Sirve para
+    /// distinguir "esto es un RAR suelto y roto" de "esto es un RAR suelto al que le faltan sus
+    /// hermanos" cuando `parts(for:)` no reconoció ningún esquema de nombres (p. ej. el sufijo
+    /// " (1)" que añade macOS al duplicar, que no dice nada sobre volúmenes de RAR). Nunca lanza:
+    /// ante cualquier dato truncado o inesperado, devuelve `false` — no arriesgarse a un falso aviso.
+    public static func isMultiVolumePart(_ data: Data) -> Bool {
+        let bytes = [UInt8](data.prefix(64))
+        if bytes.starts(with: rar5Marker) { return isMultiVolumePartRAR5(bytes) }
+        if bytes.starts(with: rar4Marker) { return isMultiVolumePartRAR4(bytes) }
+        return false
+    }
+
+    /// RAR4: marcador(7) + `HEAD_CRC`(2) + `HEAD_TYPE`(1) + `HEAD_FLAGS`(2, LE) — offsets fijos,
+    /// sin vint. `HEAD_TYPE` 0x73 = `MAIN_HEAD`; bit 0x0001 de `HEAD_FLAGS` = `MHD_VOLUME`.
+    private static func isMultiVolumePartRAR4(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count >= 12, bytes[9] == 0x73 else { return false }
+        let flags = UInt16(bytes[10]) | (UInt16(bytes[11]) << 8)
+        return flags & 0x0001 != 0
+    }
+
+    /// RAR5: marcador(8) + CRC32(4) + vint `HeaderSize` + vint `HeaderType`(1=principal) + vint
+    /// `HeaderFlags` + [vint `ExtraAreaSize` si `HeaderFlags`&1] + vint `ArchiveFlags` — bit
+    /// 0x0001 de `ArchiveFlags` es el equivalente de `MHD_VOLUME`.
+    private static func isMultiVolumePartRAR5(_ bytes: [UInt8]) -> Bool {
+        var off = 8 + 4
+        guard readVint(bytes, &off) != nil else { return false }               // HeaderSize
+        guard let headerType = readVint(bytes, &off), headerType == 1 else { return false }
+        guard let headerFlags = readVint(bytes, &off) else { return false }
+        if headerFlags & 0x0001 != 0 {
+            guard readVint(bytes, &off) != nil else { return false }           // ExtraAreaSize
+        }
+        guard let archiveFlags = readVint(bytes, &off) else { return false }
+        return archiveFlags & 0x0001 != 0
+    }
+
+    /// Vint de RAR5 (7 bits por byte, bit alto = continúa). `nil` si se sale del buffer o el vint
+    /// es sospechosamente largo (datos corruptos/adversariales) — nunca bucle infinito.
+    private static func readVint(_ bytes: [UInt8], _ off: inout Int) -> UInt64? {
+        var result: UInt64 = 0
+        var shift: UInt64 = 0
+        var count = 0
+        while true {
+            guard off < bytes.count, count < 10 else { return nil }
+            let b = bytes[off]; off += 1; count += 1
+            result |= UInt64(b & 0x7F) << shift
+            if b & 0x80 == 0 { return result }
+            shift += 7
+        }
+    }
 }

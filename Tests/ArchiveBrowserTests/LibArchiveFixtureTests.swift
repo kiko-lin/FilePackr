@@ -217,4 +217,20 @@ final class LibArchiveFixtureTests: XCTestCase {
         let (entries, _) = try LibArchive.listEntries(volumes: [v1, v2])
         XCTAssertEqual(Set(entries.map(\.path)), ["partido.txt", "entero.txt"])
     }
+
+    // MARK: - Truncamiento (mejor esfuerzo, ver LibArchive.classifyFailure)
+
+    /// `archive_error_string` no está garantizado entre versiones/casos — verificado a mano
+    /// probando varios puntos de corte de `comp-rar5.rar`: algunos ni siquiera fallan al listar
+    /// (el corte cae justo en un límite de entrada), otros dan un `.readFailed` genérico (el
+    /// mensaje no menciona truncamiento), y este punto concreto (90 %, cerca del final, a mitad
+    /// de los datos de la última entrada) sí produce un mensaje con "trunc" → `.truncated`. No es
+    /// una garantía general, solo confirma que el camino funciona cuando libarchive sí lo dice.
+    func testTruncatedRar5DetectedAsTruncatedAtLeastSometimes() throws {
+        let full = try fixture("comp-rar5", "rar")
+        let truncated = Data(full.prefix(Int(Double(full.count) * 0.9)))
+        XCTAssertThrowsError(try LibArchive.listEntries(in: truncated)) {
+            XCTAssertEqual($0 as? LibArchiveError, .truncated)
+        }
+    }
 }

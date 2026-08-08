@@ -526,6 +526,13 @@ struct ContentView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .transition(.opacity)
+            } else if doc.incompleteVolumes {
+                // Persistente mientras el documento incompleto siga abierto (a diferencia de
+                // exclusionNotice, sin temporizador): RAR multivolumen al que le faltan partes.
+                Label(loc("status.rarIncompleteVolumes"), systemImage: "exclamationmark.triangle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
             } else {
                 Text(statusText)
                     .font(.callout)
@@ -537,6 +544,7 @@ struct ContentView: View {
         .padding(.vertical, 4)
         .background(.bar)
         .animation(.easeInOut(duration: 0.2), value: exclusionNotice)
+        .animation(.easeInOut(duration: 0.2), value: doc.incompleteVolumes)
     }
 
     private var statusText: String {

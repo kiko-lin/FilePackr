@@ -663,6 +663,22 @@
         }
       }
     },
+    "error.entryNotFound": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” could not be found inside the archive."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se encontró «%@» dentro del archivo."
+          }
+        }
+      }
+    },
     "error.needsPassword": {
       "extractionState": "stale",
       "localizations": {
@@ -680,6 +696,22 @@
         }
       }
     },
+    "error.rarVolumeSetIncomplete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This RAR is part of a multivolume set, but the other volumes could not be found."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este RAR es parte de un conjunto multivolumen, pero no se encontraron el resto de las partes."
+          }
+        }
+      }
+    },
     "error.readFailed": {
       "extractionState": "stale",
       "localizations": {
@@ -693,6 +725,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "No se pudo leer el archivo."
+          }
+        }
+      }
+    },
+    "error.truncated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file appears to be incomplete (did the download get interrupted?)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El archivo parece estar incompleto (¿se cortó la descarga?)."
+          }
+        }
+      }
+    },
+    "error.unrecognizedFormat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file doesn’t appear to be in a recognized archive format (ZIP, 7z, RAR, TAR…)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este archivo no parece tener un formato reconocido (ZIP, 7z, RAR, TAR…)."
           }
         }
       }
@@ -2914,6 +2978,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "archivos"
+          }
+        }
+      }
+    },
+    "status.rarIncompleteVolumes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incomplete listing: not every volume of this multivolume RAR was found."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listado incompleto: no se encontraron todos los volúmenes de este RAR multivolumen."
           }
         }
       }

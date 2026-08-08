@@ -2,7 +2,9 @@ import Foundation
 import Carchive
 
 public enum LibArchiveError: Error, Equatable {
-    case openFailed, passphraseRequired, wrongPassword, entryNotFound, writeFailed, readFailed
+    case openFailed, passphraseRequired, wrongPassword, writeFailed, readFailed, truncated
+    /// La entrada pedida (`path`) no apareció al recorrer el archivo.
+    case entryNotFound(path: String)
 }
 
 /// Puente a la **libarchive del sistema** para formatos que no implementamos en Swift
@@ -46,7 +48,7 @@ public enum LibArchive {
             let r = archive_read_next_header(a, &entry)
             if r == EOFCODE { break }
             guard r == OK, let entry else {
-                throw classifyHeaderFailure(a, passphrase: passphrase)
+                throw classifyFailure(a, passphrase: passphrase)
             }
             let path = String(cString: archive_entry_pathname(entry))
             let isDir = archive_entry_filetype(entry) == AE_IFDIR || path.hasSuffix("/")
@@ -95,8 +97,8 @@ public enum LibArchive {
         var entry: OpaquePointer?
         while true {
             let r = archive_read_next_header(a, &entry)
-            if r == EOFCODE { throw LibArchiveError.entryNotFound }
-            guard r == OK, let entry else { throw classifyHeaderFailure(a, passphrase: passphrase) }
+            if r == EOFCODE { throw LibArchiveError.entryNotFound(path: path) }
+            guard r == OK, let entry else { throw classifyFailure(a, passphrase: passphrase) }
             if String(cString: archive_entry_pathname(entry)) == path {
                 try streamData(a, sink: sink)
                 return
@@ -137,7 +139,7 @@ public enum LibArchive {
         while !remaining.isEmpty {
             let r = archive_read_next_header(a, &entry)
             if r == EOFCODE { break }
-            guard r == OK, let entry else { throw classifyHeaderFailure(a, passphrase: passphrase) }
+            guard r == OK, let entry else { throw classifyFailure(a, passphrase: passphrase) }
             let path = String(cString: archive_entry_pathname(entry))
             // No pedida, o pedida pero el llamador la descarta → saltar sus datos y seguir.
             guard remaining.remove(path) != nil, let sink = try place(path) else {
@@ -146,8 +148,9 @@ public enum LibArchive {
             }
             try streamData(a, sink: sink)
         }
-        // Alguna ruta pedida no estaba en el archivo: mismo error que la vía de una entrada.
-        if !remaining.isEmpty { throw LibArchiveError.entryNotFound }
+        // Alguna ruta pedida no estaba en el archivo: mismo error que la vía de una entrada
+        // (la primera en orden alfabético, para un mensaje determinista con varias ausentes).
+        if let missing = remaining.sorted().first { throw LibArchiveError.entryNotFound(path: missing) }
     }
 
     // MARK: - Escritura (7z)
@@ -244,8 +247,14 @@ public enum LibArchive {
             opened = archive_read_open_filenames(a, &pointers, 10240)
         }
         guard opened == OK else {
+            // Clasificar ANTES de liberar `a`: archive_error_string necesita el archive vivo.
+            let failure = classifyFailure(a, passphrase: passphrase)
             archive_read_free(a)
-            throw LibArchiveError.openFailed
+            // .readFailed es el resultado por defecto de classifyFailure para "no sé qué pasó";
+            // aquí el fallo es al ABRIR, no a mitad de cabecera, así que ese caso por defecto
+            // pasa a ser .openFailed (mismo mensaje para el usuario, más preciso internamente).
+            if case .readFailed = failure { throw LibArchiveError.openFailed }
+            throw failure
         }
         return a
     }
@@ -284,17 +293,20 @@ public enum LibArchive {
         }
     }
 
-    /// Distingue "necesita contraseña" de un fallo genérico. Señal **estructurada** primero
-    /// (`archive_read_has_encrypted_entries` > 0, robusta ante versión/idioma de libarchive) y,
-    /// como complemento para el caso de **cabeceras** cifradas —donde el conteo es desconocido
-    /// hasta tener la clave—, el texto del mensaje de error.
-    private static func classifyHeaderFailure(_ a: OpaquePointer, passphrase: String?) -> LibArchiveError {
+    /// Clasifica un fallo (al abrir o a mitad de cabecera) usando la señal **estructurada**
+    /// primero (`archive_read_has_encrypted_entries` > 0, robusta ante versión/idioma de
+    /// libarchive) y, como complemento para el caso de **cabeceras** cifradas —donde el conteo es
+    /// desconocido hasta tener la clave— o para truncamiento, el texto libre de
+    /// `archive_error_string`. Este texto es en inglés y no está garantizado entre versiones de
+    /// libarchive: es un mejor esfuerzo, con `.readFailed` como respaldo si no reconoce nada.
+    private static func classifyFailure(_ a: OpaquePointer, passphrase: String?) -> LibArchiveError {
         let hasEncrypted = archive_read_has_encrypted_entries(a) > 0
         let message = archive_error_string(a).map { String(cString: $0).lowercased() } ?? ""
         let mentionsCrypto = message.contains("passphrase") || message.contains("password") || message.contains("encrypt")
         if hasEncrypted || mentionsCrypto {
             return passphrase == nil ? .passphraseRequired : .wrongPassword
         }
+        if message.contains("trunc") { return .truncated }
         return .readFailed
     }
 }

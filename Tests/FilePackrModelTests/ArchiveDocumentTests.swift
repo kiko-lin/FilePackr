@@ -66,6 +66,21 @@ final class ArchiveDocumentTests: XCTestCase {
         XCTAssertEqual(doc.roots.map(\.name), ["x.txt"])
     }
 
+    /// Ni la extensión ni la firma reconocen nada (bytes arbitrarios, no ningún formato
+    /// soportado): en vez del error de ZIP roto que daría el `.zip` por defecto, un mensaje
+    /// específico de "formato no reconocido".
+    func testOpenUnrecognizedFormatThrowsSpecificError() async throws {
+        let url = try writeTemp(Data([0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03]), "misterio.bin")
+
+        let doc = ArchiveDocument()
+        do {
+            try await doc.openArchive(url)
+            XCTFail("debería lanzar unrecognizedFormat")
+        } catch ArchiveDocumentError.unrecognizedFormat {
+            // esperado
+        }
+    }
+
     // MARK: - Edición (sin i18n: el nombre por defecto se inyecta)
 
     func testCreateFolderUsesInjectedName() {
