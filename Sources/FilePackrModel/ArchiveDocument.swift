@@ -70,10 +70,12 @@ public final class ArchiveDocument: ObservableObject {
     /// Contraseña para descifrar las entradas del archivo abierto.
     private var entryPassword: String?
 
-    public private(set) var sourceArchiveData: Data?
+    public private(set) var sourceArchive: ArchiveContainer?
 
-    /// Temporal con las partes de un multivolumen concatenadas, mapeado en
-    /// `sourceArchiveData`. Se borra al cerrar o al abrir otro archivo.
+    /// Temporal con las partes de un multivolumen (esquema propio de FilePackr) concatenadas,
+    /// mapeado en `sourceArchive`. Se borra al cerrar o al abrir otro archivo. Los volúmenes RAR
+    /// **nativos** (`RarVolumes`) no pasan por aquí: `sourceArchive` guarda directamente la lista
+    /// de ficheros (`.rarVolumes`) y no hay temporal que limpiar.
     private var joinedVolumesTemp: URL?
 
     /// Hay un documento activo (abierto o nuevo empezado). Sentinela para no reiniciar
@@ -131,10 +133,14 @@ public final class ArchiveDocument: ObservableObject {
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
     public func openArchive(_ url: URL, passphrase: String? = nil) async throws {
-        // Si forma parte de un juego de volúmenes, reunimos las partes en orden;
-        // la primera (nombre.zip) da el nombre base y el formato.
-        let parts = VolumeStore.parts(for: url)
-        let baseURL = parts.first ?? url
+        // ¿Conjunto RAR **nativo** (part1.rar/part2.rar… o .rar+.r00…)? Se abre vía la API de
+        // volúmenes de libarchive: no se puede concatenar a pelo, cada volumen lleva su propia
+        // cabecera intercalada (a diferencia del esquema propio de FilePackr, más abajo).
+        let rarVolumes = RarVolumes.parts(for: url)
+        // Si no, ¿forma parte de un juego de volúmenes del esquema propio? Reunimos las partes en
+        // orden; la primera (nombre.zip) da el nombre base y el formato.
+        let parts = rarVolumes == nil ? VolumeStore.parts(for: url) : []
+        let baseURL = rarVolumes?.first ?? parts.first ?? url
         // Por extensión y, si no la reconoce, por la firma (magic bytes) de la cabecera.
         let detected = ArchiveFormat.detectByExtension(baseURL)
             ?? peekHeader(baseURL).flatMap(ArchiveFormat.detectByMagic)
@@ -143,7 +149,7 @@ public final class ArchiveDocument: ObservableObject {
                                  fraction: detected == .zip ? 0 : nil)
         defer { progress = nil }
 
-        // Si venía troceado, limpiamos cualquier temporal de una apertura anterior.
+        // Si venía troceado (esquema propio), limpiamos cualquier temporal de una apertura anterior.
         discardJoinedVolumesTemp()
         // Red defensiva: restos de un guardado interrumpido por un cierre forzado anterior.
         WorkFile.cleanStale(in: baseURL.deletingLastPathComponent())
@@ -153,8 +159,14 @@ public final class ArchiveDocument: ObservableObject {
         let joinedTemp: URL?
         do {
             let loaded = try await Task.detached(priority: .userInitiated) { () -> (ArchiveReadResult, URL?) in
-                // Multivolumen: concatenar las partes a un temporal y **mapearlo**, en vez
-                // de cargar todas las partes en RAM (Volumes.join). Mono-volumen: mapear directo.
+                if let rarVolumes {
+                    // Sin fichero temporal: la lista de volúmenes ya es el "container".
+                    let (entries, _) = try LibArchive.listEntries(volumes: rarVolumes, passphrase: passphrase)
+                    let result = ArchiveReadResult(format: .rar, container: .rarVolumes(rarVolumes), entries: entries)
+                    return (result, nil)
+                }
+                // Multivolumen (esquema propio): concatenar las partes a un temporal y **mapearlo**,
+                // en vez de cargar todas las partes en RAM (Volumes.join). Mono-volumen: mapear directo.
                 let temp = parts.count == 1 ? nil : try VolumeStore.joinToTemporaryFile(parts)
                 let data = try Data(contentsOf: temp ?? parts[0], options: .mappedIfSafe)
                 // Solo ZIP reporta progreso por fracción; el throttle limita los saltos a la UI
@@ -185,7 +197,7 @@ public final class ArchiveDocument: ObservableObject {
 
         joinedVolumesTemp = joinedTemp
         format = result.format
-        sourceArchiveData = result.container
+        sourceArchive = result.container
         roots = ArchiveTreeBuilder.build(from: result.entries)
         selectedIDs = []
         sourceURL = baseURL
@@ -224,7 +236,7 @@ public final class ArchiveDocument: ObservableObject {
     public func provideEntryPassword(_ password: String) -> Bool {
         // Si hay una entrada cifrada, validar la contraseña extrayéndola; si no la hay,
         // aceptarla sin más. En ambos casos se aplican los mismos efectos (una sola vez).
-        if let archive = sourceArchiveData,
+        if let archive = sourceArchive,
            let node = firstEncryptedFile(in: roots),
            case .entry(let entry) = node.source {
             do {
@@ -400,7 +412,7 @@ public final class ArchiveDocument: ObservableObject {
     // MARK: - Documento: cerrar y guardar
 
     /// Borra el temporal de volúmenes concatenados, si lo hay. En Unix es seguro
-    /// aunque `sourceArchiveData` siga mapeado: las páginas siguen válidas hasta soltarlo.
+    /// aunque `sourceArchive` siga mapeado: las páginas siguen válidas hasta soltarlo.
     private func discardJoinedVolumesTemp() {
         if let temp = joinedVolumesTemp { try? FileManager.default.removeItem(at: temp) }
         joinedVolumesTemp = nil
@@ -411,7 +423,7 @@ public final class ArchiveDocument: ObservableObject {
         discardJoinedVolumesTemp()
         roots = []
         selectedIDs = []
-        sourceArchiveData = nil
+        sourceArchive = nil
         sourceURL = nil
         documentName = ""
         hasActiveDocument = false
@@ -531,7 +543,7 @@ public final class ArchiveDocument: ObservableObject {
             return ExportPlan(name: node.name, payload: .diskFile(url))
         case .entry(let entry):
             return ExportPlan(name: node.name, payload: .archiveEntry(
-                entry: entry, archive: sourceArchiveData ?? Data(), password: entryPassword, format: format))
+                entry: entry, archive: sourceArchive ?? .data(Data()), password: entryPassword, format: format))
         case .folder:
             return ExportPlan(name: node.name, payload: .folder([]))
         }
@@ -572,7 +584,7 @@ public final class ArchiveDocument: ObservableObject {
         // `Sendable` del árbol; en el hilo principal solo se toma esa instantánea (barata).
         let snapshot = roots.map(NodeSnapshot.init)
         let builder = SavePayloadBuilder(roots: snapshot, documentName: documentName,
-                                         sourceFormat: format, sourceArchiveData: sourceArchiveData,
+                                         sourceFormat: format, sourceArchive: sourceArchive,
                                          entryPassword: entryPassword)
         let payload = try await Task.detached(priority: .userInitiated) {
             try builder.payload(for: outputFormat, encryption: cipher, password: pwd, level: level)

@@ -18,38 +18,51 @@ public enum LibArchive {
 
     // MARK: - Lectura
 
+    /// Origen de los bytes a abrir: en memoria (el caso normal, `container` ya mapeado/cargado)
+    /// o una lista ordenada de ficheros de volúmenes RAR nativos (`archive_read_open_filenames`,
+    /// la única forma correcta de leerlos: cada volumen lleva su propia cabecera intercalada, así
+    /// que no se pueden concatenar a pelo como el esquema propio de volúmenes de FilePackr).
+    private enum Source { case memory(UnsafeRawBufferPointer); case files([String]) }
+
     /// Lista las entradas (sin extraer datos). Devuelve también si hay cifrado.
     /// Lanza `.passphraseRequired` si ni siquiera se pueden leer las cabeceras sin clave.
     public static func listEntries(in data: Data, passphrase: String? = nil) throws -> (entries: [ArchiveEntry], encrypted: Bool) {
-        try data.withUnsafeBytes { raw -> ([ArchiveEntry], Bool) in
-            let a = try open(raw, passphrase: passphrase)
-            defer { archive_read_free(a) }
+        try data.withUnsafeBytes { try listEntries(source: .memory($0), passphrase: passphrase) }
+    }
 
-            var entries: [ArchiveEntry] = []
-            var encrypted = false
-            var entry: OpaquePointer?
-            while true {
-                let r = archive_read_next_header(a, &entry)
-                if r == EOFCODE { break }
-                guard r == OK, let entry else {
-                    throw classifyHeaderFailure(a, passphrase: passphrase)
-                }
-                let path = String(cString: archive_entry_pathname(entry))
-                let isDir = archive_entry_filetype(entry) == AE_IFDIR || path.hasSuffix("/")
-                let size = UInt64(max(0, archive_entry_size(entry)))
-                let isEnc = archive_entry_is_encrypted(entry) != 0
-                if isEnc { encrypted = true }
-                let mtime = archive_entry_mtime(entry)
-                entries.append(ArchiveEntry(
-                    path: path, compressedSize: size, uncompressedSize: size,
-                    isDirectory: isDir,
-                    modificationDate: mtime == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(mtime)),
-                    isEncrypted: isEnc))
-                archive_read_data_skip(a)
+    /// Como `listEntries(in:)`, pero sobre un conjunto de volúmenes RAR nativos en disco.
+    public static func listEntries(volumes: [URL], passphrase: String? = nil) throws -> (entries: [ArchiveEntry], encrypted: Bool) {
+        try listEntries(source: .files(volumes.map(\.path)), passphrase: passphrase)
+    }
+
+    private static func listEntries(source: Source, passphrase: String?) throws -> (entries: [ArchiveEntry], encrypted: Bool) {
+        let a = try open(source, passphrase: passphrase)
+        defer { archive_read_free(a) }
+
+        var entries: [ArchiveEntry] = []
+        var encrypted = false
+        var entry: OpaquePointer?
+        while true {
+            let r = archive_read_next_header(a, &entry)
+            if r == EOFCODE { break }
+            guard r == OK, let entry else {
+                throw classifyHeaderFailure(a, passphrase: passphrase)
             }
-            if archive_read_has_encrypted_entries(a) > 0 { encrypted = true }
-            return (entries, encrypted)
+            let path = String(cString: archive_entry_pathname(entry))
+            let isDir = archive_entry_filetype(entry) == AE_IFDIR || path.hasSuffix("/")
+            let size = UInt64(max(0, archive_entry_size(entry)))
+            let isEnc = archive_entry_is_encrypted(entry) != 0
+            if isEnc { encrypted = true }
+            let mtime = archive_entry_mtime(entry)
+            entries.append(ArchiveEntry(
+                path: path, compressedSize: size, uncompressedSize: size,
+                isDirectory: isDir,
+                modificationDate: mtime == 0 ? nil : Date(timeIntervalSince1970: TimeInterval(mtime)),
+                isEncrypted: isEnc))
+            archive_read_data_skip(a)
         }
+        if archive_read_has_encrypted_entries(a) > 0 { encrypted = true }
+        return (entries, encrypted)
     }
 
     /// Datos de la entrada cuyo `path` coincide (re-abre e itera hasta ella).
@@ -64,20 +77,31 @@ public enum LibArchive {
     public static func extractEntry(path: String, in data: Data, passphrase: String? = nil,
                                     sink: (Data) throws -> Void) throws {
         try data.withUnsafeBytes { raw in
-            let a = try open(raw, passphrase: passphrase)
-            defer { archive_read_free(a) }
+            try extractEntry(path: path, source: .memory(raw), passphrase: passphrase, sink: sink)
+        }
+    }
 
-            var entry: OpaquePointer?
-            while true {
-                let r = archive_read_next_header(a, &entry)
-                if r == EOFCODE { throw LibArchiveError.entryNotFound }
-                guard r == OK, let entry else { throw classifyHeaderFailure(a, passphrase: passphrase) }
-                if String(cString: archive_entry_pathname(entry)) == path {
-                    try streamData(a, sink: sink)
-                    return
-                }
-                archive_read_data_skip(a)
+    /// Como `extractEntry(path:in:sink:)`, pero sobre un conjunto de volúmenes RAR nativos.
+    public static func extractEntry(path: String, volumes: [URL], passphrase: String? = nil,
+                                    sink: (Data) throws -> Void) throws {
+        try extractEntry(path: path, source: .files(volumes.map(\.path)), passphrase: passphrase, sink: sink)
+    }
+
+    private static func extractEntry(path: String, source: Source, passphrase: String?,
+                                     sink: (Data) throws -> Void) throws {
+        let a = try open(source, passphrase: passphrase)
+        defer { archive_read_free(a) }
+
+        var entry: OpaquePointer?
+        while true {
+            let r = archive_read_next_header(a, &entry)
+            if r == EOFCODE { throw LibArchiveError.entryNotFound }
+            guard r == OK, let entry else { throw classifyHeaderFailure(a, passphrase: passphrase) }
+            if String(cString: archive_entry_pathname(entry)) == path {
+                try streamData(a, sink: sink)
+                return
             }
+            archive_read_data_skip(a)
         }
     }
 
@@ -91,28 +115,39 @@ public enum LibArchive {
     /// unos cientos de ficheros tarda minutos y aparenta estar colgado).
     public static func extractEntries(_ paths: [String], in data: Data, passphrase: String? = nil,
                                       place: (String) throws -> ((Data) throws -> Void)?) throws {
+        try data.withUnsafeBytes { raw in
+            try extractEntries(paths, source: .memory(raw), passphrase: passphrase, place: place)
+        }
+    }
+
+    /// Como `extractEntries(_:in:place:)`, pero sobre un conjunto de volúmenes RAR nativos.
+    public static func extractEntries(_ paths: [String], volumes: [URL], passphrase: String? = nil,
+                                      place: (String) throws -> ((Data) throws -> Void)?) throws {
+        try extractEntries(paths, source: .files(volumes.map(\.path)), passphrase: passphrase, place: place)
+    }
+
+    private static func extractEntries(_ paths: [String], source: Source, passphrase: String?,
+                                       place: (String) throws -> ((Data) throws -> Void)?) throws {
         guard !paths.isEmpty else { return }
         var remaining = Set(paths)
-        try data.withUnsafeBytes { raw in
-            let a = try open(raw, passphrase: passphrase)
-            defer { archive_read_free(a) }
+        let a = try open(source, passphrase: passphrase)
+        defer { archive_read_free(a) }
 
-            var entry: OpaquePointer?
-            while !remaining.isEmpty {
-                let r = archive_read_next_header(a, &entry)
-                if r == EOFCODE { break }
-                guard r == OK, let entry else { throw classifyHeaderFailure(a, passphrase: passphrase) }
-                let path = String(cString: archive_entry_pathname(entry))
-                // No pedida, o pedida pero el llamador la descarta → saltar sus datos y seguir.
-                guard remaining.remove(path) != nil, let sink = try place(path) else {
-                    archive_read_data_skip(a)
-                    continue
-                }
-                try streamData(a, sink: sink)
+        var entry: OpaquePointer?
+        while !remaining.isEmpty {
+            let r = archive_read_next_header(a, &entry)
+            if r == EOFCODE { break }
+            guard r == OK, let entry else { throw classifyHeaderFailure(a, passphrase: passphrase) }
+            let path = String(cString: archive_entry_pathname(entry))
+            // No pedida, o pedida pero el llamador la descarta → saltar sus datos y seguir.
+            guard remaining.remove(path) != nil, let sink = try place(path) else {
+                archive_read_data_skip(a)
+                continue
             }
-            // Alguna ruta pedida no estaba en el archivo: mismo error que la vía de una entrada.
-            if !remaining.isEmpty { throw LibArchiveError.entryNotFound }
+            try streamData(a, sink: sink)
         }
+        // Alguna ruta pedida no estaba en el archivo: mismo error que la vía de una entrada.
+        if !remaining.isEmpty { throw LibArchiveError.entryNotFound }
     }
 
     // MARK: - Escritura (7z)
@@ -193,12 +228,22 @@ public enum LibArchive {
 
     // MARK: - Helpers
 
-    private static func open(_ raw: UnsafeRawBufferPointer, passphrase: String?) throws -> OpaquePointer {
+    private static func open(_ source: Source, passphrase: String?) throws -> OpaquePointer {
         guard let a = archive_read_new() else { throw LibArchiveError.openFailed }
         archive_read_support_filter_all(a)
         archive_read_support_format_all(a)
         if let passphrase { _ = passphrase.withCString { archive_read_add_passphrase(a, $0) } }
-        guard archive_read_open_memory(a, raw.baseAddress, raw.count) == OK else {
+        let opened: Int32
+        switch source {
+        case .memory(let raw):
+            opened = archive_read_open_memory(a, raw.baseAddress, raw.count)
+        case .files(let paths):
+            let cStrings = paths.map { strdup($0) }
+            defer { cStrings.forEach { free($0) } }
+            var pointers = cStrings.map { UnsafePointer($0) } + [nil]
+            opened = archive_read_open_filenames(a, &pointers, 10240)
+        }
+        guard opened == OK else {
             archive_read_free(a)
             throw LibArchiveError.openFailed
         }

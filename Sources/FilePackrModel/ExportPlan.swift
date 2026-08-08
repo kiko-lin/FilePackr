@@ -17,7 +17,7 @@ public struct ExportPlan: Sendable {
     public enum Payload: Sendable {
         case folder([ExportPlan])
         case diskFile(URL)
-        case archiveEntry(entry: ArchiveEntry, archive: Data, password: String?, format: ArchiveFormat)
+        case archiveEntry(entry: ArchiveEntry, archive: ArchiveContainer, password: String?, format: ArchiveFormat)
     }
 
     nonisolated public var isDirectory: Bool {
@@ -62,7 +62,7 @@ public struct ExportPlan: Sendable {
         // entradas de archivo con su destino. Todas las entradas de un plan comparten archivo y
         // formato por construcción (`exportPlan(for:)` usa el único documento abierto).
         var jobs: [(entry: ArchiveEntry, url: URL)] = []
-        var archive: Data?, format: ArchiveFormat?, password: String?
+        var archive: ArchiveContainer?, format: ArchiveFormat?, password: String?
         // Seguridad (ZIP-Slip, 2ª defensa): nada puede escribirse fuera del árbol de `destination`,
         // aunque un nombre con ".." se colara hasta aquí (la 1ª defensa los filtra en el árbol).
         // Comparamos rutas estandarizadas: el destino debe ser la raíz o un descendiente suyo.

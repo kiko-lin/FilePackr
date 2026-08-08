@@ -51,8 +51,8 @@ nonisolated struct SavePayloadBuilder: Sendable {
     let documentName: String
     /// Formato del archivo de origen (para leer las entradas de los nodos `.entry`).
     let sourceFormat: ArchiveFormat
-    /// Bytes del archivo de origen, si se abrió uno (para reconstruir entradas).
-    let sourceArchiveData: Data?
+    /// Contenedor del archivo de origen, si se abrió uno (para reconstruir entradas).
+    let sourceArchive: ArchiveContainer?
     /// Contraseña de las entradas cifradas del archivo de origen.
     let entryPassword: String?
 
@@ -137,7 +137,7 @@ nonisolated struct SavePayloadBuilder: Sendable {
         case .folder: return nil
         case .diskFile(let url): return try? Data(contentsOf: url)
         case .entry(let entry):
-            guard let archive = sourceArchiveData else { return nil }
+            guard let archive = sourceArchive else { return nil }
             return try? sourceFormat.codec.entryData(for: entry, in: archive, password: entryPassword)
         }
     }
@@ -213,22 +213,24 @@ nonisolated struct SavePayloadBuilder: Sendable {
                 items.append(ZipEntryInput(path: path + "/", modifiedAt: node.modificationDate, source: .directory))
             } else if case .diskFile(let url) = node.source {
                 items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .file(url)))
-            } else if case .entry(let entry) = node.source, let archive = sourceArchiveData {
+            } else if case .entry(let entry) = node.source, let archive = sourceArchive {
                 if sourceFormat != .zip {
-                    // Origen tar/gz: reconstruir el texto claro y dejar que el escritor comprima.
+                    // Origen tar/gz/rar…: reconstruir el texto claro y dejar que el escritor comprima.
                     if let data = nodeData(node) {
                         items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .data(data)))
                     }
-                } else if entry.isEncrypted {
-                    // Cifrada: descifrar a texto claro; el escritor la re-cifra (o no) limpiamente.
-                    if let data = try? extractor.extractedData(for: entry, in: archive, password: entryPassword) {
-                        items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate, source: .data(data)))
+                } else if case .data(let archive) = archive {   // ZIP: siempre .data, nunca .rarVolumes
+                    if entry.isEncrypted {
+                        // Cifrada: descifrar a texto claro; el escritor la re-cifra (o no) limpiamente.
+                        if let data = try? extractor.extractedData(for: entry, in: archive, password: entryPassword) {
+                            items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate, source: .data(data)))
+                        }
+                    } else if let zip = entry.zip, let raw = try? extractor.rawCompressedData(for: entry, in: archive) {
+                        // Sin cifrar: copiar los bytes comprimidos en crudo (más rápido).
+                        items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate,
+                            source: .rawEntry(method: zip.compressionMethod, crc32: zip.crc32,
+                                              compressed: raw, uncompressedSize: entry.uncompressedSize)))
                     }
-                } else if let zip = entry.zip, let raw = try? extractor.rawCompressedData(for: entry, in: archive) {
-                    // Sin cifrar: copiar los bytes comprimidos en crudo (más rápido).
-                    items.append(ZipEntryInput(path: path, modifiedAt: entry.modificationDate,
-                        source: .rawEntry(method: zip.compressionMethod, crc32: zip.crc32,
-                                          compressed: raw, uncompressedSize: entry.uncompressedSize)))
                 }
             }
         }

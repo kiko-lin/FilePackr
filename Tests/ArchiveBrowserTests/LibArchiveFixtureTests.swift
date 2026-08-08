@@ -7,10 +7,13 @@ import XCTest
 final class LibArchiveFixtureTests: XCTestCase {
 
     private func fixture(_ name: String, _ ext: String) throws -> Data {
-        let url = try XCTUnwrap(
+        try Data(contentsOf: fixtureURL(name, ext))
+    }
+
+    private func fixtureURL(_ name: String, _ ext: String) throws -> URL {
+        try XCTUnwrap(
             Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Fixtures"),
             "falta el fixture \(name).\(ext)")
-        return try Data(contentsOf: url)
     }
 
     // MARK: - CPIO (formato newc / SVR4, generado con /usr/bin/cpio)
@@ -159,5 +162,59 @@ final class LibArchiveFixtureTests: XCTestCase {
         XCTAssertThrowsError(try LibArchive.extractEntry(path: "hola.txt", in: data, passphrase: "clave123")) {
             XCTAssertTrue($0 is LibArchiveError, "esperado un LibArchiveError, no \($0)")
         }
+    }
+
+    // MARK: - RAR multivolumen nativo (fabricado a mano, ver docs/fixtures/make_rar_volumes.py)
+
+    /// `volumes.part1.rar`/`volumes.part2.rar` (mismos bytes que `volumes.rar`/`volumes.r00`,
+    /// solo cambia el nombre — la convención de nombres no afecta al formato interno): un
+    /// fichero ("partido.txt") partido entre los dos volúmenes y otro ("entero.txt") entero en
+    /// el segundo. Se abren con `LibArchive.listEntries(volumes:)`, vía
+    /// `archive_read_open_filenames` — no se pueden concatenar a pelo como el esquema propio de
+    /// FilePackr, cada volumen lleva su propia cabecera intercalada.
+    func testRarVolumesListsEntries() throws {
+        let v1 = try fixtureURL("volumes.part1", "rar")
+        let v2 = try fixtureURL("volumes.part2", "rar")
+        let (entries, encrypted) = try LibArchive.listEntries(volumes: [v1, v2])
+        XCTAssertFalse(encrypted)
+
+        let paths = Set(entries.map(\.path))
+        XCTAssertEqual(paths, ["partido.txt", "entero.txt"])
+        let partido = try XCTUnwrap(entries.first { $0.path == "partido.txt" })
+        XCTAssertEqual(partido.uncompressedSize, 61, "el tamaño declarado es el del fichero completo, no el trozo del volumen 1")
+    }
+
+    func testRarVolumesExtractsContentAcrossBoundary() throws {
+        let v1 = try fixtureURL("volumes.part1", "rar")
+        let v2 = try fixtureURL("volumes.part2", "rar")
+        var partido = Data()
+        try LibArchive.extractEntry(path: "partido.txt", volumes: [v1, v2]) { partido.append($0) }
+        XCTAssertEqual(partido, Data("Contenido partido entre dos volumenes RAR nativos, de verdad.".utf8))
+
+        var entero = Data()
+        try LibArchive.extractEntry(path: "entero.txt", volumes: [v1, v2]) { entero.append($0) }
+        XCTAssertEqual(entero, Data("Este fichero vive entero en el segundo volumen.".utf8))
+    }
+
+    /// `extractEntries` (recorrido único, el que usa `LibArchiveCodec.extractAll` — Extraer/
+    /// Extraer todo/arrastre al Finder) también funciona a través del límite de volumen.
+    func testRarVolumesExtractEntriesSinglePass() throws {
+        let v1 = try fixtureURL("volumes.part1", "rar")
+        let v2 = try fixtureURL("volumes.part2", "rar")
+        var results: [String: Data] = [:]
+        try LibArchive.extractEntries(["partido.txt", "entero.txt"], volumes: [v1, v2]) { path in
+            { chunk in results[path, default: Data()].append(chunk) }
+        }
+        XCTAssertEqual(results["partido.txt"], Data("Contenido partido entre dos volumenes RAR nativos, de verdad.".utf8))
+        XCTAssertEqual(results["entero.txt"], Data("Este fichero vive entero en el segundo volumen.".utf8))
+    }
+
+    /// Mismos bytes, esquema de nombres **legado** (`.rar` + `.r00`): la lectura no depende de
+    /// cómo se llamen los ficheros, solo del orden en que se pasan.
+    func testRarVolumesLegacyNamingReadsIdentically() throws {
+        let v1 = try fixtureURL("volumes", "rar")
+        let v2 = try fixtureURL("volumes", "r00")
+        let (entries, _) = try LibArchive.listEntries(volumes: [v1, v2])
+        XCTAssertEqual(Set(entries.map(\.path)), ["partido.txt", "entero.txt"])
     }
 }

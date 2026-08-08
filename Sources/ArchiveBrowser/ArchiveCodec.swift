@@ -1,14 +1,28 @@
 import Foundation
 
+/// Origen de los bytes de un contenedor ya abierto, a conservar para extraer entradas después.
+/// Casi siempre son bytes en memoria (`.data`, mapeados o cargados); un conjunto RAR nativo
+/// multivolumen (`.rarVolumes`) no se puede representar como un único `Data` — cada volumen
+/// lleva su propia cabecera intercalada — así que se conserva como la lista de ficheros y se
+/// reabre con `archive_read_open_filenames` cada vez que hace falta leer de él.
+public enum ArchiveContainer: Sendable {
+    case data(Data)
+    case rarVolumes([URL])
+}
+
+/// Un codec recibió un `ArchiveContainer` que no sabe interpretar. Solo `LibArchiveCodec`
+/// produce y consume `.rarVolumes`; el resto de codecs solo ven `.data` en la práctica.
+struct UnsupportedContainerError: Error {}
+
 /// Resultado de abrir un contenedor: el formato (posiblemente **refinado** —p. ej. un
 /// `.gz` que en realidad es un `.tar.gz`—), los bytes que hay que conservar para
 /// extraer entradas después (`container`) y la lista de entradas.
 public struct ArchiveReadResult: Sendable {
     public let format: ArchiveFormat
-    public let container: Data
+    public let container: ArchiveContainer
     public let entries: [ArchiveEntry]
 
-    public init(format: ArchiveFormat, container: Data, entries: [ArchiveEntry]) {
+    public init(format: ArchiveFormat, container: ArchiveContainer, entries: [ArchiveEntry]) {
         self.format = format
         self.container = container
         self.entries = entries
@@ -28,11 +42,11 @@ public protocol ArchiveCodec: Sendable {
               progress: ((Double) -> Void)?) throws -> ArchiveReadResult
 
     /// Datos en claro de una entrada, leídos del `container` que devolvió `open`.
-    func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data
+    func entryData(for entry: ArchiveEntry, in container: ArchiveContainer, password: String?) throws -> Data
 
     /// Extrae una entrada emitiendo el contenido en claro por trozos (`sink`), **sin
     /// materializar la salida en RAM** cuando el formato lo permite (ZIP, gz/xz/bz2).
-    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+    func extract(_ entry: ArchiveEntry, in container: ArchiveContainer, password: String?,
                  sink: (Data) throws -> Void) throws
 
     /// Extrae varias entradas en el **mínimo número de pases**. Por cada entrada que el codec
@@ -45,7 +59,7 @@ public protocol ArchiveCodec: Sendable {
     /// —ZIP, `.tar` puro—). Lo sobreescriben los formatos **secuenciales**, donde ir entrada a
     /// entrada re-descomprime lo anterior cada vez: `TarCodec` comprimido (un pase con
     /// `streamEntries`) y `LibArchiveCodec` (7z sólido y compañía, un pase con `extractEntries`).
-    func extractAll(_ entries: [ArchiveEntry], in container: Data, password: String?,
+    func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws
 }
 
@@ -57,14 +71,14 @@ public extension ArchiveCodec {
 
     /// Por defecto cae a `entryData` + una sola escritura (formatos donde aún no hay
     /// streaming de extracción, p. ej. tar ya descomprimido en RAM y libarchive).
-    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+    func extract(_ entry: ArchiveEntry, in container: ArchiveContainer, password: String?,
                  sink: (Data) throws -> Void) throws {
         try sink(entryData(for: entry, in: container, password: password))
     }
 
     /// Por defecto: extrae cada entrada por separado (acceso aleatorio). `TarCodec` comprimido lo
     /// sobreescribe para hacer un único pase cuando hay varias entradas.
-    func extractAll(_ entries: [ArchiveEntry], in container: Data, password: String?,
+    func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
         for entry in entries {
             if let sink = try place(entry) {
@@ -116,15 +130,17 @@ struct ZipCodec: ArchiveCodec {
     func open(_ data: Data, fallbackName: String, passphrase: String?,
               progress: ((Double) -> Void)?) throws -> ArchiveReadResult {
         let entries = try ZipReader().listEntries(in: data, progress: progress)
-        return ArchiveReadResult(format: .zip, container: data, entries: entries)
+        return ArchiveReadResult(format: .zip, container: .data(data), entries: entries)
     }
 
-    func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {
-        try ZipExtractor().extractedData(for: entry, in: container, password: password)
+    func entryData(for entry: ArchiveEntry, in container: ArchiveContainer, password: String?) throws -> Data {
+        guard case .data(let container) = container else { throw UnsupportedContainerError() }
+        return try ZipExtractor().extractedData(for: entry, in: container, password: password)
     }
 
-    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+    func extract(_ entry: ArchiveEntry, in container: ArchiveContainer, password: String?,
                  sink: (Data) throws -> Void) throws {
+        guard case .data(let container) = container else { throw UnsupportedContainerError() }
         try ZipExtractor().extract(entry, in: container, password: password, sink: sink)
     }
 }
@@ -145,31 +161,34 @@ struct TarCodec: ArchiveCodec {
     func open(_ data: Data, fallbackName: String, passphrase: String?,
               progress: ((Double) -> Void)?) throws -> ArchiveReadResult {
         guard let streamDecompress else {   // .tar puro: acceso aleatorio directo sobre el container
-            return ArchiveReadResult(format: format, container: data, entries: try Tar.listEntries(in: data))
+            return ArchiveReadResult(format: format, container: .data(data), entries: try Tar.listEntries(in: data))
         }
         let indexer = Tar.StreamIndexer()
         try streamDecompress(data) { try indexer.consume($0) }
         // El container se conserva COMPRIMIDO (mapeado); las entradas se re-descomprimen por offset.
-        return ArchiveReadResult(format: format, container: data, entries: try indexer.finish())
+        return ArchiveReadResult(format: format, container: .data(data), entries: try indexer.finish())
     }
 
-    func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {
+    func entryData(for entry: ArchiveEntry, in container: ArchiveContainer, password: String?) throws -> Data {
+        guard case .data(let container) = container else { throw UnsupportedContainerError() }
         guard let streamDecompress else { return try Tar.entryData(for: entry, in: container) }
         var out = Data()
         try streamExtractEntry(entry, in: container, with: streamDecompress) { out.append($0) }
         return out
     }
 
-    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+    func extract(_ entry: ArchiveEntry, in container: ArchiveContainer, password: String?,
                  sink: (Data) throws -> Void) throws {
+        guard case .data(let container) = container else { throw UnsupportedContainerError() }
         guard let streamDecompress else { try sink(Tar.entryData(for: entry, in: container)); return }
         try withoutActuallyEscaping(sink) { escapingSink in
             try streamExtractEntry(entry, in: container, with: streamDecompress, sink: escapingSink)
         }
     }
 
-    func extractAll(_ entries: [ArchiveEntry], in container: Data, password: String?,
+    func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
+        guard case .data(let container) = container else { throw UnsupportedContainerError() }
         // Varias entradas de un tar **comprimido**: un solo recorrido (re-descomprime una vez).
         // Con una sola entrada (o `.tar` puro) sale más a cuenta ir por entrada: `extract` usa
         // `streamExtract`, que **corta** al terminarla sin inflar el resto del flujo (§10 #1).
@@ -181,7 +200,7 @@ struct TarCodec: ArchiveCodec {
         }
         for entry in entries {
             if let sink = try place(entry) {
-                try extract(entry, in: container, password: password, sink: sink)
+                try extract(entry, in: .data(container), password: password, sink: sink)
             }
         }
     }
@@ -218,9 +237,9 @@ struct SingleFileCodec: ArchiveCodec {
             // tarFormat, que re-descomprime por offset (§10 #2, mismo container comprimido).
             let indexer = Tar.StreamIndexer()
             try streamDecompress(data) { try indexer.consume($0) }
-            return ArchiveReadResult(format: tarFormat, container: data, entries: try indexer.finish())
+            return ArchiveReadResult(format: tarFormat, container: .data(data), entries: try indexer.finish())
         }
-        return ArchiveReadResult(format: format, container: data, entries: entries(data, fallbackName))
+        return ArchiveReadResult(format: format, container: .data(data), entries: entries(data, fallbackName))
     }
 
     /// Descomprime en streaming solo hasta acumular `count` bytes (o EOF), para inspeccionar
@@ -238,12 +257,14 @@ struct SingleFileCodec: ArchiveCodec {
         return head
     }
 
-    func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {
-        try decompress(container)
+    func entryData(for entry: ArchiveEntry, in container: ArchiveContainer, password: String?) throws -> Data {
+        guard case .data(let container) = container else { throw UnsupportedContainerError() }
+        return try decompress(container)
     }
 
-    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+    func extract(_ entry: ArchiveEntry, in container: ArchiveContainer, password: String?,
                  sink: (Data) throws -> Void) throws {
+        guard case .data(let container) = container else { throw UnsupportedContainerError() }
         try streamDecompress(container, sink)   // descomprime al vuelo, sin materializar la salida
     }
 }
@@ -255,28 +276,46 @@ struct LibArchiveCodec: ArchiveCodec {
     func open(_ data: Data, fallbackName: String, passphrase: String?,
               progress: ((Double) -> Void)?) throws -> ArchiveReadResult {
         let (entries, _) = try LibArchive.listEntries(in: data, passphrase: passphrase)
-        return ArchiveReadResult(format: format, container: data, entries: entries)
+        return ArchiveReadResult(format: format, container: .data(data), entries: entries)
     }
 
-    func entryData(for entry: ArchiveEntry, in container: Data, password: String?) throws -> Data {
-        try LibArchive.extractEntry(path: entry.path, in: container, passphrase: password)
+    func entryData(for entry: ArchiveEntry, in container: ArchiveContainer, password: String?) throws -> Data {
+        switch container {
+        case .data(let data):
+            return try LibArchive.extractEntry(path: entry.path, in: data, passphrase: password)
+        case .rarVolumes(let volumes):
+            var out = Data()
+            try LibArchive.extractEntry(path: entry.path, volumes: volumes, passphrase: password) { out.append($0) }
+            return out
+        }
     }
 
-    func extract(_ entry: ArchiveEntry, in container: Data, password: String?,
+    func extract(_ entry: ArchiveEntry, in container: ArchiveContainer, password: String?,
                  sink: (Data) throws -> Void) throws {
-        try LibArchive.extractEntry(path: entry.path, in: container, passphrase: password, sink: sink)
+        switch container {
+        case .data(let data):
+            try LibArchive.extractEntry(path: entry.path, in: data, passphrase: password, sink: sink)
+        case .rarVolumes(let volumes):
+            try LibArchive.extractEntry(path: entry.path, volumes: volumes, passphrase: password, sink: sink)
+        }
     }
 
     /// Un **solo recorrido** para todo el lote. libarchive es un iterador secuencial (no acceso
     /// aleatorio) y 7z comprime en bloques **sólidos**: extraer entrada a entrada re-abre y
     /// re-descomprime todo lo anterior cada vez → coste cuadrático (§10 #1, igual que tar
     /// comprimido). Con una sola entrada da lo mismo: el recorrido corta al colocarla.
-    func extractAll(_ entries: [ArchiveEntry], in container: Data, password: String?,
+    func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
         let byPath = Dictionary(entries.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
-        try LibArchive.extractEntries(Array(byPath.keys), in: container, passphrase: password) { path in
+        func resolve(_ path: String) throws -> ((Data) throws -> Void)? {
             guard let entry = byPath[path] else { return nil }
             return try place(entry)
+        }
+        switch container {
+        case .data(let data):
+            try LibArchive.extractEntries(Array(byPath.keys), in: data, passphrase: password, place: resolve)
+        case .rarVolumes(let volumes):
+            try LibArchive.extractEntries(Array(byPath.keys), volumes: volumes, passphrase: password, place: resolve)
         }
     }
 }

@@ -16,6 +16,7 @@ int archive_read_support_filter_all(struct archive *);
 int archive_read_support_format_all(struct archive *);
 int archive_read_add_passphrase(struct archive *, const char *);
 int archive_read_open_memory(struct archive *, const void *buff, size_t size);
+int archive_read_open_filenames(struct archive *, const char **filenames, size_t block_size);
 int archive_read_next_header(struct archive *, struct archive_entry **);
 int64_t archive_read_data(struct archive *, void *buff, size_t len);
 int archive_read_data_skip(struct archive *);

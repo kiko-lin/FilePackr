@@ -49,3 +49,28 @@ de RARLAB (contraseña real `clave123` donde aplica):
 > Nota: RAR 7 ya **no crea** archivos RAR4 (`-ma4` retirado); por eso el fixture RAR4 se fabrica
 > a mano. Y crear estos requiere el `rar` de RARLAB (no viene con macOS, no reproducible del todo
 > sin conexión) — quedan versionados en el repo precisamente para no depender de él en CI.
+
+## Fixtures de volúmenes RAR **nativos** (multivolumen, no el esquema propio de FilePackr)
+
+| Fixture                              | Cómo                                | Qué prueba                                   |
+|---------------------------------------|--------------------------------------|-----------------------------------------------|
+| `volumes.part1.rar`/`volumes.part2.rar` | `docs/fixtures/make_rar_volumes.py` | esquema moderno (`nombre.partN.rar`)          |
+| `volumes.rar`/`volumes.r00`           | mismos bytes, renombrados            | esquema legado (`nombre.rar`+`.r00`…)         |
+
+RAR 4.x (*storing*, 0x30) fabricado a mano igual que `sample.rar`, pero partido en **2
+volúmenes**: `partido.txt` queda partido entre ambos (banderas `LHD_SPLIT_AFTER`/
+`LHD_SPLIT_BEFORE` del `FILE_HEAD` y `MHD_VOLUME` en el `MAIN_HEAD` de cada volumen) y
+`entero.txt` vive entero en el segundo, para ejercitar varias entradas. No se puede fabricar
+por concatenación simple de dos `sample.rar`: cada volumen real lleva su propia cabecera
+intercalada, que es justo lo que `archive_read_open_filenames` (y no `Volumes.join`) sabe
+saltar. Verificado leyendo con `LibArchive.listEntries(volumes:)`/`extractEntries(volumes:)`
+antes de fijar el fixture — ver `LibArchiveFixtureTests.testRarVolumes*`.
+
+Regenerar:
+```sh
+python3 docs/fixtures/make_rar_volumes.py Tests/ArchiveBrowserTests/Fixtures/volumes.part1.rar Tests/ArchiveBrowserTests/Fixtures/volumes.part2.rar
+cp Tests/ArchiveBrowserTests/Fixtures/volumes.part1.rar Tests/ArchiveBrowserTests/Fixtures/volumes.rar
+cp Tests/ArchiveBrowserTests/Fixtures/volumes.part2.rar Tests/ArchiveBrowserTests/Fixtures/volumes.r00
+```
+(y copiar los cuatro ficheros también a `Tests/FilePackrModelTests/Fixtures/`, que tiene su
+propio target de recursos — ver `Package.swift`).

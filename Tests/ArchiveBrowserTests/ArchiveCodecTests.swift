@@ -86,9 +86,10 @@ final class ArchiveCodecTests: XCTestCase {
         let targz = Gzip.compress(tar)
         let result = try ArchiveFormat.tarGzip.codec.open(targz, fallbackName: "paquete")
 
+        guard case .data(let container) = result.container else { return XCTFail("container debe ser .data") }
         XCTAssertEqual(result.format, .tarGzip)
-        XCTAssertEqual(result.container, targz, "el container debe ser el .gz comprimido, no el tar inflado")
-        XCTAssertLessThan(result.container.count, tar.count / 4,
+        XCTAssertEqual(container, targz, "el container debe ser el .gz comprimido, no el tar inflado")
+        XCTAssertLessThan(container.count, tar.count / 4,
                           "el container comprimido debe ser mucho menor que el tar descomprimido")
     }
 
@@ -158,9 +159,10 @@ final class ArchiveCodecTests: XCTestCase {
         let cases: [(ArchiveFormat, Data)] = [(.tarXz, Xz.compress(tar)), (.tarBzip2, Bzip2.compress(tar))]
         for (format, compressed) in cases {
             let result = try format.codec.open(compressed, fallbackName: "p")
+            guard case .data(let containerData) = result.container else { return XCTFail("container debe ser .data") }
             XCTAssertEqual(result.format, format)
-            XCTAssertEqual(result.container, compressed, "\(format): el container debe ser el comprimido")
-            XCTAssertLessThan(result.container.count, tar.count / 4, "\(format): container ≪ tar inflado")
+            XCTAssertEqual(containerData, compressed, "\(format): el container debe ser el comprimido")
+            XCTAssertLessThan(containerData.count, tar.count / 4, "\(format): container ≪ tar inflado")
             let codec = result.format.codec
             for (path, expected) in [("uno.txt", hello), ("dir/grande.bin", big)] {
                 let entry = try XCTUnwrap(result.entries.first { $0.path == path })

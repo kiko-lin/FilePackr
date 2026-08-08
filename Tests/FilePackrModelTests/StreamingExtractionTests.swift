@@ -8,7 +8,7 @@ import ArchiveBrowser
 /// disco; el invariante de "un solo pase" lo cubre `ArchiveCodecTests`.
 final class StreamingExtractionTests: XCTestCase {
 
-    private func makeTarGz() throws -> (container: Data, entries: [ArchiveEntry]) {
+    private func makeTarGz() throws -> (container: ArchiveContainer, entries: [ArchiveEntry]) {
         let big = Data((0..<150_000).map { UInt8(($0 * 7) & 0xFF) })
         let tar = Tar.write([
             Tar.WriteItem(path: "raiz.txt", data: Data("raíz".utf8), modifiedAt: nil, isDirectory: false),
