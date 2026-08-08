@@ -730,9 +730,21 @@ public final class ArchiveDocument: ObservableObject {
 
     /// Reporter `@Sendable` para actualizar la barra de progreso desde tareas en
     /// segundo plano sin capturar `self` directamente en el código concurrente.
+    ///
+    /// Bloquea el hilo de fondo hasta que la actualización se aplica en el actor principal
+    /// (en vez de lanzar un `Task` sin esperar): leer el índice de un ZIP es puro cálculo en
+    /// memoria, sin E/S que lo frene, así que sin este freno el bucle encola cientos de tareas
+    /// en una ráfaga más rápida de lo que la vista llega a repintar — @Published las coalesce
+    /// y en pantalla solo se ve el primer y el último valor, es decir, la barra "salta" de un
+    /// pelín a ocultarse. Al esperar cada tira, el ritmo de fondo queda acompasado al del actor.
     private func makeProgressReporter() -> @Sendable (Double) -> Void {
         { fraction in
-            Task { @MainActor in self.progress?.fraction = fraction }
+            let semaphore = DispatchSemaphore(value: 0)
+            Task { @MainActor in
+                self.progress?.fraction = fraction
+                semaphore.signal()
+            }
+            semaphore.wait()
         }
     }
 
