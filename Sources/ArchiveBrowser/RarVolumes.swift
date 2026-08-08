@@ -15,10 +15,15 @@ public enum RarVolumes {
         modernParts(for: url) ?? legacyParts(for: url)
     }
 
-    // MARK: - Moderno: nombre.part1.rar, nombre.part2.rar…
-
+    // MARK: - Moderno: nombre.part1.rar, nombre.part2.rar… (WinRAR separa con un punto, pero
+    // no es el único: hay "scene releases" que usan guion bajo — `nombre_part1.rar` — y otros
+    // extractores (WinRAR incluido) los abren igual, porque lo que de verdad marca el volumen
+    // es la cabecera interna (`isMultiVolumePart`), no el separador. No exigimos el punto: lo
+    // que haya antes de "part" (incluido nada) se captura entero como prefijo y se reutiliza tal
+    // cual al reconstruir los nombres de las siguientes partes, así el separador real (el que
+    // sea) se conserva.
     private static let modernRegex = try! NSRegularExpression(
-        pattern: #"^(.*)\.part(\d+)\.rar$"#, options: [.caseInsensitive])
+        pattern: #"^(.*)part(\d+)\.rar$"#, options: [.caseInsensitive])
 
     private static func modernMatch(_ name: String) -> (prefix: String, digits: String)? {
         let range = NSRange(name.startIndex..<name.endIndex, in: name)
@@ -54,7 +59,7 @@ public enum RarVolumes {
     private static func modernName(prefix: String, index: Int, width: Int) -> String {
         let number = String(index)
         let padded = number.count < width ? String(repeating: "0", count: width - number.count) + number : number
-        return "\(prefix).part\(padded).rar"
+        return "\(prefix)part\(padded).rar"
     }
 
     // MARK: - Legado: nombre.rar, nombre.r00, nombre.r01…

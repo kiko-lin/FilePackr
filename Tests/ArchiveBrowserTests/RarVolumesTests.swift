@@ -60,6 +60,21 @@ final class RarVolumesTests: XCTestCase {
         XCTAssertNil(RarVolumes.parts(for: p1))
     }
 
+    /// "Scene releases" (escaneos de cómics, etc.) separan con guion bajo en vez de punto —
+    /// `nombre_part1.rar` — y WinRAR los abre igual: lo que marca el volumen es la cabecera
+    /// interna, no el separador del nombre. El prefijo capturado conserva el guion bajo tal
+    /// cual, así que las siguientes partes se reconstruyen con el mismo separador.
+    func testModernSchemeAcceptsUnderscoreSeparator() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let p1 = dir.appendingPathComponent("Comic_CRG_1_part1.rar")
+        let p2 = dir.appendingPathComponent("Comic_CRG_1_part2.rar")
+        try touch(p1); try touch(p2)
+
+        XCTAssertEqual(RarVolumes.parts(for: p1), [p1, p2])
+        XCTAssertEqual(RarVolumes.parts(for: p2), [p1, p2])
+    }
+
     // MARK: - Legado: nombre.rar, nombre.r00, nombre.r01…
 
     func testLegacySchemeFromBase() throws {
