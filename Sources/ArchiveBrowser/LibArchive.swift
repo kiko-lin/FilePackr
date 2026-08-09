@@ -26,29 +26,39 @@ public enum LibArchive {
     /// que no se pueden concatenar a pelo como el esquema propio de volúmenes de FilePackr).
     private enum Source { case memory(UnsafeRawBufferPointer); case files([String]) }
 
-    /// Lista las entradas (sin extraer datos). Devuelve también si hay cifrado.
+    /// Lista las entradas (sin extraer datos). Devuelve también si hay cifrado y si la lectura
+    /// se cortó antes de tiempo (`truncated`: p. ej. un RAR multivolumen al que le faltan partes).
     /// Lanza `.passphraseRequired` si ni siquiera se pueden leer las cabeceras sin clave.
-    public static func listEntries(in data: Data, passphrase: String? = nil) throws -> (entries: [ArchiveEntry], encrypted: Bool) {
+    public static func listEntries(in data: Data, passphrase: String? = nil) throws -> (entries: [ArchiveEntry], encrypted: Bool, truncated: Bool) {
         try data.withUnsafeBytes { try listEntries(source: .memory($0), passphrase: passphrase) }
     }
 
     /// Como `listEntries(in:)`, pero sobre un conjunto de volúmenes RAR nativos en disco.
-    public static func listEntries(volumes: [URL], passphrase: String? = nil) throws -> (entries: [ArchiveEntry], encrypted: Bool) {
+    public static func listEntries(volumes: [URL], passphrase: String? = nil) throws -> (entries: [ArchiveEntry], encrypted: Bool, truncated: Bool) {
         try listEntries(source: .files(volumes.map(\.path)), passphrase: passphrase)
     }
 
-    private static func listEntries(source: Source, passphrase: String?) throws -> (entries: [ArchiveEntry], encrypted: Bool) {
+    private static func listEntries(source: Source, passphrase: String?) throws -> (entries: [ArchiveEntry], encrypted: Bool, truncated: Bool) {
         let a = try open(source, passphrase: passphrase)
         defer { archive_read_free(a) }
 
         var entries: [ArchiveEntry] = []
         var encrypted = false
+        var truncated = false
         var entry: OpaquePointer?
         while true {
             let r = archive_read_next_header(a, &entry)
             if r == EOFCODE { break }
             guard r == OK, let entry else {
-                throw classifyFailure(a, passphrase: passphrase)
+                // A un volumen le faltan partes: `next_header` no siempre da un EOF limpio al
+                // llegar al final de los datos disponibles (solo lo da si el corte cae justo en
+                // un borde de bloque) — lo normal en un RAR real es un error de lectura a mitad
+                // de bloque. Si ya habíamos leído alguna entrada, esa parte es legítima y se
+                // devuelve tal cual (marcada `truncated`) en vez de descartarla; solo se lanza si
+                // no hay nada rescatable.
+                guard !entries.isEmpty else { throw classifyFailure(a, passphrase: passphrase) }
+                truncated = true
+                break
             }
             let path = String(cString: archive_entry_pathname(entry))
             let isDir = archive_entry_filetype(entry) == AE_IFDIR || path.hasSuffix("/")
@@ -64,7 +74,7 @@ public enum LibArchive {
             archive_read_data_skip(a)
         }
         if archive_read_has_encrypted_entries(a) > 0 { encrypted = true }
-        return (entries, encrypted)
+        return (entries, encrypted, truncated)
     }
 
     /// Datos de la entrada cuyo `path` coincide (re-abre e itera hasta ella).

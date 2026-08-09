@@ -21,11 +21,15 @@ public struct ArchiveReadResult: Sendable {
     public let format: ArchiveFormat
     public let container: ArchiveContainer
     public let entries: [ArchiveEntry]
+    /// La lectura se cortó antes de llegar al final real del archivo (p. ej. un RAR
+    /// multivolumen al que le faltan partes): `entries` es lo que se pudo leer, no todo.
+    public let truncated: Bool
 
-    public init(format: ArchiveFormat, container: ArchiveContainer, entries: [ArchiveEntry]) {
+    public init(format: ArchiveFormat, container: ArchiveContainer, entries: [ArchiveEntry], truncated: Bool = false) {
         self.format = format
         self.container = container
         self.entries = entries
+        self.truncated = truncated
     }
 }
 
@@ -275,8 +279,8 @@ struct LibArchiveCodec: ArchiveCodec {
 
     func open(_ data: Data, fallbackName: String, passphrase: String?,
               progress: ((Double) -> Void)?) throws -> ArchiveReadResult {
-        let (entries, _) = try LibArchive.listEntries(in: data, passphrase: passphrase)
-        return ArchiveReadResult(format: format, container: .data(data), entries: entries)
+        let (entries, _, truncated) = try LibArchive.listEntries(in: data, passphrase: passphrase)
+        return ArchiveReadResult(format: format, container: .data(data), entries: entries, truncated: truncated)
     }
 
     func entryData(for entry: ArchiveEntry, in container: ArchiveContainer, password: String?) throws -> Data {

@@ -268,7 +268,7 @@ final class FormatsTests: XCTestCase {
 
         let data = try Data(contentsOf: url)
         XCTAssertEqual(Array(data.prefix(2)), [0x37, 0x7A])   // "7z" magic (37 7A BC AF 27 1C)
-        let (entries, encrypted) = try LibArchive.listEntries(in: data)
+        let (entries, encrypted, _) = try LibArchive.listEntries(in: data)
         XCTAssertFalse(encrypted)
         XCTAssertTrue(Set(entries.map(\.path)).isSuperset(of: ["a.txt", "dir/b.bin"]))
         XCTAssertEqual(String(decoding: try LibArchive.extractEntry(path: "a.txt", in: data), as: UTF8.self), "primero 7z")

@@ -21,7 +21,7 @@ final class LibArchiveFixtureTests: XCTestCase {
     /// El fixture `sample.cpio` contiene: hola.txt (15 B), config.json (17 B),
     /// docs/anidado.txt (17 B) y el directorio docs/.
     func testCpioListsEntries() throws {
-        let (entries, encrypted) = try LibArchive.listEntries(in: fixture("sample", "cpio"))
+        let (entries, encrypted, _) = try LibArchive.listEntries(in: fixture("sample", "cpio"))
         XCTAssertFalse(encrypted)
 
         let paths = Set(entries.map(\.path))
@@ -49,7 +49,7 @@ final class LibArchiveFixtureTests: XCTestCase {
     /// El fixture `sample.cab` contiene hola.txt (14 B) y docs/anidado.txt (17 B).
     /// libarchive normaliza el separador `\` de CAB a `/`.
     func testCabListsEntries() throws {
-        let (entries, encrypted) = try LibArchive.listEntries(in: fixture("sample", "cab"))
+        let (entries, encrypted, _) = try LibArchive.listEntries(in: fixture("sample", "cab"))
         XCTAssertFalse(encrypted)
 
         let paths = Set(entries.map(\.path))
@@ -73,7 +73,7 @@ final class LibArchiveFixtureTests: XCTestCase {
 
     /// El fixture `sample.lha` contiene hola.txt (14 B) y config.json (17 B).
     func testLhaListsEntries() throws {
-        let (entries, encrypted) = try LibArchive.listEntries(in: fixture("sample", "lha"))
+        let (entries, encrypted, _) = try LibArchive.listEntries(in: fixture("sample", "lha"))
         XCTAssertFalse(encrypted)
 
         let paths = Set(entries.map(\.path))
@@ -97,7 +97,7 @@ final class LibArchiveFixtureTests: XCTestCase {
 
     /// El fixture `sample.rar` contiene hola.txt (14 B) y config.json (17 B).
     func testRarListsEntries() throws {
-        let (entries, encrypted) = try LibArchive.listEntries(in: fixture("sample", "rar"))
+        let (entries, encrypted, _) = try LibArchive.listEntries(in: fixture("sample", "rar"))
         XCTAssertFalse(encrypted)
 
         let paths = Set(entries.map(\.path))
@@ -123,7 +123,7 @@ final class LibArchiveFixtureTests: XCTestCase {
     /// listamos y extraemos de verdad (incluida una entrada grande y compresible).
     func testRar5CompressedUnencrypted() throws {
         let data = try fixture("comp-rar5", "rar")
-        let (entries, encrypted) = try LibArchive.listEntries(in: data)
+        let (entries, encrypted, _) = try LibArchive.listEntries(in: data)
         XCTAssertFalse(encrypted)
         XCTAssertEqual(Set(entries.map(\.path)),
                        ["hola.txt", "config.json", "anidado.txt", "repetido.txt"])
@@ -157,7 +157,7 @@ final class LibArchiveFixtureTests: XCTestCase {
     /// correcta. Documenta la misma limitación por la vía de extracción.
     func testRar5EncryptedDataNotExtractable() throws {
         let data = try fixture("enc-rar5-data", "rar")
-        let (entries, _) = try LibArchive.listEntries(in: data)          // lista sin clave
+        let (entries, _, _) = try LibArchive.listEntries(in: data)          // lista sin clave
         XCTAssertTrue(Set(entries.map(\.path)).contains("hola.txt"))
         XCTAssertThrowsError(try LibArchive.extractEntry(path: "hola.txt", in: data, passphrase: "clave123")) {
             XCTAssertTrue($0 is LibArchiveError, "esperado un LibArchiveError, no \($0)")
@@ -175,13 +175,26 @@ final class LibArchiveFixtureTests: XCTestCase {
     func testRarVolumesListsEntries() throws {
         let v1 = try fixtureURL("volumes.part1", "rar")
         let v2 = try fixtureURL("volumes.part2", "rar")
-        let (entries, encrypted) = try LibArchive.listEntries(volumes: [v1, v2])
+        let (entries, encrypted, truncated) = try LibArchive.listEntries(volumes: [v1, v2])
         XCTAssertFalse(encrypted)
+        XCTAssertFalse(truncated, "están las dos partes: no debería marcarse incompleto")
 
         let paths = Set(entries.map(\.path))
         XCTAssertEqual(paths, ["partido.txt", "entero.txt"])
         let partido = try XCTUnwrap(entries.first { $0.path == "partido.txt" })
         XCTAssertEqual(partido.uncompressedSize, 61, "el tamaño declarado es el del fichero completo, no el trozo del volumen 1")
+    }
+
+    /// Si solo se pasa el primer volumen (el segundo no aparece, esté o no reconocido su
+    /// nombre), `archive_read_open_filenames` debe devolver lo que sí pudo leer (`partido.txt`,
+    /// aunque truncado) en vez de lanzar y perderlo todo — con este fixture concreto el corte
+    /// cae justo en un borde de bloque (EOF limpio, sin marcar `truncated`), así que no se
+    /// comprueba ese flag aquí; lo importante es que la entrada sobrevive. Ver
+    /// `testTruncatedRar5RecoversEntriesReadBeforeTheCut` para un caso que sí marca `truncated`.
+    func testRarVolumesWithOnlyFirstPartReturnsPartialEntries() throws {
+        let v1 = try fixtureURL("volumes.part1", "rar")
+        let (entries, _, _) = try LibArchive.listEntries(volumes: [v1])
+        XCTAssertEqual(Set(entries.map(\.path)), ["partido.txt"])
     }
 
     func testRarVolumesExtractsContentAcrossBoundary() throws {
@@ -214,23 +227,42 @@ final class LibArchiveFixtureTests: XCTestCase {
     func testRarVolumesLegacyNamingReadsIdentically() throws {
         let v1 = try fixtureURL("volumes", "rar")
         let v2 = try fixtureURL("volumes", "r00")
-        let (entries, _) = try LibArchive.listEntries(volumes: [v1, v2])
+        let (entries, _, _) = try LibArchive.listEntries(volumes: [v1, v2])
         XCTAssertEqual(Set(entries.map(\.path)), ["partido.txt", "entero.txt"])
     }
 
     // MARK: - Truncamiento (mejor esfuerzo, ver LibArchive.classifyFailure)
 
-    /// `archive_error_string` no está garantizado entre versiones/casos — verificado a mano
-    /// probando varios puntos de corte de `comp-rar5.rar`: algunos ni siquiera fallan al listar
-    /// (el corte cae justo en un límite de entrada), otros dan un `.readFailed` genérico (el
-    /// mensaje no menciona truncamiento), y este punto concreto (90 %, cerca del final, a mitad
-    /// de los datos de la última entrada) sí produce un mensaje con "trunc" → `.truncated`. No es
-    /// una garantía general, solo confirma que el camino funciona cuando libarchive sí lo dice.
-    func testTruncatedRar5DetectedAsTruncatedAtLeastSometimes() throws {
+    /// Cortar `comp-rar5.rar` al 90 % cae a mitad de los datos de la última entrada (verificado
+    /// a mano): las cabeceras de las 4 entradas ya se han leído para entonces, así que
+    /// `listEntries` debe devolverlas todas marcadas `truncated`, no lanzar y perderlas — es
+    /// exactamente el caso real de un RAR multivolumen al que le falta la última parte.
+    func testTruncatedRar5RecoversEntriesReadBeforeTheCut() throws {
         let full = try fixture("comp-rar5", "rar")
         let truncated = Data(full.prefix(Int(Double(full.count) * 0.9)))
-        XCTAssertThrowsError(try LibArchive.listEntries(in: truncated)) {
-            XCTAssertEqual($0 as? LibArchiveError, .truncated)
-        }
+        let (entries, _, wasTruncated) = try LibArchive.listEntries(in: truncated)
+        XCTAssertTrue(wasTruncated)
+        XCTAssertEqual(Set(entries.map(\.path)),
+                       ["hola.txt", "config.json", "anidado.txt", "repetido.txt"])
+    }
+
+    /// Si el corte cae tan pronto que ni siquiera la primera cabecera se puede leer del todo,
+    /// libarchive no siempre lo trata como error: para RAR5 suele dar un EOF limpio sin haber
+    /// podido identificar ninguna entrada — `listEntries` no lanza (fiel a lo que reporta
+    /// libarchive), simplemente no hay nada en `entries`. Es la propia `ArchiveDocument` la que,
+    /// más arriba, convierte "0 entradas" en el error de conjunto incompleto — ver
+    /// `RarVolumesDocumentTests`.
+    func testTruncatedRar5TooShortForAnyHeaderReturnsEmptyWithoutThrowing() throws {
+        let full = try fixture("comp-rar5", "rar")
+        let truncated = Data(full.prefix(20))   // marcador + cabecera principal a medias
+        let (entries, _, _) = try LibArchive.listEntries(in: truncated)
+        XCTAssertTrue(entries.isEmpty)
+    }
+
+    /// Un corte tan agresivo que ni el formato se reconoce sí sigue siendo un error real.
+    func testTruncatedRar5UnrecognizableStillThrows() throws {
+        let full = try fixture("comp-rar5", "rar")
+        let truncated = Data(full.prefix(2))
+        XCTAssertThrowsError(try LibArchive.listEntries(in: truncated))
     }
 }

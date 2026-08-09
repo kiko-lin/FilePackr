@@ -336,7 +336,7 @@ final class StreamingCompressionTests: XCTestCase {
         ], to: url, format: .sevenZip)
 
         let data = try Data(contentsOf: url)
-        let (entries, _) = try LibArchive.listEntries(in: data)
+        let (entries, _, _) = try LibArchive.listEntries(in: data)
         XCTAssertTrue(Set(entries.map(\.path)).isSuperset(of: ["dir/big.bin", "mem.txt"]))
         // Extracción en streaming (sink) y por el wrapper en memoria: mismos bytes.
         XCTAssertEqual(try collect { try LibArchive.extractEntry(path: "dir/big.bin", in: data, sink: $0) }, payload)

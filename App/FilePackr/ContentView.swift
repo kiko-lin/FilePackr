@@ -546,9 +546,11 @@ struct ContentView: View {
             } else if doc.incompleteVolumes {
                 // Persistente mientras el documento incompleto siga abierto (a diferencia de
                 // exclusionNotice, sin temporizador): RAR multivolumen al que le faltan partes.
+                // Color de aviso (no `.secondary`): la alerta puntual al abrir se descarta y
+                // se olvida, así que esto es lo único que queda para recordar que falta contenido.
                 Label(loc("status.rarIncompleteVolumes"), systemImage: "exclamationmark.triangle")
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.orange)
                     .transition(.opacity)
             } else {
                 Text(statusText)
@@ -641,7 +643,12 @@ struct ContentView: View {
     /// como base; el resto se añade a la carpeta destino resolviendo conflictos de nombre.
     private func handleOpen(_ urls: [URL]) {
         if let archive = doc.archiveToOpen(from: urls) {
-            Task { await runAsync { try await doc.openArchive(archive) } }
+            Task {
+                await runAsync { try await doc.openArchive(archive) }
+                // Aviso puntual, solo tras un éxito (parcial): si hubiera fallado del todo,
+                // `runAsync` ya habría puesto su propio `errorMessage` con el motivo.
+                if doc.incompleteVolumes { errorMessage = loc("status.rarIncompleteVolumes") }
+            }
         } else {
             addCoord.start(urls, into: doc.addTargetFolder(), doc: doc,
                            hiddenPolicy: settings.addHiddenPolicy,

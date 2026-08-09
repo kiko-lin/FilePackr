@@ -88,6 +88,26 @@ final class RarVolumesDocumentTests: XCTestCase {
         XCTAssertEqual(Set(doc.roots.map(\.name)), ["partido.txt"])
     }
 
+    /// Si al volumen presente le falta hasta la primera cabecera de fichero (aquí, cortado antes
+    /// del nombre "partido.txt"), no hay ni una entrada que rescatar: a diferencia del caso de
+    /// arriba (donde sí se lista algo), esto debe lanzar `rarVolumeSetIncomplete` — no abrir un
+    /// documento vacío sin avisar de por qué.
+    func testOpeningTruncatedFirstVolumeWithNothingReadableThrows() async throws {
+        let src = try XCTUnwrap(
+            Bundle.module.url(forResource: "volumes.part1", withExtension: "rar", subdirectory: "Fixtures"))
+        let full = try Data(contentsOf: src)
+        let dst = tempDir.appendingPathComponent("solo.part1.rar")
+        try full.prefix(20).write(to: dst)
+
+        let doc = ArchiveDocument()
+        do {
+            try await doc.openArchive(dst)
+            XCTFail("debería lanzar rarVolumeSetIncomplete")
+        } catch ArchiveDocumentError.rarVolumeSetIncomplete {
+            // esperado
+        }
+    }
+
     func testExtractsAcrossVolumeBoundary() async throws {
         let url = try copyVolumes(vol1Name: "x.part1.rar", vol2Name: "x.part2.rar")
         let doc = ArchiveDocument()

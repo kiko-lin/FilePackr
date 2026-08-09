@@ -183,11 +183,16 @@ public final class ArchiveDocument: ObservableObject {
         do {
             let loaded = try await Task.detached(priority: .userInitiated) { () -> (ArchiveReadResult, URL?, Bool) in
                 if let rarVolumes {
-                    // Sin fichero temporal: la lista de volúmenes ya es el "container". Se
-                    // reconoció el conjunto completo por nombre, nunca queda incompleto.
-                    let (entries, _) = try LibArchive.listEntries(volumes: rarVolumes, passphrase: passphrase)
-                    let result = ArchiveReadResult(format: .rar, container: .rarVolumes(rarVolumes), entries: entries)
-                    return (result, nil, false)
+                    // Sin fichero temporal: la lista de volúmenes ya es el "container". El nombre
+                    // reconoce una secuencia contigua, pero eso no garantiza que sea el conjunto
+                    // COMPLETO (podría faltar el último volumen) — de ahí que también miremos
+                    // `truncated` aquí, igual que en el camino de abajo. Si encima no queda ni una
+                    // entrada legible, no hay nada que mostrar: mismo trato que un `.rar` suelto sin
+                    // nada rescatable.
+                    let (entries, _, truncated) = try LibArchive.listEntries(volumes: rarVolumes, passphrase: passphrase)
+                    if entries.isEmpty { throw ArchiveDocumentError.rarVolumeSetIncomplete }
+                    let result = ArchiveReadResult(format: .rar, container: .rarVolumes(rarVolumes), entries: entries, truncated: truncated)
+                    return (result, nil, truncated)
                 }
                 // Multivolumen (esquema propio): concatenar las partes a un temporal y **mapearlo**,
                 // en vez de cargar todas las partes en RAM (Volumes.join). Mono-volumen: mapear directo.
@@ -196,10 +201,18 @@ public final class ArchiveDocument: ObservableObject {
                 // .rar suelto cuya propia cabecera dice pertenecer a un conjunto multivolumen
                 // (nombre no reconocido por `RarVolumes`, o hueco en la secuencia): distingue más
                 // abajo entre "falló del todo" (nada que mostrar) y "abrió parcial" (aviso suave).
+                // Aquí no usamos `r.truncated`: al leer un único volumen suelto (no vía la API de
+                // volúmenes) libarchive a veces da un EOF limpio justo al quedarse sin datos, sin
+                // marcar error — pero `isVolumePart` ya nos dice, con independencia de eso, que por
+                // definición falta el resto del conjunto.
                 let isVolumePart = detected == .rar && RarVolumes.isMultiVolumePart(data)
                 do {
                     let r = try detected.codec.open(data, fallbackName: fallbackName,
                                                     passphrase: passphrase, progress: nil)
+                    // Sin ni una entrada legible: nada que mostrar, tratarlo igual que si hubiera
+                    // lanzado (el `catch` de abajo limpia el temporal y lo convierte en el error
+                    // adecuado).
+                    if isVolumePart, r.entries.isEmpty { throw ArchiveDocumentError.rarVolumeSetIncomplete }
                     return (r, temp, isVolumePart)
                 } catch {
                     if let temp { try? FileManager.default.removeItem(at: temp) }
