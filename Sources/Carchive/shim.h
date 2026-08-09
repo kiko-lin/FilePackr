@@ -17,6 +17,14 @@ int archive_read_support_format_all(struct archive *);
 int archive_read_add_passphrase(struct archive *, const char *);
 int archive_read_open_memory(struct archive *, const void *buff, size_t size);
 int archive_read_open_filenames(struct archive *, const char **filenames, size_t block_size);
+// Apertura por callbacks: única forma de controlar dónde termina la lectura de un volumen
+// (necesario para recortar la cola de un volumen RAR5 sin copiar el fichero, ver RAR5TrailingServiceBlock).
+int archive_read_open2(struct archive *,
+    void *client_data,
+    int (*open_cb)(struct archive *, void *),
+    ssize_t (*read_cb)(struct archive *, void *, const void **),
+    int64_t (*skip_cb)(struct archive *, void *, int64_t),
+    int (*close_cb)(struct archive *, void *));
 int archive_read_next_header(struct archive *, struct archive_entry **);
 int64_t archive_read_data(struct archive *, void *buff, size_t len);
 int archive_read_data_skip(struct archive *);

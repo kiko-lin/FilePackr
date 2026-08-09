@@ -249,12 +249,24 @@ public enum LibArchive {
         let opened: Int32
         switch source {
         case .memory(let raw):
-            opened = archive_read_open_memory(a, raw.baseAddress, raw.count)
+            // Recorta el bloque SERVICE/QuickOpen sobrante de RAR5 si lo hay (ver
+            // RAR5TrailingServiceBlock) — evita el bug de libarchive que lo desincroniza.
+            let length = RAR5TrailingServiceBlock.offset(length: Int64(raw.count), read: { off, len in
+                guard let base = raw.baseAddress, off >= 0, off + Int64(len) <= Int64(raw.count) else { return nil }
+                return Data(bytes: base.advanced(by: Int(off)), count: len)
+            }).map(Int.init) ?? raw.count
+            opened = archive_read_open_memory(a, raw.baseAddress, length)
         case .files(let paths):
-            let cStrings = paths.map { strdup($0) }
-            defer { cStrings.forEach { free($0) } }
-            var pointers = cStrings.map { UnsafePointer($0) } + [nil]
-            opened = archive_read_open_filenames(a, &pointers, 10240)
+            if let stream = RARVolumeStream.makeIfTruncationNeeded(paths: paths) {
+                let clientData = Unmanaged.passRetained(stream).toOpaque()
+                opened = archive_read_open2(a, clientData, rarVolumeOpenCallback,
+                    rarVolumeReadCallback, nil, rarVolumeCloseCallback)
+            } else {
+                let cStrings = paths.map { strdup($0) }
+                defer { cStrings.forEach { free($0) } }
+                var pointers = cStrings.map { UnsafePointer($0) } + [nil]
+                opened = archive_read_open_filenames(a, &pointers, 10240)
+            }
         }
         guard opened == OK else {
             // Clasificar ANTES de liberar `a`: archive_error_string necesita el archive vivo.
@@ -319,4 +331,111 @@ public enum LibArchive {
         if message.contains("trunc") { return .truncated }
         return .readFailed
     }
+}
+
+// MARK: - Lector de volúmenes RAR con cola recortada
+
+/// Presenta una lista de volúmenes RAR como un único flujo secuencial a libarchive (vía
+/// `archive_read_open2`), igual que haría `archive_read_open_filenames` — con la diferencia de
+/// que el ÚLTIMO volumen se corta en `lastVolumeCap` bytes en vez de leerse entero. Solo se usa
+/// cuando `RAR5TrailingServiceBlock` ha encontrado un bloque SERVICE/QuickOpen sobrante que hay
+/// que esquivar; en cualquier otro caso se sigue usando `archive_read_open_filenames` sin coste
+/// añadido.
+private final class RARVolumeStream {
+    private let paths: [String]
+    private let lastVolumeCap: Int64
+    private var index = 0
+    private var handle: FileHandle?
+    private var remainingInCurrent: Int64 = 0
+    private let chunkSize = 256 * 1024
+
+    /// Retenido por el puntero que se pasa a libarchive como `client_data` mientras dure la
+    /// apertura (ver `rarVolumeReadCallback`): el contrato de `archive_read_open2` exige que el
+    /// buffer devuelto siga vivo hasta la siguiente llamada.
+    var currentChunk = Data()
+
+    private init(paths: [String], lastVolumeCap: Int64) {
+        self.paths = paths
+        self.lastVolumeCap = lastVolumeCap
+    }
+
+    static func makeIfTruncationNeeded(paths: [String]) -> RARVolumeStream? {
+        guard paths.count > 1, let lastPath = paths.last,
+              let size = (try? FileManager.default.attributesOfItem(atPath: lastPath)[.size]) as? Int,
+              let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: lastPath)) else { return nil }
+        defer { try? handle.close() }
+        guard let cap = RAR5TrailingServiceBlock.offset(length: Int64(size), read: { off, len in
+            guard off >= 0, off + Int64(len) <= Int64(size) else { return nil }
+            do {
+                try handle.seek(toOffset: UInt64(off))
+                let d = try handle.read(upToCount: len)
+                return d?.count == len ? d : nil
+            } catch { return nil }
+        }) else { return nil }
+        return RARVolumeStream(paths: paths, lastVolumeCap: cap)
+    }
+
+    private func openNextIfNeeded() -> Bool {
+        while handle == nil {
+            guard index < paths.count else { return false }
+            let path = paths[index]
+            guard let h = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)),
+                  let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size]) as? Int else {
+                index += 1
+                continue
+            }
+            let cap = index == paths.count - 1 ? min(Int64(size), lastVolumeCap) : Int64(size)
+            guard cap > 0 else {
+                try? h.close()
+                index += 1
+                continue
+            }
+            handle = h
+            remainingInCurrent = cap
+        }
+        return true
+    }
+
+    func nextChunk() -> Data {
+        guard openNextIfNeeded(), let h = handle else { return Data() }
+        let want = Int(min(Int64(chunkSize), remainingInCurrent))
+        guard want > 0, let chunk = try? h.read(upToCount: want), !chunk.isEmpty else {
+            try? h.close(); handle = nil; index += 1
+            return nextChunk()
+        }
+        remainingInCurrent -= Int64(chunk.count)
+        if remainingInCurrent <= 0 {
+            try? h.close(); handle = nil; index += 1
+        }
+        return chunk
+    }
+
+    func close() {
+        try? handle?.close()
+        handle = nil
+    }
+}
+
+private func rarVolumeOpenCallback(_ archive: OpaquePointer?, _ clientData: UnsafeMutableRawPointer?) -> Int32 {
+    0 // ARCHIVE_OK
+}
+
+private func rarVolumeReadCallback(_ archive: OpaquePointer?, _ clientData: UnsafeMutableRawPointer?,
+                                   _ buffer: UnsafeMutablePointer<UnsafeRawPointer?>?) -> Int {
+    guard let clientData else { buffer?.pointee = nil; return 0 }
+    let stream = Unmanaged<RARVolumeStream>.fromOpaque(clientData).takeUnretainedValue()
+    stream.currentChunk = stream.nextChunk()
+    guard !stream.currentChunk.isEmpty else { buffer?.pointee = nil; return 0 }
+    return stream.currentChunk.withUnsafeBytes { raw in
+        buffer?.pointee = raw.baseAddress
+        return raw.count
+    }
+}
+
+private func rarVolumeCloseCallback(_ archive: OpaquePointer?, _ clientData: UnsafeMutableRawPointer?) -> Int32 {
+    guard let clientData else { return 0 }
+    let unmanaged = Unmanaged<RARVolumeStream>.fromOpaque(clientData)
+    unmanaged.takeUnretainedValue().close()
+    unmanaged.release()
+    return 0 // ARCHIVE_OK
 }
