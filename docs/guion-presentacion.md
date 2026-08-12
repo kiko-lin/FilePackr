@@ -6,9 +6,9 @@
 > (el screencast es obligatorio en Fundae).
 
 **Índice:** 1. Portada · 2. La necesidad y la propuesta · 3. Recorrido por la app · 4. Puntos
-fuertes · 5. Arquitectura general · 6. Motor propio · 7. Abstracción por formato · 8. Memoria
-constante · 9. Cifrado interoperable · 10. Calidad, ingeniería y seguridad · 11. Distribución ·
-12. Retos y aprendizajes · 13. Futuro · 14. Cierre
+fuertes · 5. Arquitectura general · 6. Motor propio · 7. Librerías externas · 8. Abstracción por
+formato · 9. Memoria constante · 10. Cifrado interoperable · 11. Calidad, ingeniería y seguridad ·
+12. Distribución · 13. Retos y aprendizajes · 14. Futuro · 15. Cierre
 
 ---
 
@@ -25,6 +25,8 @@ constante · 9. Cifrado interoperable · 10. Calidad, ingeniería y seguridad ·
 - Trabajar con archivos comprimidos en el día a día es incómodo: las apps existentes son cajas
   negras, o te **obligan a descomprimirlo todo** solo para ver o sacar un fichero.
 - Cada formato (zip, 7z, rar, iso…) suele requerir **una herramienta distinta**.
+- No hay **una misma app para comprimir y descomprimir**: cada tarea implica cambiar de
+  herramienta.
 - En macOS, el propio Finder se queda corto: descomprime y poco más.
 
 **La propuesta (qué es FilePackr):**
@@ -52,6 +54,8 @@ constante · 9. Cifrado interoperable · 10. Calidad, ingeniería y seguridad ·
   cancelar).
 - **Extracción** — por elemento, en lote, arrastrando al Finder, o **«Extraer todo»**, con diálogo
   de conflictos.
+- **Volúmenes RAR nativos** — abre y extrae un RAR multivolumen creado por WinRAR/rar
+  (`part1.rar`, o `.rar`+`.r00`), no solo el esquema propio de troceado de FilePackr.
 - **Conversión de formato** — abrir en un formato y **exportar a otro** (p. ej. zip → 7z o `.tar.gz`).
 - **Cifrado al exportar** — proteger con contraseña (ZipCrypto o AES-256) y, opcionalmente,
   **trocear en volúmenes**.
@@ -160,7 +164,44 @@ comprimir/descomprimir, CRC y cifrado), en lugar de enchufar una librería ya he
 
 ---
 
-## 7 · Decisión de diseño — Abstracción por formato
+## 7 · Librerías externas — qué se usa, para qué, y para qué no
+
+**Por qué merece su propio apartado:** FilePackr no es "una librería con una ventana encima".
+Conviene poder responder con precisión, dependencia por dependencia, **qué hace cada una** y —
+igual de importante — **qué NO hace** (esa parte es código propio).
+
+**El criterio general:** las librerías del sistema resuelven **matemática de compresión/cifrado
+pura** (bytes comprimidos ↔ bytes originales). **Nunca** deciden cómo se organiza un archivo —
+dónde empieza cada entrada, cómo se lista, cómo se reconstruye un multivolumen. Esa parte, **el
+contenedor**, es siempre Swift propio (ver §6).
+
+**Quién hace qué:**
+
+| Dependencia | Para qué SÍ | Para qué NO |
+|---|---|---|
+| **`libarchive`** (sistema, en C) | Leer/escribir 7z, rar, iso, cpio, xar, lha, cab — **el contenedor entero** de esos siete formatos (cabeceras, listado, extracción) | ZIP, tar, gzip, xz, bzip2 — ninguno pasa por aquí; es motor propio |
+| **zlib del sistema** | Comprimir DEFLATE **al escribir** ZIP/gzip — necesita **nivel** 0–9, que zlib expone | Descomprimir (va por el framework de Apple); la estructura del ZIP (nuestra) |
+| **liblzma del sistema** | Comprimir **al escribir** `.xz`/`tar.xz` — necesita **preset** 0–9 | Descomprimir `.xz` (framework de Apple); el LZMA del 7z (lo gestiona `libarchive`) |
+| **libbz2 del sistema** | Comprimir **y** descomprimir `.bz2`/`tar.bz2` — el framework de Apple no soporta bzip2, así que aquí sí hacen falta las dos direcciones | El contenedor tar en sí (motor propio); solo el flujo bzip2 |
+| **`Compression` (framework de Apple)** | **Descomprimir** DEFLATE/LZMA al leer ZIP/gzip/xz — no necesita nivel, así que basta | Comprimir con nivel elegible; bzip2 (no lo soporta) |
+| **CommonCrypto / CryptoKit (Apple)** | El AES-256 del cifrado ZIP (WinZip AE-2): cifrado, derivación PBKDF2, autenticación HMAC | El formato exacto del cifrado AE-2 byte a byte (eso lo implementamos nosotros para ser interoperables) |
+| *(nada — Swift puro)* | ZipCrypto, CRC-32, el contenedor ZIP entero, el contenedor tar entero | — |
+
+**El patrón que se repite (DEFLATE y LZMA):** **escribir** pasa por la librería del sistema (hace
+falta elegir el nivel de compresión); **leer** pasa por el framework `Compression` de Apple (más
+simple, no necesita nivel). Es una asimetría **deliberada**, documentada en el propio código — no
+un descuido.
+
+**Por qué importa (enlaza con «Retos»):** cuanto más se apoya FilePackr en una dependencia ajena,
+menos control hay sobre **qué versión concreta** corre en la máquina de cada usuario — Apple
+actualiza estas librerías del sistema a su ritmo, no al nuestro (verificado durante el desarrollo:
+un bug real de `libarchive` en RAR5, ausente en versiones más nuevas de la librería, tuvo que
+esquivarse desde FilePackr). Por eso el contenedor de ZIP/tar —el formato que más se usa— es
+100 % propio, y solo los formatos menos frecuentes delegan en `libarchive`.
+
+---
+
+## 8 · Decisión de diseño — Abstracción por formato
 
 **El problema que resuelve:** con tantos formatos, el código se llenaría de «si es zip… si no si es
 tar…» — imposible de mantener y ampliar. La solución es una **abstracción común**: que el resto de
@@ -189,7 +230,7 @@ la app trate **todos los formatos igual**, sin saber cuál tiene delante.
 
 ---
 
-## 8 · Decisión de diseño — Memoria constante (streaming)
+## 9 · Decisión de diseño — Memoria constante (streaming)
 
 **El principio rector:** **nunca cargar el archivo entero en memoria (RAM).** Gobierna todo el motor.
 
@@ -223,9 +264,19 @@ la app trate **todos los formatos igual**, sin saber cuál tiene delante.
 - **Resultado:** RAM mínima y el flujo común cuesta **un único recorrido**. Un **compromiso
   consciente y documentado**, no una bala de plata.
 
+**El mismo patrón, generalizado — extracción por lotes en `libarchive`:**
+- `libarchive` también es un iterador secuencial (sin acceso aleatorio): pedir varias entradas
+  reabriendo y re-recorriendo el archivo desde el principio para cada una es **coste O(n²)** — con
+  formatos de bloques sólidos (7z) además re-descomprime todo lo anterior en cada salto.
+- **Decisión:** un único recorrido que coloca en streaming las entradas pedidas y corta en cuanto
+  no queda ninguna pendiente.
+- **Medido:** un 7z de 300 entradas / 60 MB pasó de **171,6 s a 1,10 s (155×)**. Afecta a Extraer,
+  Extraer todo, arrastrar al Finder y «Descomprimir aquí», en los siete formatos delegados en
+  `libarchive` (no solo 7z).
+
 ---
 
-## 9 · Decisión de diseño — Cifrado interoperable
+## 10 · Decisión de diseño — Cifrado interoperable
 
 **La decisión:** implementar los **estándares de cifrado del propio formato ZIP**, para que los
 archivos cifrados **se abran en cualquier herramienta** (no un cifrado propietario).
@@ -256,13 +307,13 @@ archivos cifrados **se abran en cualquier herramienta** (no un cifrado propietar
 
 ---
 
-## 10 · Calidad, ingeniería y seguridad
+## 11 · Calidad, ingeniería y seguridad
 
 Un proyecto de este tamaño (~8.000 líneas de Swift) no se sostiene sin **red de seguridad** ni sin
 cuidar la **seguridad frente a archivos maliciosos**.
 
 ### Calidad e ingeniería
-- **Pruebas automatizadas** — cerca de **200 tests** (≈143 del motor + ≈57 del modelo), con un solo
+- **Pruebas automatizadas** — **244 tests** (177 del motor + 67 del modelo), con un solo
   `swift test`. Cubren lo delicado: formatos, cifrado, edición del árbol.
 - **Integración continua (GitHub Actions)** — en **cada cambio** se ejecutan **todas las pruebas** y
   se **compila la app**. Si algo se rompe, el cambio **queda en rojo** antes de entrar en `main`.
@@ -295,7 +346,7 @@ cuidar la **seguridad frente a archivos maliciosos**.
 
 ---
 
-## 11 · Distribución
+## 12 · Distribución
 
 *(Siendo una app de escritorio, su «despliegue» es distinto al de una web.)*
 - **Empaquetado en `.dmg`** — con un **script de release reproducible** (mismo resultado cada vez).
@@ -311,7 +362,7 @@ cuidar la **seguridad frente a archivos maliciosos**.
 
 ---
 
-## 12 · Retos y aprendizajes
+## 13 · Retos y aprendizajes
 
 **Retos técnicos:**
 - **Formatos binarios byte a byte** — en el cifrado interoperable y en ZIP64, **un byte mal puesto**
@@ -321,6 +372,11 @@ cuidar la **seguridad frente a archivos maliciosos**.
   de un `.tar.gz` (el caso difícil): no hay solución perfecta, hay que elegir un compromiso.
 - **Anticipar entradas maliciosas** — diseñar la extracción asumiendo que el archivo puede ser
   hostil (Zip-Slip, bombas), no solo que «vendrá bien formado».
+- **Robustez ante archivos incompletos o con esquemas distintos** — un RAR multivolumen real
+  (WinRAR) no sigue el esquema propio de FilePackr: hay que reconocer sus dos convenciones de
+  nombre (`part1.rar` / `.rar`+`.r00`, con punto o guion bajo) y, si falta la última parte,
+  **recuperar lo que sí se pudo leer** en vez de descartarlo, distinguiendo «no hay ni una entrada
+  legible» de «abrió parcial».
 - **Integrar AppKit dentro de SwiftUI** — el navegador (`NSOutlineView`), Quick Look y el
   arrastrar-y-soltar del sistema son de AppKit y hay que **encajarlos en una app SwiftUI**.
 
@@ -334,7 +390,7 @@ cuidar la **seguridad frente a archivos maliciosos**.
 
 ---
 
-## 13 · Futuro
+## 14 · Futuro
 
 - **Cifrado al escribir en más formatos** — hoy **solo el ZIP cifra** al guardar; el 7z se puede
   **abrir cifrado** pero su escritor guarda en claro. Extenderlo es la mejora más natural.
@@ -353,7 +409,7 @@ acertadas.
 
 ---
 
-## 14 · Cierre
+## 15 · Cierre
 
 **Recapitulación (una frase):**
 > FilePackr es una **utilidad real y nativa de macOS** en la que se aplican de forma tangible los
