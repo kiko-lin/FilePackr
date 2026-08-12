@@ -288,7 +288,12 @@ struct ExtractCompactView: View {
         case .progress:
             VStack(alignment: .leading, spacing: 14) {
                 Text(loc("progress.extracting")).font(.headline)
-                ProgressView(value: session.progressFraction ?? 0, total: 1)   // barra determinada siempre
+                if let fraction = session.progressFraction {
+                    ProgressView(value: fraction, total: 1)
+                } else {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                }
                 HStack {
                     Spacer()
                     Button(loc("button.cancel"), role: .cancel, action: session.cancel)

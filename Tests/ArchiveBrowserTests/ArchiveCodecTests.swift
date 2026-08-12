@@ -235,6 +235,36 @@ final class ArchiveCodecTests: XCTestCase {
         XCTAssertNil(got["tres.txt"], "la entrada no pedida no debe colocarse")
     }
 
+    /// El recorrido único (RAR/7z) salta las entradas no pedidas sin extraerlas, pero ese salto
+    /// tiene coste real (más con bloques sólidos): sin una señal de progreso para él, extraer solo
+    /// un par de ficheros de un archivo grande deja la barra sin moverse durante todo ese tramo
+    /// (bug real). `onSkip` debe reportar el tamaño de cada entrada no pedida que se atraviesa.
+    func testLibArchiveCodecExtractAllReportsSkippedBytesViaOnSkip() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("lote.7z")
+
+        let big = Data((0..<50_000).map { UInt8($0 & 0xFF) })
+        try LibArchive.write([
+            .init(path: "uno.txt", data: hello, modifiedAt: nil, isDirectory: false),
+            .init(path: "dir/grande.bin", data: big, modifiedAt: nil, isDirectory: false),
+            .init(path: "tres.txt", data: Data("tres".utf8), modifiedAt: nil, isDirectory: false),
+        ], to: url)
+
+        let result = try ArchiveFormat.sevenZip.codec.open(try Data(contentsOf: url), fallbackName: "lote")
+        let entry = try XCTUnwrap(result.entries.first { $0.path == "tres.txt" })   // la ÚLTIMA del recorrido
+
+        var skipped: Int64 = 0
+        var got = Data()
+        try result.format.codec.extractAll([entry], in: result.container, password: nil, onSkip: { skipped += $0 }) { e in
+            e.path == "tres.txt" ? { got.append($0) } : nil
+        }
+
+        XCTAssertEqual(got, Data("tres".utf8))
+        XCTAssertEqual(skipped, Int64(hello.count) + Int64(big.count), "debe sumar el tamaño de uno.txt y dir/grande.bin, saltadas antes de llegar a la pedida")
+    }
+
     /// Una entrada pedida que no está en el archivo falla igual que por la vía de una sola
     /// (`entryNotFound`), en vez de terminar en silencio dejando el fichero sin escribir.
     func testSevenZipExtractAllReportsMissingEntry() throws {

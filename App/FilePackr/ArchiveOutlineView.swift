@@ -5,6 +5,16 @@ import QuickLookUI
 import ArchiveBrowser
 import FilePackrModel
 
+/// Lo que necesita `writePromiseTo` (hilo de fondo) para extraer y medir el progreso, capturado
+/// en el hilo principal al iniciar el arrastre: el documento (`@MainActor`) no se puede tocar
+/// desde allí. `contentSize` es el tamaño total del archivo abierto (no solo lo arrastrado); con
+/// libarchive (RAR/7z…) hace falta para no mostrar la barra congelada al extraer un subconjunto.
+private struct ExtractionPromise: Sendable {
+    let plan: ExportPlan
+    let usesLibArchive: Bool
+    let contentSize: Int64
+}
+
 extension NSUserInterfaceItemIdentifier {
     static let nameColumn = NSUserInterfaceItemIdentifier("name")
     static let dateColumn = NSUserInterfaceItemIdentifier("date")
@@ -510,7 +520,9 @@ extension ArchiveOutlineView {
             let provider = NSFilePromiseProvider(fileType: utType(for: node).identifier, delegate: self)
             // Construimos aquí (en el hilo principal, con acceso al documento) el plan ligero
             // y `Sendable`; así la promesa se cumple en la cola de fondo sin tocar el documento.
-            provider.userInfo = doc.exportPlan(for: node)
+            provider.userInfo = ExtractionPromise(plan: doc.exportPlan(for: node),
+                                                  usesLibArchive: doc.format.usesLibArchive,
+                                                  contentSize: Int64(doc.contentSize))
             return provider
         }
 
@@ -570,7 +582,7 @@ extension ArchiveOutlineView {
         // MARK: - NSFilePromiseProviderDelegate (extraer al Finder)
 
         func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String) -> String {
-            (filePromiseProvider.userInfo as? ExportPlan)?.name ?? loc("promise.fallback")
+            (filePromiseProvider.userInfo as? ExtractionPromise)?.plan.name ?? loc("promise.fallback")
         }
 
         /// AppKit invoca esto en `promiseQueue` (de fondo). Descomprime en streaming sin tocar
@@ -578,8 +590,12 @@ extension ArchiveOutlineView {
         /// progreso de la app saltando al hilo principal, para dar feedback sin bloquear.
         func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, writePromiseTo url: URL,
                                  completionHandler: @escaping (Error?) -> Void) {
-            guard let plan = filePromiseProvider.userInfo as? ExportPlan else { completionHandler(nil); return }
-            let total = plan.byteCount()
+            guard let promise = filePromiseProvider.userInfo as? ExtractionPromise else { completionHandler(nil); return }
+            let plan = promise.plan
+            // Con libarchive (RAR/7z…) extraer un subconjunto recorre el archivo entero (iterador
+            // secuencial, sin acceso aleatorio): el coste real es al menos `contentSize`, aunque
+            // el plan arrastrado sea un único fichero pequeño (ver `onSkip` más abajo).
+            let total = promise.usesLibArchive ? max(plan.byteCount(), promise.contentSize) : plan.byteCount()
             // Registramos la extracción en el documento (en main) para mostrar la barra y la (X)
             // de cancelar; el token se consulta aquí, en el hilo de fondo, en cada trozo.
             let token = CancelToken()
@@ -597,6 +613,11 @@ extension ArchiveOutlineView {
                             self.doc.progress?.fraction = fraction
                             self.doc.progress?.detail = name
                         }
+                    }, onSkip: { bytes in
+                        done += bytes
+                        let fraction = min(1, Double(done) / Double(total))
+                        guard throttle.shouldReport(fraction) else { return }
+                        Task { @MainActor in self.doc.progress?.fraction = fraction }
                     }, isCancelled: { token.isCancelled })
                 } else {
                     try plan.writeContents(to: url, isCancelled: { token.isCancelled })

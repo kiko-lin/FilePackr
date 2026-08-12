@@ -539,7 +539,12 @@ public final class ArchiveDocument: ObservableObject {
         if overwrite, FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
-        let total = plan.byteCount()
+        // Con libarchive (RAR/7z…) extraer un subconjunto obliga a recorrer TODO el archivo (su
+        // iterador es secuencial, sin acceso aleatorio): el coste real es al menos `contentSize`
+        // aunque el plan solo pida unos pocos ficheros pequeños. Si el total se quedara en
+        // `plan.byteCount()`, esos bytes "saltados" no tendrían con qué contar y la barra se
+        // vería congelada mientras dura el recorrido.
+        let total = format.usesLibArchive ? max(plan.byteCount(), Int64(contentSize)) : plan.byteCount()
         let token = CancelToken()
         registerExtraction(token: token, total: total)
         defer { endExtraction() }
@@ -562,6 +567,11 @@ public final class ArchiveDocument: ObservableObject {
                         self.progress?.fraction = fraction
                         self.progress?.detail = name
                     }
+                }, onSkip: { bytes in
+                    done += bytes
+                    let fraction = min(1, Double(done) / Double(total))
+                    guard throttle.shouldReport(fraction) else { return }
+                    Task { @MainActor in self.progress?.fraction = fraction }
                 }, isCancelled: { token.isCancelled })
             }.value
         } catch let e as LibArchiveError where format == .rar && (e == .wrongPassword || e == .passphraseRequired) {

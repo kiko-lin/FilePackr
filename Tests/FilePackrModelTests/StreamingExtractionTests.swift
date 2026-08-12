@@ -129,6 +129,34 @@ final class StreamingExtractionTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: dest.appendingPathComponent("lleno.txt")), Data("hola".utf8))
     }
 
+    /// `writeContents` sobre un archivo libarchive (RAR/7z…) del que solo se pide **una** entrada
+    /// debe reportar por `onSkip` el tamaño de las demás: ese recorrido secuencial (sin acceso
+    /// aleatorio) tiene coste real aunque no escriba nada, y sin la señal la barra de progreso del
+    /// llamador se queda congelada durante todo ese tramo (bug real: arrastrar un solo fichero
+    /// fuera de un RAR grande).
+    func testWriteContentsReportsSkippedBytesForLibArchivePartialExtraction() throws {
+        let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("lote.7z")
+        let a = Data(repeating: 0x41, count: 30_000)
+        let b = Data(repeating: 0x42, count: 40_000)
+        try LibArchive.write([
+            .init(path: "a.bin", data: a, modifiedAt: nil, isDirectory: false),
+            .init(path: "b.bin", data: b, modifiedAt: nil, isDirectory: false),
+            .init(path: "c.txt", data: Data("solo esta se pide".utf8), modifiedAt: nil, isDirectory: false),
+        ], to: url)
+        let result = try ArchiveFormat.sevenZip.codec.open(try Data(contentsOf: url), fallbackName: "lote")
+
+        let plan = ExportPlan(name: "c.txt", payload: .archiveEntry(
+            entry: try entry(result.entries, "c.txt"), archive: result.container, password: nil, format: .sevenZip))
+
+        var skipped: Int64 = 0
+        let dest = dir.appendingPathComponent("c.txt")
+        try plan.writeContents(to: dest, onSkip: { skipped += $0 })
+
+        XCTAssertEqual(try Data(contentsOf: dest), Data("solo esta se pide".utf8))
+        XCTAssertEqual(skipped, Int64(a.count) + Int64(b.count), "debe saltar a.bin y b.bin, no pedidas")
+    }
+
     private func tempDir() -> URL {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("FilePackrTest-\(UUID().uuidString)", isDirectory: true)

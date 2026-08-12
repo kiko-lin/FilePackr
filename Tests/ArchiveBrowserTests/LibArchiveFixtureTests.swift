@@ -135,6 +135,39 @@ final class LibArchiveFixtureTests: XCTestCase {
                        Data(String(repeating: "ABCD", count: 5000).utf8))
     }
 
+    /// Extraer solo la ÚLTIMA entrada del stream obliga a `extractEntries` a saltar (sin
+    /// extraerlas) todas las demás: `onSkip` debe reportar exactamente sus tamaños, para que la
+    /// barra de progreso no se quede congelada mientras dura ese recorrido invisible (bug real:
+    /// arrastrar un solo fichero fuera de un RAR grande dejaba la barra sin moverse).
+    func testExtractEntriesReportsSkippedBytesForUnrequestedEntries() throws {
+        let data = try fixture("comp-rar5", "rar")
+        let (entries, _, _) = try LibArchive.listEntries(in: data)
+        let target = try XCTUnwrap(entries.last { !$0.isDirectory })
+        let expectedSkipped = entries.filter { $0.path != target.path }
+            .reduce(Int64(0)) { $0 + Int64($1.uncompressedSize) }
+        XCTAssertGreaterThan(expectedSkipped, 0, "el fixture necesita más de una entrada para que el test tenga sentido")
+
+        var skipped: Int64 = 0
+        var extracted = Data()
+        try LibArchive.extractEntries([target.path], in: data, onSkip: { skipped += $0 }) { path in
+            guard path == target.path else { return nil }
+            return { extracted.append($0) }
+        }
+        XCTAssertEqual(extracted.count, Int(target.uncompressedSize))
+        XCTAssertEqual(skipped, expectedSkipped)
+    }
+
+    /// Extraer TODAS las entradas no salta ninguna: `onSkip` no debe dispararse.
+    func testExtractEntriesReportsNoSkipWhenExtractingEverything() throws {
+        let data = try fixture("comp-rar5", "rar")
+        let (entries, _, _) = try LibArchive.listEntries(in: data)
+        var skipped: Int64 = 0
+        try LibArchive.extractEntries(entries.map(\.path), in: data, onSkip: { skipped += $0 }) { _ in
+            { _ in }   // descarta el contenido: solo interesa `onSkip` aquí
+        }
+        XCTAssertEqual(skipped, 0)
+    }
+
     /// **Limitación conocida y verificada**: la libarchive del sistema NO descifra RAR
     /// (ni RAR4 ni RAR5); solo el `unrar` propietario lo hace. Detecta el cifrado de cabeceras
     /// (`passphraseRequired`) pero **con la clave correcta sigue fallando**. Este test fija la

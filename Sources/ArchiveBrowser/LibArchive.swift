@@ -126,19 +126,27 @@ public enum LibArchive {
     /// entrada obliga a re-descomprimir todo lo anterior cada vez (coste cuadrático: un 7z de
     /// unos cientos de ficheros tarda minutos y aparenta estar colgado).
     public static func extractEntries(_ paths: [String], in data: Data, passphrase: String? = nil,
+                                      onSkip: ((Int64) -> Void)? = nil,
                                       place: (String) throws -> ((Data) throws -> Void)?) throws {
         try data.withUnsafeBytes { raw in
-            try extractEntries(paths, source: .memory(raw), passphrase: passphrase, place: place)
+            try extractEntries(paths, source: .memory(raw), passphrase: passphrase, onSkip: onSkip, place: place)
         }
     }
 
     /// Como `extractEntries(_:in:place:)`, pero sobre un conjunto de volúmenes RAR nativos.
     public static func extractEntries(_ paths: [String], volumes: [URL], passphrase: String? = nil,
+                                      onSkip: ((Int64) -> Void)? = nil,
                                       place: (String) throws -> ((Data) throws -> Void)?) throws {
-        try extractEntries(paths, source: .files(volumes.map(\.path)), passphrase: passphrase, place: place)
+        try extractEntries(paths, source: .files(volumes.map(\.path)), passphrase: passphrase, onSkip: onSkip, place: place)
     }
 
+    /// `onSkip`, si se da, recibe el tamaño (sin descomprimir) de cada entrada **no pedida** que
+    /// hay que recorrer para llegar a las que sí lo son: como el iterador es secuencial, ese
+    /// recorrido tiene coste real (más aún si el archivo es sólido) aunque no produzca bytes de
+    /// salida — sin esta señal, quien mida el progreso por bytes escritos ve la barra congelada
+    /// mientras se salta un RAR grande para extraer solo un par de ficheros de él.
     private static func extractEntries(_ paths: [String], source: Source, passphrase: String?,
+                                       onSkip: ((Int64) -> Void)? = nil,
                                        place: (String) throws -> ((Data) throws -> Void)?) throws {
         guard !paths.isEmpty else { return }
         var remaining = Set(paths)
@@ -153,6 +161,7 @@ public enum LibArchive {
             let path = String(cString: archive_entry_pathname(entry))
             // No pedida, o pedida pero el llamador la descarta → saltar sus datos y seguir.
             guard remaining.remove(path) != nil, let sink = try place(path) else {
+                onSkip?(Int64(max(0, archive_entry_size(entry))))
                 archive_read_data_skip(a)
                 continue
             }

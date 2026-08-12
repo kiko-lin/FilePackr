@@ -63,7 +63,14 @@ public protocol ArchiveCodec: Sendable {
     /// —ZIP, `.tar` puro—). Lo sobreescriben los formatos **secuenciales**, donde ir entrada a
     /// entrada re-descomprime lo anterior cada vez: `TarCodec` comprimido (un pase con
     /// `streamEntries`) y `LibArchiveCodec` (7z sólido y compañía, un pase con `extractEntries`).
+    ///
+    /// `onSkip`, si se da, recibe el tamaño sin comprimir de cada entrada que el recorrido tiene
+    /// que atravesar sin extraerla (no pedida): solo lo usa `LibArchiveCodec`, cuyo iterador es
+    /// secuencial y sin acceso aleatorio, así que ese recorrido tiene coste real aunque no emita
+    /// bytes de salida — sin la señal, extraer solo un par de ficheros de un RAR grande deja la
+    /// barra de progreso congelada mientras se salta el resto.
     func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
+                    onSkip: ((Int64) -> Void)?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws
 }
 
@@ -80,9 +87,17 @@ public extension ArchiveCodec {
         try sink(entryData(for: entry, in: container, password: password))
     }
 
-    /// Por defecto: extrae cada entrada por separado (acceso aleatorio). `TarCodec` comprimido lo
-    /// sobreescribe para hacer un único pase cuando hay varias entradas.
+    /// Sobrecarga sin `onSkip`, para los llamadores (y tests) a los que no les hace falta.
     func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
+                    place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
+        try extractAll(entries, in: container, password: password, onSkip: nil, place: place)
+    }
+
+    /// Por defecto: extrae cada entrada por separado (acceso aleatorio), sin recorrido de por
+    /// medio que saltar → `onSkip` no aplica aquí. `TarCodec` comprimido lo sobreescribe para
+    /// hacer un único pase cuando hay varias entradas.
+    func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
+                    onSkip: ((Int64) -> Void)?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
         for entry in entries {
             if let sink = try place(entry) {
@@ -191,6 +206,7 @@ struct TarCodec: ArchiveCodec {
     }
 
     func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
+                    onSkip: ((Int64) -> Void)?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
         guard case .data(let container) = container else { throw UnsupportedContainerError() }
         // Varias entradas de un tar **comprimido**: un solo recorrido (re-descomprime una vez).
@@ -309,6 +325,7 @@ struct LibArchiveCodec: ArchiveCodec {
     /// re-descomprime todo lo anterior cada vez → coste cuadrático (§10 #1, igual que tar
     /// comprimido). Con una sola entrada da lo mismo: el recorrido corta al colocarla.
     func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
+                    onSkip: ((Int64) -> Void)?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
         let byPath = Dictionary(entries.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         func resolve(_ path: String) throws -> ((Data) throws -> Void)? {
@@ -317,9 +334,9 @@ struct LibArchiveCodec: ArchiveCodec {
         }
         switch container {
         case .data(let data):
-            try LibArchive.extractEntries(Array(byPath.keys), in: data, passphrase: password, place: resolve)
+            try LibArchive.extractEntries(Array(byPath.keys), in: data, passphrase: password, onSkip: onSkip, place: resolve)
         case .rarVolumes(let volumes):
-            try LibArchive.extractEntries(Array(byPath.keys), volumes: volumes, passphrase: password, place: resolve)
+            try LibArchive.extractEntries(Array(byPath.keys), volumes: volumes, passphrase: password, onSkip: onSkip, place: resolve)
         }
     }
 }

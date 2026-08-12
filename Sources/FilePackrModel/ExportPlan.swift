@@ -55,8 +55,14 @@ public struct ExportPlan: Sendable {
     /// curso** y los **bytes** de ese trozo, para una barra fina con etiqueta. Quien lo consuma
     /// debe **acumular y coalescer** (p. ej. a saltos del 1 %): aquí se llama por cada trozo,
     /// que con ficheros grandes son muchos.
+    ///
+    /// `onSkip` recibe los bytes (sin nombre: no hay un fichero de destino al que asociarlos) de
+    /// cada entrada que el codec tiene que atravesar sin extraerla — solo relevante en formatos
+    /// de recorrido secuencial (RAR/7z…) al extraer un subconjunto: ese recorrido tiene coste
+    /// real aunque no escriba nada, y sin esta señal la barra parece congelada mientras dura.
     nonisolated public func writeContents(to destination: URL,
                                    onProgress: @escaping (_ name: String, _ bytes: Int64) -> Void = { _, _ in },
+                                   onSkip: @escaping (_ bytes: Int64) -> Void = { _ in },
                                    isCancelled: @escaping () -> Bool = { false }) throws {
         // Fase 1: crear la estructura (carpetas), copiar los ficheros de disco y **recolectar** las
         // entradas de archivo con su destino. Todas las entradas de un plan comparten archivo y
@@ -98,7 +104,7 @@ public struct ExportPlan: Sendable {
         var writer: AtomicEntryWriter?
         func commitCurrent() throws { try writer?.commit(); writer = nil }
         do {
-            try format.codec.extractAll(jobs.map(\.entry), in: archive, password: password) { entry in
+            try format.codec.extractAll(jobs.map(\.entry), in: archive, password: password, onSkip: onSkip) { entry in
                 try commitCurrent()                                  // la entrada anterior queda completa
                 guard let url = destinations[entry.path] else { return nil }   // no seleccionada → saltar
                 let active = try AtomicEntryWriter(destination: url)
