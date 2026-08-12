@@ -58,7 +58,9 @@ Abrir un archivo en un formato y **guardarlo en otro** reconstruye el contenido.
   Tamaño, Clase, Comprimido) y **barra de estado** (nº de ficheros · tamaño · comprimido).
 - **Operaciones en segundo plano** con barra de progreso; el guardado va en **streaming
   a disco** (no carga el archivo entero en memoria).
-- **ZIP64** (archivos > 4 GB o > 65.535 entradas) y **volúmenes** (división por bytes).
+- **ZIP64** (archivos > 4 GB o > 65.535 entradas) y **volúmenes** (división por bytes, propia
+  de FilePackr). También **abre** los volúmenes RAR nativos que crean WinRAR/`rar`
+  (`nombre.part1.rar…` o `nombre.rar`+`.r00…`), sin necesidad de concatenarlos a mano.
 - **Cifrado ZIP estándar**:
   - **Débil** — ZipCrypto / PKWARE clásico (universal, inseguro).
   - **Fuerte** — AES‑256 de WinZip (AE‑2), interop verificada contra `pyzipper`.
@@ -88,7 +90,8 @@ FilePackr/                            (raíz del repo; remoto: github.com/kiko-l
 │   │   ├── ZipReader / ZipExtractor / ZipWriter / ZipCrypto / ZipAES / Deflate / CRC32
 │   │   ├── Tar / Gzip / Xz / Bzip2    tar y compresores (Swift puro / Compression / libbz2)
 │   │   ├── LibArchive.swift           puente a la libarchive del sistema (7z/rar/iso/…)
-│   │   └── Volumes / VolumeStore      troceado por bytes (en memoria / en disco)
+│   │   ├── RarVolumes.swift           detecta volúmenes RAR nativos (WinRAR/`rar`, no concatenables)
+│   │   └── Volumes / VolumeStore      troceado propio por bytes (en memoria / en disco)
 │   ├── FilePackrModel/               capa de modelo de la app (sin vistas; testeable por CLI)
 │   │   ├── ArchiveDocument.swift      modelo (árbol editable, abrir/guardar/exportar/extraer)
 │   │   ├── ArchiveSaver / SavePayloadBuilder   codifica el SavePayload a disco (streaming)

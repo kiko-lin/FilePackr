@@ -309,11 +309,11 @@ archivos cifrados **se abran en cualquier herramienta** (no un cifrado propietar
 
 ## 11 · Calidad, ingeniería y seguridad
 
-Un proyecto de este tamaño (~8.000 líneas de Swift) no se sostiene sin **red de seguridad** ni sin
+Un proyecto de este tamaño (~9.000 líneas de Swift) no se sostiene sin **red de seguridad** ni sin
 cuidar la **seguridad frente a archivos maliciosos**.
 
 ### Calidad e ingeniería
-- **Pruebas automatizadas** — **244 tests** (177 del motor + 67 del modelo), con un solo
+- **Pruebas automatizadas** — **248 tests** (180 del motor + 68 del modelo), con un solo
   `swift test`. Cubren lo delicado: formatos, cifrado, edición del árbol.
 - **Integración continua (GitHub Actions)** — en **cada cambio** se ejecutan **todas las pruebas** y
   se **compila la app**. Si algo se rompe, el cambio **queda en rojo** antes de entrar en `main`.
@@ -415,7 +415,7 @@ acertadas.
 > FilePackr es una **utilidad real y nativa de macOS** en la que se aplican de forma tangible los
 > pilares del máster: **arquitectura** (capas separadas, motor propio), **diseño** (abstracción por
 > formato, memoria constante), **seguridad** (extracción segura, cifrado interoperable) y
-> **calidad** (≈200 tests, CI).
+> **calidad** (≈250 tests, CI).
 
 **Enlaces (para la diapositiva y el formulario Fundae):**
 - **Código** — `github.com/kiko-lin/FilePackr`

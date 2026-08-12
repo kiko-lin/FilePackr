@@ -23,10 +23,20 @@ con `swift test`):
   `detect(from:contents:)` (extensión y, si no decide, firma).
 - **`ArchiveCodec`** (protocolo + registro `ArchiveFormat.codec`) — centraliza
   **leer** (`open(_:fallbackName:passphrase:progress:)` → `ArchiveReadResult` con el
-  formato refinado, los bytes a conservar y las entradas) y **extraer una entrada**
-  (`entryData(for:in:password:)`). Concretos: `ZipCodec`, `TarCodec` (tar y variantes
-  comprimidas), `SingleFileCodec` (gz/xz/bz2; refina `.gz`→`.tar.gz` por firma ustar) y
-  `LibArchiveCodec`. La **escritura NO** pasa por aquí (rutas dispares: ver app/`ArchiveSaver`).
+  formato refinado, los bytes a conservar y las entradas), **extraer una entrada**
+  (`entryData(for:in:password:)`) y **extraer varias** (`extractAll`, un solo recorrido;
+  `onSkip` opcional reporta el tamaño de las entradas saltadas — solo relevante en
+  `LibArchiveCodec`, cuyo iterador es secuencial sin acceso aleatorio). Concretos:
+  `ZipCodec`, `TarCodec` (tar y variantes comprimidas), `SingleFileCodec` (gz/xz/bz2;
+  refina `.gz`→`.tar.gz` por firma ustar) y `LibArchiveCodec`. La **escritura NO** pasa
+  por aquí (rutas dispares: ver app/`ArchiveSaver`).
+- **`ArchiveContainer`** (`.data(Data)` / `.rarVolumes([URL])`) — el contenedor que lleva
+  `ArchiveReadResult`, generalizado más allá de `Data` para los **volúmenes RAR nativos**
+  (los que crea WinRAR/`rar`, detectados por `RarVolumes`): a diferencia del esquema propio
+  de FilePackr (`Volumes`/`VolumeStore`, abajo), esos no se concatenan —cada volumen lleva
+  su propia cabecera intercalada— así que se abren con `archive_read_open_filenames` de
+  libarchive. `RAR5TrailingServiceBlock` recorta, cuando hace falta, un bloque de servicio
+  QuickOpen obsoleto que si no desincroniza el lector y produce entradas fantasma.
 - **`ArchiveEntry`** — entrada **neutral** común a todos los formatos: ruta, tamaños,
   fecha, `isDirectory`, `isEncrypted`, `dataOffset?` (lo usa TAR) y `zip: ZipEntryInfo?`
   (método/CRC/local header/dosTime/flags/AES, **solo** en entradas de ZIP). Ningún otro
@@ -58,14 +68,17 @@ Lectores/escritores por formato:
 - **libarchive** (`LibArchive.swift`): puente a la **libarchive del sistema** (target
   `Carchive` = systemLibrary, con `shim.h` de prototipos propios). Lee 7z/rar/iso/xar/
   cpio/lha/cab; escribe 7z/iso/xar. API de **iterador en streaming**.
-- **Volúmenes**: `Volumes` (split/join por bytes en memoria + naming) y `VolumeStore`
-  (volúmenes sobre disco: descubrir partes, trocear un fichero ya escrito, y
+- **Volúmenes propios**: `Volumes` (split/join por bytes en memoria + naming) y
+  `VolumeStore` (volúmenes sobre disco: descubrir partes, trocear un fichero ya escrito, y
   `joinToTemporaryFile` —concatena las partes a un temporal mapeado sin cargarlas en RAM).
+- **Volúmenes RAR nativos** (`RarVolumes.swift`, distinto de lo anterior — solo lectura, no
+  concatenable): detecta el esquema moderno (`nombre.part1.rar…`, separador punto o guion
+  bajo) y el legado (`nombre.rar`+`.r00…`) de WinRAR/`rar`; ver `ArchiveContainer` arriba.
 
 Tests en `Tests/`: `ArchiveBrowserTests` (motor + codec + formatos + volúmenes + metadatos +
 detección + cifrado), con interop **opcional** (se salta si la herramienta no está): `zip`/`unzip`
 para ZipCrypto, `pyzipper` para AES‑256. Y `FilePackrModelTests` (documento + coordinadores de
-añadir/extraer/guardar). **Todo corre con un solo `swift test`** (125 tests).
+añadir/extraer/guardar). **Todo corre con un solo `swift test`** (248 tests).
 
 ## Modelo — `Sources/FilePackrModel/`
 
@@ -111,7 +124,8 @@ construcción del árbol (`ArchiveTreeBuilder`: de entradas o de disco) y los he
 
 - **Abrir**: `ContentView` → `doc.openArchive` (en 2.º plano: carga/mapea los bytes,
   `detected.codec.open`) → `buildTree` → el outline pinta. Si hay entradas cifradas →
-  pide contraseña. Multivolumen → `VolumeStore.joinToTemporaryFile` + mapeo.
+  pide contraseña. Multivolumen propio → `VolumeStore.joinToTemporaryFile` + mapeo. Volumen
+  RAR nativo → `RarVolumes.parts` + `ArchiveContainer.rarVolumes` (sin concatenar).
 - **Editar**: el outline/columna llaman a métodos de `doc`, que suben `revision` (el
   outline recarga), recalculan el resumen y marcan `hasUnsavedChanges`.
 - **Guardar/Exportar**: `doc.makeSavePayload(for:)` (zip: `.rawEntry` copia en crudo las

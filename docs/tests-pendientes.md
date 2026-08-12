@@ -1,8 +1,8 @@
 # Tests pendientes — verificación en GUI
 
-Checklist para una **prueba final de toda la app**. El agente solo compila y corre los tests del
-**motor** (`swift test`, 93 verdes) y los del **modelo** (`FilePackrTests`, ⌘U); la parte de
-**GUI / Finder / sistema** la verificas tú en Xcode (**⌘R**) y marcas aquí.
+Checklist para una **prueba final de toda la app**. El agente solo compila y corre `swift test`
+(motor + modelo, 248 verdes — ya **no** existe el target `FilePackrTests`/⌘U, ver `AGENTS.md`);
+la parte de **GUI / Finder / sistema** la verificas tú en Xcode (**⌘R**) y marcas aquí.
 
 - **Parte A (§1–§13)**: trabajo reciente pendiente de verificar (i18n, Servicios, cancelación,
   «último usado», guardar/exportar, niveles…).

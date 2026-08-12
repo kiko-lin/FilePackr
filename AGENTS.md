@@ -22,7 +22,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 - **Tests**: `swift test` (rápido, sin Xcode) corre la **suite completa**: motor
   (`ArchiveBrowserTests`) + modelo (`FilePackrModelTests`, el documento/coordinadores, en SPM
-  tras la 4ª auditoría). 196 tests. Ya **no** existe el target `FilePackrTests` en el `.pbxproj`.
+  tras la 4ª auditoría). 248 tests. Ya **no** existe el target `FilePackrTests` en el `.pbxproj`.
   - Las clases @MainActor de `FilePackrModelTests` usan `setUp`/`tearDown` **`async`** (no
     síncronos) y **no llaman a `super`**: así compilan tanto en Xcode 26 como en el XCTest del
     runner de CI (Xcode 16), donde esos métodos son `nonisolated` y enviar `self` no-Sendable da
@@ -88,12 +88,21 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     app (`ArchiveFormat+App.swift`).
   - **`ArchiveCodec`** (protocolo + registro `ArchiveFormat.codec`): centraliza
     **leer** (`open` → `ArchiveReadResult`, refina `.gz`→`.tar.gz`) y **extraer una
-    entrada** (`entryData`) de cada formato. Antes era un `switch` repetido por el
-    documento. Codecs: `ZipCodec`, `TarCodec`, `SingleFileCodec`, `LibArchiveCodec`.
-    La **escritura** no va por aquí (rutas dispares: ver `ArchiveSaver`).
-  - **`VolumeStore`**: volúmenes sobre disco (`parts`/`gather`/`removeContinuations`/
-    `split(file:)` y `joinToTemporaryFile` —concatena las partes a un temporal mapeado
-    sin cargarlas en RAM), sobre el esquema de nombres de `Volumes`.
+    entrada** (`entryData`) de cada formato, y **extraer varias** (`extractAll`, un solo
+    recorrido con `onSkip` opcional para reportar el tamaño de las entradas saltadas —
+    solo lo usa `LibArchiveCodec`, cuyo iterador es secuencial). Antes era un `switch`
+    repetido por el documento. Codecs: `ZipCodec`, `TarCodec`, `SingleFileCodec`,
+    `LibArchiveCodec`. La **escritura** no va por aquí (rutas dispares: ver `ArchiveSaver`).
+  - **`ArchiveContainer`** (`.data(Data)` / `.rarVolumes([URL])`): el contenedor de un
+    archivo abierto, generalizado más allá de `Data` para los volúmenes RAR **nativos**
+    (WinRAR/`rar`, ver `RarVolumes`) — a diferencia del esquema propio de FilePackr, esos
+    no se pueden concatenar (cada volumen lleva su cabecera intercalada), así que se abren
+    con `archive_read_open_filenames` de libarchive. `RAR5TrailingServiceBlock` recorta un
+    bloque de servicio QuickOpen obsoleto que si no desincroniza el lector.
+  - **`VolumeStore`**: volúmenes **propios** de FilePackr sobre disco (`parts`/`gather`/
+    `removeContinuations`/`split(file:)` y `joinToTemporaryFile` —concatena las partes a un
+    temporal mapeado sin cargarlas en RAM), sobre el esquema de nombres de `Volumes`. No
+    confundir con `RarVolumes`/`ArchiveContainer.rarVolumes` (volúmenes RAR nativos, arriba).
   - Detección de formato en `ArchiveFormat`: `detectByExtension` (por nombre),
     `detectByMagic` (por firma) y `detect(from:contents:)` (extensión y, si no decide,
     firma). `openArchive` y la decisión abrir-vs-añadir caen a la firma si la extensión falla.
@@ -131,6 +140,82 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     (`archiveBaseName`, `localizedErrorMessage`).
 
 ## Hecho
+
+- **Sesión 2026-08-12 — el progreso ya no se congela al extraer un subconjunto de RAR/7z**
+  (commit `fix(progreso)` + `docs`): bug real, no solo teórico — arrastrar al Finder o
+  extraer solo un par de ficheros de un archivo grande dejaba la barra sin moverse durante
+  todo el tramo en que `libarchive` tenía que **saltar** (sin extraer) las entradas no
+  pedidas, porque ese salto no emitía ninguna señal de progreso aunque tenga coste real
+  (recorrido secuencial, sin acceso aleatorio; peor aún en 7z sólido). Arreglo: nuevo
+  callback `onSkip: ((Int64) -> Void)?` en `ArchiveCodec.extractAll`/`LibArchive.
+  extractEntries`/`ExportPlan.writeContents`, que reporta el tamaño sin comprimir de cada
+  entrada saltada; `ArchiveDocument.extract` y el `writePromiseTo` de `ArchiveOutlineView`
+  lo suman a `done` igual que los bytes escritos. El **total** también se corrige: con
+  `usesLibArchive` pasa a ser `max(plan.byteCount(), contentSize)` (antes solo contaba lo
+  pedido, así que `done` podía superar `total` y la fracción se disparaba). 3 tests nuevos
+  (`ArchiveCodecTests`, `LibArchiveFixtureTests`, `StreamingExtractionTests`) que fijan
+  cuántos bytes se reportan como saltados. **248 verdes**. Docs: nueva sección 7 "Librerías
+  externas" en `guion-presentacion.md` (qué resuelve cada dependencia del sistema y qué no)
+  + mención de "Volúmenes RAR nativos" en el recorrido de funcionalidades.
+
+- **Sesión 2026-08-09 — RAR5: bloque QuickOpen fantasma y volúmenes incompletos que
+  recuperan lo ya leído** (commits `b32cc44`, `a209db3`):
+  - **Entradas fantasma por un bloque QuickOpen obsoleto** (bug real, hallado con un archivo
+    real): un RAR5 editado con WinRAR puede dejar en el bloque de servicio QuickOpen (al
+    final del último volumen) restos de una versión **anterior** del archivo. La libarchive
+    del sistema no usa ese bloque (su lector lo salta sin más), pero al saltarlo se
+    **desincroniza** y reinterpreta esa caché obsoleta como si fueran entradas reales,
+    sustituyendo el listado correcto por decenas de entradas fantasma. Arreglo:
+    `RAR5TrailingServiceBlock` camina las cabeceras del volumen (sin descomprimir nada) para
+    localizar el bloque cuando encaja exactamente con el patrón "SERVICE justo antes de
+    ENDARC"; `LibArchive` lo recorta antes de abrir, tanto para un `.rar` suelto
+    (`archive_read_open_memory` con la longitud recortada) como para volúmenes nativos en
+    disco (nuevo `RARVolumeStream` sobre `archive_read_open2`, solo entra en juego cuando
+    hace falta recortar). Verificado además contra el archivo real que reveló el bug:
+    listado y extracción correctos (tamaño + SHA-256) de la entrada que cruza el límite
+    entre volúmenes y de la que queda pegada al bloque recortado.
+  - **Volúmenes RAR incompletos ya no pierden lo que sí se pudo leer**: `listEntries`
+    devuelve `truncated` cuando el corte cae a mitad de cabecera (típico de un multivolumen
+    al que le falta la última parte) en vez de lanzar y descartar todo lo leído hasta ahí.
+    `ArchiveDocument` distingue "no queda ni una entrada legible" (lanza
+    `rarVolumeSetIncomplete`) de "abrió parcial" (aviso persistente en naranja en la barra
+    de estado, no bloqueante, para no confundirlo con texto normal).
+
+- **Sesión 2026-08-08 — Volúmenes RAR nativos (WinRAR/`rar`) + progreso de apertura de ZIP
+  a spinner** (commits `f944f69`, `099cc9d`, `206153a`, `017229b`, `b6b5a30`):
+  - **Volúmenes RAR nativos**: hasta ahora FilePackr solo reconocía su **propio** esquema de
+    multivolumen (`nombre_001.ext`, concatenable a pelo); un RAR multivolumen real creado
+    por WinRAR/`rar` daba "No se pudo leer el archivo." porque se abría solo la primera
+    parte suelta, y concatenar esos volúmenes tampoco vale — cada uno lleva su propia
+    cabecera intercalada. Nuevo `RarVolumes` (detección de ambos esquemas de nombre:
+    moderno `nombre.part1.rar…` y legado `nombre.rar`+`.r00…`) + `archive_read_open_filenames`
+    de libarchive para abrir el conjunto real sin concatenar. El contenedor de un archivo
+    abierto se generaliza de `Data` a **`ArchiveContainer`** (casos `.data`/`.rarVolumes`),
+    propagado por `ArchiveReadResult`/`ArchiveCodec`/`ArchiveDocument`/`SavePayloadBuilder`/
+    `ExportPlan`, así que Extraer/Extraer todo/arrastrar al Finder funcionan sobre el
+    conjunto, no solo listar entradas. Fixture fabricado a mano
+    (`docs/fixtures/make_rar_volumes.py`, RAR4 *storing* partido en 2 volúmenes) sin
+    depender de `rar`/`unrar`. Dos hardenings inmediatos sobre lo anterior: el separador
+    moderno acepta también **guion bajo** (`nombre_part1.rar`, no solo el punto — lo que
+    marca el volumen es la cabecera interna, no el separador del nombre) y, si un `.rar`
+    suelto declara pertenecer a un conjunto pero las demás partes no se reconocen por
+    nombre (p. ej. el sufijo " (1)" que añade macOS al duplicar), el error ya no es el
+    genérico "No se pudo leer el archivo." sino uno explícito de partes que faltan; de paso
+    se desglosan otros motivos que compartían ese mensaje genérico (formato no reconocido,
+    archivo truncado vía `archive_error_string`, entrada que faltaba al extraer un lote).
+  - **Progreso al abrir un ZIP, dos iteraciones**: primero se sincronizó el reporte
+    (el hilo de fondo esperaba a que cada tick se aplicara antes de seguir, porque leer el
+    central directory es puro cálculo en memoria sin E/S que lo frene y los ticks se
+    encolaban y drenaban de golpe al final). Pero el síntoma real era otro: la lectura que
+    de verdad tarda (copiar la región del central directory a memoria) ocurre **antes** del
+    bucle que reportaba progreso, así que en disco lento esa fase no reportaba nada y el
+    bucle posterior (puro cálculo, <1 ms medido) disparaba todo el progreso de golpe al
+    final → la barra se quedaba pillada y saltaba a terminado, pareciendo un cuelgue. Como
+    esa fase no se puede subdividir en progreso útil, abrir un ZIP pasa a usar **spinner
+    indeterminado**, igual que RAR/7z/tar (se retira el reporter con semáforo, ya
+    innecesario). De paso, umbral de **300 ms** antes de mostrar el overlay de progreso en
+    general: si la operación termina antes, la vista nunca lo construye, así que no hay
+    overlay que parpadee en aperturas rápidas.
 
 - **Sesión 2026-08-03 (c) — volúmenes en 7z: NO era un fallo (verificado en la app)**:
   el usuario informó de que «al crear un 7z dividido en lotes los lotes no se realizan, se
@@ -409,6 +494,12 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   Diálogo Guardar con toggle "Dividir en volúmenes" + tamaño/unidad, por formato
   (`supportsVolumeSplit`). Al abrir cualquier parte se reúnen y concatenan; re-guardar
   conserva el troceo. Guardar como fichero único limpia los `_NNN` sobrantes.
+- **Volúmenes RAR nativos** (2026-08-08, `RarVolumes.swift`): además del esquema propio de
+  arriba, se **abren** (no se crean — RAR solo se lee) los multivolumen que crean WinRAR/
+  `rar`: moderno `nombre.part1.rar…` (separador punto o guion bajo) y legado `nombre.rar`+
+  `.r00…`. No se concatenan como el esquema propio (cada volumen lleva cabecera propia):
+  se abren con `archive_read_open_filenames` vía `ArchiveContainer.rarVolumes`. Un conjunto
+  al que le falta la última parte no se descarta entero (avisa, muestra lo leído).
 - **Pedir contraseña al abrir** un zip cifrado (de otra app): valida la clave
   extrayendo la primera entrada y la recuerda (`entryPassword`) para extraer/
   previsualizar/arrastrar. `ExportPlan.zipEntry` lleva la contraseña.
@@ -567,7 +658,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       cero-deps. ZIP+AES-256 ya cubre "archivo seguro". Confirmado en revisión externa (2026-06-21).
 - [x] ~~**CI: ampliar cobertura (tests de modelo + app)**~~ (HECHO 2026-07-01, sin esperar runner
       macOS 26: se hizo el código **portable a Xcode 16**, el del runner `macos-15`). El CI tiene
-      ahora dos jobs bloqueantes: `test` = `swift test` (suite completa **motor + modelo, 196**) y
+      ahora dos jobs bloqueantes: `test` = `swift test` (suite completa **motor + modelo, 248**) y
       `build-app` = `xcodebuild build` sin firma (la capa de vistas). Cómo se desbloqueó cada parte:
       (a) **`FilePackrModelTests`**: `setUp`/`tearDown` pasados a **`async`** y sin llamar a `super`
       (eliminado el mecanismo `FILEPACKR_SKIP_MODEL_TESTS`). (b) **App**: `@MainActor` explícito en las
@@ -703,6 +794,20 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   **sin cifrar**, pero **no descifra** RAR con contraseña —ni con la clave correcta— porque no
   incorpora el `unrar` propietario de RARLAB. Sí descifra ZIP (ZipCrypto/AES) y 7z. En RAR5 con
   solo datos cifrados libarchive ni siquiera indica `isEncrypted`. Ver `docs/fixtures/README.md`.
+  **Volúmenes RAR nativos SÍ soportados** (2026-08-08): además del esquema propio de FilePackr
+  (`Volumes`/`VolumeStore`, división por bytes concatenable), se reconocen los volúmenes que
+  crean WinRAR/`rar` — `RarVolumes.parts(for:)` detecta el esquema moderno
+  (`nombre.part1.rar…`, separador punto **o** guion bajo) y el legado (`nombre.rar`+`.r00…`).
+  A diferencia del esquema propio, estos **no** se concatenan (cada volumen lleva su propia
+  cabecera intercalada): se abren con `archive_read_open_filenames`, expuesto como el caso
+  `.rarVolumes` de `ArchiveContainer` (junto a `.data`). Un conjunto incompleto (falta la
+  última parte) no se descarta entero: `listEntries` devuelve lo leído hasta el corte
+  (`truncated`) y la app avisa en vez de fingir que está completo. **Bug real hallado y
+  corregido** (2026-08-09): un volumen RAR5 editado por WinRAR puede dejar en el bloque de
+  servicio QuickOpen (final del último volumen) restos de una versión anterior del archivo;
+  libarchive lo salta pero se desincroniza y lo reinterpreta como entradas reales
+  (fantasma). `RAR5TrailingServiceBlock` localiza y recorta ese bloque antes de abrir. Sigue
+  **NO soportado**: multivolumen nativo de **7z** (`.7z.001`).
 - Volúmenes: división **por bytes** (no spanning PKWARE nativo). La primera parte
   conserva el nombre base (`nombre.zip`) y las siguientes llevan `_NNN` antes de la
   extensión (`nombre_001.zip`, `nombre_002.zip`…). Reconstrucción = concatenar en
