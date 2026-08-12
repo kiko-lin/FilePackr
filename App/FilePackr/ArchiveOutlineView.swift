@@ -140,7 +140,7 @@ extension ArchiveOutlineView {
     // Xcode 26 lo infiere del SDK; Xcode 16 (CI) no, y sin esto la app no compila allí.
     @MainActor
     final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate,
-                             NSFilePromiseProviderDelegate, QLPreviewPanelDataSource {
+                             NSFilePromiseProviderDelegate, QLPreviewPanelDataSource, NSTextFieldDelegate {
         var doc: ArchiveDocument
         var onExtract: (FileNode) -> Void
         var onNeedPassword: () -> Void
@@ -302,6 +302,7 @@ extension ArchiveOutlineView {
             text.focusRingType = .none
             text.target = self
             text.action = #selector(nameEdited(_:))
+            text.delegate = self
             cell.addSubview(image)
             cell.addSubview(text)
             cell.imageView = image
@@ -448,7 +449,23 @@ extension ArchiveOutlineView {
 
         // MARK: - Renombrar
 
+        // `action` solo se dispara con Return/Tab (sendsActionOnEndEditing es false por
+        // defecto). Si el usuario confirma el renombrado haciendo clic en otra fila o fuera
+        // del outline, ese gesto no pasaba por aquí: el modelo nunca se actualizaba, no se
+        // marcaba el documento como modificado y el siguiente reciclado de la celda revertía
+        // el texto sin avisar. `controlTextDidEndEditing` sí se dispara siempre que termina la
+        // edición, sea cual sea el motivo, así que cubre ese caso; queda idempotente frente a
+        // `nameEdited` porque `doc.rename` no hace nada si el nombre ya coincide.
         @objc private func nameEdited(_ sender: NSTextField) {
+            commitRename(sender)
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField else { return }
+            commitRename(field)
+        }
+
+        private func commitRename(_ sender: NSTextField) {
             guard let outline else { return }
             let row = outline.row(for: sender)
             guard row >= 0, let node = outline.item(atRow: row) as? FileNode else { return }
