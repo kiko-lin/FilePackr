@@ -741,8 +741,8 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       `spctl`. Guía completa en `docs/distribution.md`. **PENDIENTE (usuario, requiere Apple
       Developer Program):** (1) certificado *Developer ID Application* en el llavero;
       (2) `xcrun notarytool store-credentials "FilePackr" …` con contraseña específica de app;
-      (3) `scripts/release.sh`; (4) prueba en frío del `.dmg`; (5) publicar (p. ej. GitHub
-      Releases). App Sandbox sigue **OFF** a propósito (solo haría falta para la App Store).
+      (3) `scripts/release.sh` (modo notarizado); (4) prueba en frío del `.dmg`. App Sandbox
+      sigue **OFF** a propósito (solo haría falta para la App Store).
       **Vía GRATUITA añadida (2026-07-01)**: `scripts/release.sh --unsigned` genera un `.dmg`
       con firma **ad-hoc** (sin certificado ni cuenta de pago), verificado aquí (BUILD SUCCEEDED
       + `.dmg` de 4,4 MB, app `valid on disk`); el usuario final lo autoriza con «Abrir
@@ -750,6 +750,12 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       **Team ID corregido**: el real de `kikolincor@gmail.com` es **`969HQC97L9`** (no
       `J5HQ9TN2HX`, que daba 403 en notarytool); actualizado en pbxproj + ExportOptions. Falta
       confirmar si esa cuenta está en el **programa de pago** (si no, solo la vía `--unsigned`).
+      **Publicado en GitHub Releases (2026-08-14)**: el tag `v1.0` original (y un `v1.1` suelto)
+      apuntaban a commits desincronizados entre local y remoto, y la release `v1.0` que existía
+      en GitHub estaba **vacía (sin `.dmg` adjunto)** — de ahí que no se encontrara la descarga.
+      Se borraron esa release y ambos tags, se reconstruyó el `.dmg --unsigned` desde `main`
+      (HEAD actual), y se republicó `v1.0` con el `.dmg` adjunto y el SHA-256 corregido en
+      `docs/release-notes-v1.0.md`. Sigue pendiente la vía notarizada (arriba).
 
 > Lo ya realizado vive en la sección **Hecho** (arriba) y en el historial de git; aquí solo
 > quedan objetivos **pendientes**.
