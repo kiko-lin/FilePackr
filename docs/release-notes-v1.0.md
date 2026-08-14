@@ -14,7 +14,7 @@ Interfaz nativa (SwiftUI + AppKit) con un navegador de ficheros tipo Finder.
 
 | Archivo | Descripción |
 |---|---|
-| **`FilePackr-1.0-unsigned.dmg`** | La aplicación (imagen de disco). **4,7 MB.** Universal: Intel + Apple Silicon. |
+| **[`FilePackr-1.0-unsigned.dmg`](https://github.com/kiko-lin/FilePackr/releases/download/v1.0/FilePackr-1.0-unsigned.dmg)** | La aplicación (imagen de disco). **4,7 MB.** Universal: Intel + Apple Silicon. |
 
 **Requisitos:** macOS 14 (Sonoma) o superior. Compatible con Mac Intel y Apple Silicon (binario universal).
 
@@ -34,7 +34,7 @@ shasum -a 256 FilePackr-1.0-unsigned.dmg
 
 ## Instalación
 
-1. Descarga **`FilePackr-1.0-unsigned.dmg`** y haz doble clic para montarlo.
+1. Descarga **[`FilePackr-1.0-unsigned.dmg`](https://github.com/kiko-lin/FilePackr/releases/download/v1.0/FilePackr-1.0-unsigned.dmg)** y haz doble clic para montarlo.
 2. Arrastra **FilePackr** a la carpeta **Aplicaciones**.
 3. Expulsa la imagen de disco.
 
