@@ -19,8 +19,8 @@ Proyecto Final del Máster — Francisco Javier Linares (`kikolincor@gmail.com`)
 |---|---|
 | **Código fuente** | https://github.com/kiko-lin/FilePackr |
 | **Despliegue / descarga** (app en funcionamiento) | [Release v1.0](https://github.com/kiko-lin/FilePackr/releases/tag/v1.0) (con el `.dmg`) |
-| **Presentación (slides)** | [`docs/FilePackr-presentacion.pptx`](docs/FilePackr-presentacion.pptx) · [PDF](docs/FilePackr-presentacion.pdf) _(URL pública pendiente)_ |
-| **Vídeo explicativo** | _pendiente_ ⏳ |
+| **Presentación (slides)** | [`docs/FilePackr-presentacion.pptx`](docs/FilePackr-presentacion.pptx) · [PDF](docs/FilePackr-presentacion.pdf) · [PDF (Drive)](https://drive.google.com/file/d/1LiGrJkfLCRO7AAzIK5kY_gcYcn9wztjt/view?usp=drive_link) |
+| **Vídeo explicativo** | [Ver vídeo](https://drive.google.com/file/d/1mvq1PesSwvw4mlBKnko2nUNY3BqfBGKB/view?usp=drive_link) |
 | **Usuario y contraseña de prueba** | N/A — la aplicación no tiene login |
 
 > **Nota sobre el «despliegue»:** FilePackr es una **aplicación de escritorio nativa

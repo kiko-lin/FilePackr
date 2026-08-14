@@ -14,14 +14,14 @@ Interfaz nativa (SwiftUI + AppKit) con un navegador de ficheros tipo Finder.
 
 | Archivo | Descripción |
 |---|---|
-| **`FilePackr-1.0-unsigned.dmg`** | La aplicación (imagen de disco). **4,6 MB.** Universal: Intel + Apple Silicon. |
+| **`FilePackr-1.0-unsigned.dmg`** | La aplicación (imagen de disco). **4,7 MB.** Universal: Intel + Apple Silicon. |
 
 **Requisitos:** macOS 14 (Sonoma) o superior. Compatible con Mac Intel y Apple Silicon (binario universal).
 
 **SHA-256** del DMG (para verificar la descarga):
 
 ```
-3236fa7cea3b3fbc556a137e728b244996e37efd53a8bde9c7443e77fa84575e
+5c713ad98d446782f4b6df4e6f4a2176719aa90241bc5f6f02765bce053d74f9
 ```
 
 Verifícalo tras descargar con:
