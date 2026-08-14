@@ -33,6 +33,18 @@ public enum ArchiveDocumentError: Error {
     case unrecognizedFormat
 }
 
+/// Resultado de la fase de detección de `ArchiveDocument.openArchive` (¿es parte de un
+/// volumen?, ¿qué formato es?): se calcula en un `Task.detached`, fuera del actor principal,
+/// porque tocar hermanos de fichero en una carpeta protegida (Descargas, Documentos…) sin
+/// consentimiento previo puede bloquear el hilo que llama hasta que el usuario responda al
+/// aviso del sistema — ver el comentario en `openArchive`.
+private struct ArchiveOpenDetection: Sendable {
+    let rarVolumes: [URL]?
+    let parts: [URL]
+    let baseURL: URL
+    let explicitFormat: ArchiveFormat?
+}
+
 /// Documento de trabajo: el árbol de elementos que acabará siendo un ZIP.
 /// Mantiene, si se abrió un ZIP existente, sus bytes originales para poder
 /// extraer o copiar entradas sin recomprimir.
@@ -149,33 +161,50 @@ public final class ArchiveDocument: ObservableObject {
     /// Abre un ZIP existente y muestra su contenido (sin descomprimirlo). La lectura
     /// y el parseo del índice van en segundo plano para no bloquear la interfaz.
     public func openArchive(_ url: URL, passphrase: String? = nil) async throws {
-        // ¿Conjunto RAR **nativo** (part1.rar/part2.rar… o .rar+.r00…)? Se abre vía la API de
-        // volúmenes de libarchive: no se puede concatenar a pelo, cada volumen lleva su propia
-        // cabecera intercalada (a diferencia del esquema propio de FilePackr, más abajo).
-        let rarVolumes = RarVolumes.parts(for: url)
-        // Si no, ¿forma parte de un juego de volúmenes del esquema propio? Reunimos las partes en
-        // orden; la primera (nombre.zip) da el nombre base y el formato.
-        let parts = rarVolumes == nil ? VolumeStore.parts(for: url) : []
-        let baseURL = rarVolumes?.first ?? parts.first ?? url
-        // Por extensión y, si no la reconoce, por la firma (magic bytes) de la cabecera. `nil`
-        // si NINGUNA de las dos reconoce nada — distinto de "explícitamente .zip" para poder
-        // avisar de formato no reconocido en vez de fingir que es un zip roto (más abajo).
-        let explicitFormat = ArchiveFormat.detectByExtension(baseURL)
-            ?? peekHeader(baseURL).flatMap(ArchiveFormat.detectByMagic)
-        let detected = explicitFormat ?? .zip
-        // Indeterminado siempre: leer el índice es pura CPU en memoria (imperceptible, confirmado
-        // por benchmark) salvo que el disco sea lento (externo/red), en cuyo caso el tiempo real se
-        // va en una única lectura del central directory *antes* de que el bucle por entrada pueda
-        // reportar nada — un % ahí no reflejaría el tiempo real, solo daría la falsa impresión de
-        // que se ha quedado colgada. Ver `ZipReader.listEntries`.
-        progress = ProgressState(kind: .opening(baseURL.lastPathComponent), fraction: nil)
+        // El overlay de "Abriendo…" sale ya, con el nombre del fichero pinchado: la detección de
+        // abajo (¿tiene hermanos de volumen?) también toca disco, y si la carpeta contenedora aún
+        // no tiene el consentimiento del usuario (p. ej. Descargas en macOS moderno, la primera vez
+        // que se abre algo de ahí), el sistema bloquea esa llamada hasta que el usuario responde al
+        // aviso de "FilePackr querría acceder a…". Por eso toda la detección va también dentro del
+        // `Task.detached`, fuera del hilo principal: si ese aviso queda tapado por otra ventana, la
+        // app sigue respondiendo (y el usuario puede mover ventanas para encontrarlo) en vez de dar
+        // la sensación de que se ha quedado colgada.
+        progress = ProgressState(kind: .opening(url.lastPathComponent), fraction: nil)
         defer { progress = nil }
         incompleteVolumes = false   // no arrastrar el aviso de una apertura anterior
 
         // Si venía troceado (esquema propio), limpiamos cualquier temporal de una apertura anterior.
         discardJoinedVolumesTemp()
-        // Red defensiva: restos de un guardado interrumpido por un cierre forzado anterior.
-        WorkFile.cleanStale(in: baseURL.deletingLastPathComponent())
+
+        let detection = await Task.detached(priority: .userInitiated) { () -> ArchiveOpenDetection in
+            // ¿Conjunto RAR **nativo** (part1.rar/part2.rar… o .rar+.r00…)? Se abre vía la API de
+            // volúmenes de libarchive: no se puede concatenar a pelo, cada volumen lleva su propia
+            // cabecera intercalada (a diferencia del esquema propio de FilePackr, más abajo).
+            let rarVolumes = RarVolumes.parts(for: url)
+            // Si no, ¿forma parte de un juego de volúmenes del esquema propio? Reunimos las partes en
+            // orden; la primera (nombre.zip) da el nombre base y el formato.
+            let parts = rarVolumes == nil ? VolumeStore.parts(for: url) : []
+            let baseURL = rarVolumes?.first ?? parts.first ?? url
+            // Por extensión y, si no la reconoce, por la firma (magic bytes) de la cabecera. `nil`
+            // si NINGUNA de las dos reconoce nada — distinto de "explícitamente .zip" para poder
+            // avisar de formato no reconocido en vez de fingir que es un zip roto (más abajo).
+            let explicitFormat = ArchiveFormat.detectByExtension(baseURL)
+                ?? Self.peekHeader(baseURL).flatMap(ArchiveFormat.detectByMagic)
+            // Red defensiva: restos de un guardado interrumpido por un cierre forzado anterior.
+            WorkFile.cleanStale(in: baseURL.deletingLastPathComponent())
+            return ArchiveOpenDetection(rarVolumes: rarVolumes, parts: parts, baseURL: baseURL, explicitFormat: explicitFormat)
+        }.value
+        let rarVolumes = detection.rarVolumes
+        let parts = detection.parts
+        let baseURL = detection.baseURL
+        let explicitFormat = detection.explicitFormat
+        let detected = explicitFormat ?? .zip
+        // El fichero pinchado ya podía ser el propio `baseURL` (caso normal): solo hace falta
+        // refrescar el overlay cuando la detección encontró que en realidad es la parte 2+ de un
+        // volumen y el nombre "real" a mostrar es el de la primera parte.
+        if baseURL != url {
+            progress = ProgressState(kind: .opening(baseURL.lastPathComponent), fraction: nil)
+        }
         let fallbackName = baseURL.deletingPathExtension().lastPathComponent
         let result: ArchiveReadResult
         let joinedTemp: URL?
@@ -768,11 +797,13 @@ public final class ArchiveDocument: ObservableObject {
     /// no la reconoce, por la firma de su cabecera (p. ej. un `.bin` que en realidad es 7z).
     private func isOpenableArchive(_ url: URL) -> Bool {
         if ArchiveFormat.isOpenableArchive(url) { return true }
-        return peekHeader(url).flatMap(ArchiveFormat.detectByMagic) != nil
+        return Self.peekHeader(url).flatMap(ArchiveFormat.detectByMagic) != nil
     }
 
     /// Lee unos pocos bytes de cabecera para la detección por firma. `nil` si no se puede.
-    private func peekHeader(_ url: URL) -> Data? {
+    /// `static` (no toca `self`) para poder llamarla también desde el `Task.detached` de
+    /// `openArchive`, fuera del actor principal.
+    nonisolated private static func peekHeader(_ url: URL) -> Data? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         return try? handle.read(upToCount: 512)

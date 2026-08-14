@@ -58,6 +58,11 @@ struct ContentView: View {
             }
         }
         .onOpenURL { url in
+            // Trae la app al frente antes de nada: abrir puede necesitar mirar la carpeta
+            // contenedora (hermanos de volumen) y, si es una carpeta protegida (Descargas…) sin
+            // consentimiento previo, macOS muestra un aviso de permiso que si esta ventana no
+            // está al frente puede acabar tapado por la que sí lo estuviera.
+            NSApp.activate(ignoringOtherApps: true)
             // La extensión Finder Sync reenvía por filepackr://open|extract (rutas en base64, «p»).
             // El doble clic del Finder llega como file://.
             if url.scheme == "filepackr" {
