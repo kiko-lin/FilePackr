@@ -309,18 +309,24 @@ public final class ArchiveDocument: ObservableObject {
     }
 
     /// Da la contraseña para las entradas cifradas del archivo abierto. La valida
-    /// extrayendo la primera entrada cifrada; devuelve `false` si es incorrecta.
-    public func provideEntryPassword(_ password: String) -> Bool {
-        // Si hay una entrada cifrada, validar la contraseña extrayéndola; si no la hay,
-        // aceptarla sin más. En ambos casos se aplican los mismos efectos (una sola vez).
-        if let archive = sourceArchive,
-           let node = firstEncryptedFile(in: roots),
-           case .entry(let entry) = node.source {
-            do {
-                _ = try format.codec.entryData(for: entry, in: archive, password: password)
-            } catch {
-                return false
-            }
+    /// descifrando una entrada cifrada; devuelve `false` si es incorrecta.
+    ///
+    /// La validación lee lo **mínimo** y va en segundo plano: antes extraía entera la primera
+    /// entrada cifrada en el hilo principal, y en un disco externo (lento) con un fichero grande
+    /// la app tardaba mucho en desbloquearse. Ahora usa la entrada cifrada **más pequeña** y, en
+    /// los formatos secuenciales (7z/RAR…), para en el primer trozo descifrado: RAR5 y 7z
+    /// comprueban la clave antes o al empezar a descomprimir. En ZIP (acceso directo) sí se
+    /// extrae entera, que con la más pequeña es barato y verifica también CRC/MAC.
+    public func provideEntryPassword(_ password: String) async -> Bool {
+        // Si hay una entrada cifrada, validar la contraseña con ella; si no la hay, aceptarla
+        // sin más. En ambos casos se aplican los mismos efectos (una sola vez).
+        if let archive = sourceArchive, let entry = smallestEncryptedEntry(in: roots) {
+            let codec = format.codec
+            let stopEarly = format.usesLibArchive
+            let valid = await Task.detached(priority: .userInitiated) {
+                Self.passwordDecrypts(password, entry: entry, archive: archive, codec: codec, stopEarly: stopEarly)
+            }.value
+            guard valid else { return false }
         }
         entryPassword = password
         savePassword = password   // misma contraseña para re-guardar cifrado
@@ -341,15 +347,35 @@ public final class ArchiveDocument: ObservableObject {
         }
     }
 
-    private func firstEncryptedFile(in nodes: [FileNode]) -> FileNode? {
-        for node in nodes {
-            if node.isDirectory {
-                if let found = firstEncryptedFile(in: node.children) { return found }
-            } else if case .entry(let entry) = node.source, entry.isEncrypted {
-                return node
+    /// Entrada cifrada de menor tamaño comprimido (la más barata de leer para validar la clave).
+    private func smallestEncryptedEntry(in nodes: [FileNode]) -> ArchiveEntry? {
+        var best: ArchiveEntry?
+        func walk(_ nodes: [FileNode]) {
+            for node in nodes {
+                if node.isDirectory { walk(node.children); continue }
+                guard case .entry(let entry) = node.source, entry.isEncrypted else { continue }
+                if best.map({ entry.compressedSize < $0.compressedSize }) ?? true { best = entry }
             }
         }
-        return nil
+        walk(nodes)
+        return best
+    }
+
+    /// `true` si `password` descifra `entry`. Con `stopEarly`, basta el primer trozo en claro.
+    nonisolated private static func passwordDecrypts(_ password: String, entry: ArchiveEntry,
+                                                     archive: ArchiveContainer, codec: any ArchiveCodec,
+                                                     stopEarly: Bool) -> Bool {
+        struct Enough: Error {}
+        do {
+            try codec.extract(entry, in: archive, password: password) { chunk in
+                if stopEarly, !chunk.isEmpty { throw Enough() }
+            }
+            return true
+        } catch is Enough {
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// Empieza un documento nuevo, aún sin guardar. El nombre mostrado ("Sin título")

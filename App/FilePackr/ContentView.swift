@@ -296,13 +296,16 @@ struct ContentView: View {
     }
 
     private func confirmEntryPassword() {
-        if doc.provideEntryPassword(entryPasswordInput) {
-            // Solo cerrar la hoja. La acción pendiente se ejecuta en `onDismiss`, ya cerrada la
-            // hoja, para no presentar el panel/hoja siguiente sobre una que aún se está cerrando.
-            showingEntryPassword = false
-        } else {
-            entryPasswordWrong = true
-            entryPasswordInput = ""
+        let password = entryPasswordInput
+        Task {
+            if await doc.provideEntryPassword(password) {
+                // Solo cerrar la hoja. La acción pendiente se ejecuta en `onDismiss`, ya cerrada la
+                // hoja, para no presentar el panel/hoja siguiente sobre una que aún se está cerrando.
+                showingEntryPassword = false
+            } else {
+                entryPasswordWrong = true
+                entryPasswordInput = ""
+            }
         }
     }
 

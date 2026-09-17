@@ -94,7 +94,7 @@ final class ExtractSession: ObservableObject {
         wrong = false
         while doc.requiresEntryPassword {                      // contraseña para extraer entradas
             guard let pw = await askPassword(wrong) else { return nil }
-            wrong = !doc.provideEntryPassword(pw)
+            wrong = !(await doc.provideEntryPassword(pw))
         }
         if cancelled { return nil }
 

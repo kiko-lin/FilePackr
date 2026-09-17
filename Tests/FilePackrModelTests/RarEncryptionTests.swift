@@ -66,8 +66,10 @@ final class RarEncryptionTests: XCTestCase {
         try await doc.openArchive(url)
         XCTAssertTrue(doc.requiresEntryPassword)
 
-        XCTAssertFalse(doc.provideEntryPassword("mala"))
-        XCTAssertTrue(doc.provideEntryPassword("clave123"))
+        let wrong = await doc.provideEntryPassword("mala")
+        XCTAssertFalse(wrong)
+        let right = await doc.provideEntryPassword("clave123")
+        XCTAssertTrue(right)
 
         let node = try XCTUnwrap(firstFile(in: doc.roots) { $0.name == "hola.txt" })
         let dest = tempDir.appendingPathComponent("hola.txt")
