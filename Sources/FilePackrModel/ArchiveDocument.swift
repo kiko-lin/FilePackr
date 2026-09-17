@@ -219,8 +219,12 @@ public final class ArchiveDocument: ObservableObject {
                 }
                 // Multivolumen (esquema propio): concatenar las partes a un temporal y **mapearlo**,
                 // en vez de cargar todas las partes en RAM (Volumes.join). Mono-volumen: mapear directo.
+                // `.alwaysMapped`, no `.mappedIfSafe`: este último NO mapea en discos externos y lee
+                // el fichero entero a RAM antes de listar (medido: 780 MB en USB → 5 s y +781 MB).
+                // Contrapartida: desconectar el disco a la fuerza con el archivo abierto puede cerrar
+                // la app (SIGBUS); expulsarlo normalmente no deja mientras esté en uso.
                 let temp = parts.count == 1 ? nil : try VolumeStore.joinToTemporaryFile(parts)
-                let data = try Data(contentsOf: temp ?? parts[0], options: .mappedIfSafe)
+                let data = try Data(contentsOf: temp ?? parts[0], options: .alwaysMapped)
                 // .rar suelto cuya propia cabecera dice pertenecer a un conjunto multivolumen
                 // (nombre no reconocido por `RarVolumes`, o hueco en la secuencia): distingue más
                 // abajo entre "falló del todo" (nada que mostrar) y "abrió parcial" (aviso suave).
