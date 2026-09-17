@@ -18,7 +18,7 @@ Proyecto Final del Máster — Francisco Javier Linares (`kikolincor@gmail.com`)
 | Entregable | Enlace |
 |---|---|
 | **Código fuente** | https://github.com/kiko-lin/FilePackr |
-| **Despliegue / descarga** (app en funcionamiento) | [Release v1.0](https://github.com/kiko-lin/FilePackr/releases/tag/v1.0) · [`.dmg`](https://github.com/kiko-lin/FilePackr/releases/download/v1.0/FilePackr-1.0-unsigned.dmg) · instrucciones de instalación en las [notas de la versión](docs/release-notes-v1.0.md) |
+| **Despliegue / descarga** (app en funcionamiento) | [Release v1.1](https://github.com/kiko-lin/FilePackr/releases/tag/v1.1) · [`.dmg`](https://github.com/kiko-lin/FilePackr/releases/download/v1.1/FilePackr-1.1-unsigned.dmg) · instrucciones de instalación en las [notas de la versión](docs/release-notes-v1.1.md) |
 | **Presentación (slides)** | [`docs/FilePackr-presentacion.pptx`](docs/FilePackr-presentacion.pptx) · [PDF](docs/FilePackr-presentacion.pdf) · [PDF (Drive)](https://drive.google.com/file/d/1LiGrJkfLCRO7AAzIK5kY_gcYcn9wztjt/view?usp=drive_link) |
 | **Vídeo explicativo** | [Ver vídeo](https://drive.google.com/file/d/1mvq1PesSwvw4mlBKnko2nUNY3BqfBGKB/view?usp=drive_link) |
 | **Usuario y contraseña de prueba** | N/A — la aplicación no tiene login |
@@ -26,11 +26,11 @@ Proyecto Final del Máster — Francisco Javier Linares (`kikolincor@gmail.com`)
 > **Nota sobre el «despliegue»:** FilePackr es una **aplicación de escritorio nativa
 > de macOS**, no un servicio web, por lo que su publicación en funcionamiento es un
 > **GitHub Release** con la app empaquetada en un
-> [`.dmg` descargable](https://github.com/kiko-lin/FilePackr/releases/download/v1.0/FilePackr-1.0-unsigned.dmg).
+> [`.dmg` descargable](https://github.com/kiko-lin/FilePackr/releases/download/v1.1/FilePackr-1.1-unsigned.dmg).
 > El evaluador puede **descargarla y usarla** directamente, o **compilarla desde el código**
 > (`⌘R` en Xcode) al ser open source. Requisitos: macOS 14 (Sonoma) o superior · Intel y
 > Apple Silicon (binario universal). **Dónde y cómo instalarla:** ver las
-> [notas de la versión](docs/release-notes-v1.0.md), que incluyen el enlace de descarga,
+> [notas de la versión](docs/release-notes-v1.1.md), que incluyen el enlace de descarga,
 > el SHA-256 para verificarla y los pasos de instalación (incluida la primera apertura,
 > al no estar notarizada).
 

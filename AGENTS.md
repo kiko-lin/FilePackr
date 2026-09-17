@@ -785,6 +785,10 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       Se borraron esa release y ambos tags, se reconstruyó el `.dmg --unsigned` desde `main`
       (HEAD actual), y se republicó `v1.0` con el `.dmg` adjunto y el SHA-256 corregido en
       `docs/release-notes-v1.0.md`. Sigue pendiente la vía notarizada (arriba).
+      **Release v1.1 (2026-09-17)**: `MARKETING_VERSION` 1.1 / build 2, `.dmg --unsigned` universal
+      (5,3 MB), notas en `docs/release-notes-v1.1.md`; README apunta a v1.1. Para la siguiente:
+      subir versión en el pbxproj (4 configs), `scripts/release.sh --unsigned`, notas con SHA-256,
+      actualizar enlaces del README, tag + `gh release create` con el `.dmg`.
 
 > Lo ya realizado vive en la sección **Hecho** (arriba) y en el historial de git; aquí solo
 > quedan objetivos **pendientes**.
