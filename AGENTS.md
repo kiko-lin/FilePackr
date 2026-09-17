@@ -22,7 +22,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 - **Tests**: `swift test` (rápido, sin Xcode) corre la **suite completa**: motor
   (`ArchiveBrowserTests`) + modelo (`FilePackrModelTests`, el documento/coordinadores, en SPM
-  tras la 4ª auditoría). 262 tests. Ya **no** existe el target `FilePackrTests` en el `.pbxproj`.
+  tras la 4ª auditoría). 264 tests. Ya **no** existe el target `FilePackrTests` en el `.pbxproj`.
   - Las clases @MainActor de `FilePackrModelTests` usan `setUp`/`tearDown` **`async`** (no
     síncronos) y **no llaman a `super`**: así compilan tanto en Xcode 26 como en el XCTest del
     runner de CI (Xcode 16), donde esos métodos son `nonisolated` y enviar `self` no-Sendable da
@@ -785,8 +785,10 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       Se borraron esa release y ambos tags, se reconstruyó el `.dmg --unsigned` desde `main`
       (HEAD actual), y se republicó `v1.0` con el `.dmg` adjunto y el SHA-256 corregido en
       `docs/release-notes-v1.0.md`. Sigue pendiente la vía notarizada (arriba).
-      **Release v1.1 (2026-09-17)**: `MARKETING_VERSION` 1.1 / build 2, `.dmg --unsigned` universal
-      (5,3 MB), notas en `docs/release-notes-v1.1.md`; README apunta a v1.1. Para la siguiente:
+      **Release v1.1 (2026-09-17)**: `MARKETING_VERSION` 1.1, `.dmg --unsigned` universal (5,3 MB),
+      notas en `docs/release-notes-v1.1.md`; README apunta a v1.1. **Republicada** el mismo día
+      (build 3) para incluir Quick Look tipo Finder y la validación rápida de contraseña: se borró
+      la release y el tag `v1.1` y se recrearon sobre el commit nuevo con el `.dmg` regenerado. Para la siguiente:
       subir versión en el pbxproj (4 configs), `scripts/release.sh --unsigned`, notas con SHA-256,
       actualizar enlaces del README, tag + `gh release create` con el `.dmg`.
 

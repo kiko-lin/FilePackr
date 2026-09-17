@@ -18,6 +18,12 @@ Interfaz nativa (SwiftUI + AppKit) con un navegador de ficheros tipo Finder.
 - **Apertura rápida en discos externos** — los archivos de un disco USB o externo se listan al
   instante. Antes la app los leía enteros en memoria antes de mostrar el contenido
   (por ejemplo, un ZIP de 780 MB tardaba varios segundos).
+- **Contraseña al instante** — aceptar la contraseña de un archivo cifrado ya no espera a leer
+  un fichero entero (se notaba mucho en discos externos) ni bloquea la app.
+- **Quick Look como en Finder** — con la previsualización abierta, ↑/↓ recorren la lista y la
+  vista previa sigue a la selección; con varios ficheros seleccionados, ←/→ pasan entre ellos.
+  Mientras un fichero grande se descomprime se muestra un indicador de carga (antes salía
+  «null») y la app no se queda bloqueada.
 - **Nueva ventana «Acerca de»** — más ancha y con los créditos y licencias de terceros.
 
 ---
@@ -33,7 +39,7 @@ Interfaz nativa (SwiftUI + AppKit) con un navegador de ficheros tipo Finder.
 **SHA-256** del DMG (para verificar la descarga):
 
 ```
-d489776412e478030e447d9f9dc6c8c9a2df1385bf24e13ca326522b9498a822
+39af108012ac213c385c6bd8796dfbe20a0c5676167c4c9f9818629794dc215f
 ```
 
 Verifícalo tras descargar con:
