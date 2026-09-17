@@ -15,13 +15,24 @@ struct FilePackrApp: App {
                 .environmentObject(AppSettings.shared)
         }
         .windowStyle(.hiddenTitleBar)   // sin barra de título "FilePackr"; el contenido sube
-        .commands { HelpCommands() }    // menú Ayuda (⌘?) → ventana de Ayuda
+        .commands {
+            AboutCommands()             // menú de la app → ventana Acerca de (ancha, con créditos)
+            HelpCommands()              // menú Ayuda (⌘?) → ventana de Ayuda
+        }
 
         // Ajustes en el menú de la app (⌘,), accesible siempre (también con la app vacía).
         Settings {
             SettingsView()
                 .environmentObject(AppSettings.shared)
         }
+
+        // Ventana Acerca de: una sola instancia, la abre `AboutCommands` (ver `AboutView`).
+        Window(loc("about.title"), id: AboutView.windowID) {
+            AboutView()
+        }
+        .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
+        .commandsRemoved()
 
         // Ventana de Ayuda: una sola instancia, la abre `HelpCommands` con `openWindow`.
         // `.commandsRemoved()` retira el ítem de menú que SwiftUI añade por su cuenta para

@@ -53,7 +53,7 @@ public enum VolumeStore {
         let handle = try FileHandle(forWritingTo: temp)
         do {
             for part in parts {
-                try handle.write(contentsOf: try Data(contentsOf: part, options: .mappedIfSafe))
+                try handle.write(contentsOf: try Data(contentsOf: part, options: .alwaysMapped))   // .mappedIfSafe copia a RAM en discos externos
             }
             try handle.close()
         } catch {

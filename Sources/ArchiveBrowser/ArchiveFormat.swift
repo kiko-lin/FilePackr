@@ -51,7 +51,8 @@ public enum ArchiveFormat: String, Sendable, CaseIterable, Hashable {
     /// `false` para formatos solo de lectura (rar propietario; cpio/lha/cab no se escriben).
     public var isWritable: Bool { ![.rar, .cpio, .lha, .cab].contains(self) }
 
-    /// Se lee/escribe con la libarchive del sistema (no en Swift puro).
+    /// Se lee con un motor **secuencial** externo (libarchive del sistema; RAR con unrar), no en
+    /// Swift puro: extraer un subconjunto obliga a recorrer el archivo entero.
     public var usesLibArchive: Bool { [.sevenZip, .rar, .iso, .cpio, .xar, .lha, .cab].contains(self) }
 
     /// Formato de escritura de libarchive (solo para los escribibles vía libarchive).

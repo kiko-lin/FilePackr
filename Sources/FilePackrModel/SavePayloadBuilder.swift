@@ -219,7 +219,7 @@ nonisolated struct SavePayloadBuilder: Sendable {
                     if let data = nodeData(node) {
                         items.append(ZipEntryInput(path: path, modifiedAt: node.modificationDate, source: .data(data)))
                     }
-                } else if case .data(let archive) = archive {   // ZIP: siempre .data, nunca .rarVolumes
+                } else if case .data(let archive) = archive {   // ZIP: siempre .data, nunca .rarFile
                     if entry.isEncrypted {
                         // Cifrada: descifrar a texto claro; el escritor la re-cifra (o no) limpiamente.
                         if let data = try? extractor.extractedData(for: entry, in: archive, password: entryPassword) {

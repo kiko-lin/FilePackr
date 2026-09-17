@@ -20,9 +20,10 @@ public struct ZipReader: Sendable {
     public init() {}
 
     /// Lista las entradas del ZIP en `url`. Usa mapeo en memoria para no copiar
-    /// el fichero entero cuando es grande.
+    /// el fichero entero cuando es grande (`.alwaysMapped`: `.mappedIfSafe` copia a RAM en
+    /// discos externos).
     public func listEntries(at url: URL) throws -> [ArchiveEntry] {
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        let data = try Data(contentsOf: url, options: .alwaysMapped)
         return try listEntries(in: data)
     }
 

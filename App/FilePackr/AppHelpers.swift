@@ -17,9 +17,6 @@ func archiveBaseName(_ name: String) -> String {
 /// Compartido por la vista y los Servicios del Finder.
 func localizedErrorMessage(_ error: Error) -> String {
     switch error {
-    case ArchiveDocumentError.encryptionUnsupported(let format):
-        // <TIPO> = acrónimo del formato (mismo en todo idioma): "RAR", etc.
-        return loc("error.encryptionUnsupported", format.fileExtension.uppercased())
     case ArchiveDocumentError.rarVolumeSetIncomplete:
         return loc("error.rarVolumeSetIncomplete")
     case ArchiveDocumentError.unrecognizedFormat:
@@ -37,6 +34,14 @@ func localizedErrorMessage(_ error: Error) -> String {
         case .passphraseRequired: return loc("error.needsPassword")
         case .wrongPassword: return loc("error.wrongPassword")
         case .writeFailed: return loc("error.writeFailed")
+        case .openFailed, .readFailed: return loc("error.readFailed")
+        case .truncated: return loc("error.truncated")
+        case .entryNotFound(let path): return loc("error.entryNotFound", path)
+        }
+    case let e as UnrarError:
+        switch e {
+        case .passphraseRequired: return loc("error.needsPassword")
+        case .wrongPassword: return loc("error.wrongPassword")
         case .openFailed, .readFailed: return loc("error.readFailed")
         case .truncated: return loc("error.truncated")
         case .entryNotFound(let path): return loc("error.entryNotFound", path)

@@ -2,6 +2,38 @@
   "sourceLanguage": "en",
   "strings": {
     "": {},
+    "about.title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About FilePackr"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acerca de FilePackr"
+          }
+        }
+      }
+    },
+    "about.version": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %1$@ (%2$@)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versión %1$@ (%2$@)"
+          }
+        }
+      }
+    },
     "a11y.operationFinished": {
       "extractionState": "stale",
       "localizations": {
@@ -643,22 +675,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "El fichero está dañado o no es un archivo válido."
-          }
-        }
-      }
-    },
-    "error.encryptionUnsupported": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "FilePackr can’t currently read encrypted %@ archives."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Actualmente FilePackr no puede leer archivos cifrados de tipo %@."
           }
         }
       }

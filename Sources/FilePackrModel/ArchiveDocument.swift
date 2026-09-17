@@ -17,11 +17,6 @@ public enum LockState: Equatable {
 
 /// Errores propios del documento (no del motor); la capa de vista los traduce.
 public enum ArchiveDocumentError: Error {
-    /// No podemos abrir/extraer un archivo **cifrado** de este formato. Hoy solo se da con **RAR**:
-    /// la libarchive del sistema no descifra RAR (ni RAR4 ni RAR5), solo el `unrar` propietario de
-    /// RARLAB, así que pedir contraseña no serviría (la correcta también falla). Ver `docs/fixtures/`.
-    /// Lleva el formato para que el mensaje diga de qué tipo se trata.
-    case encryptionUnsupported(format: ArchiveFormat)
     /// Un `.rar` suelto declara en su propia cabecera (`MHD_VOLUME`) que es parte de un conjunto
     /// multivolumen, pero no se encontraron las demás partes (ni por nombre reconocido — ver
     /// `RarVolumes` — ni ninguna) y la apertura falló del todo. Si hubiera abierto parcialmente,
@@ -103,7 +98,7 @@ public final class ArchiveDocument: ObservableObject {
     /// Temporal con las partes de un multivolumen (esquema propio de FilePackr) concatenadas,
     /// mapeado en `sourceArchive`. Se borra al cerrar o al abrir otro archivo. Los volúmenes RAR
     /// **nativos** (`RarVolumes`) no pasan por aquí: `sourceArchive` guarda directamente la lista
-    /// de ficheros (`.rarVolumes`) y no hay temporal que limpiar.
+    /// del primer volumen (`.rarFile`) y no hay temporal que limpiar.
     private var joinedVolumesTemp: URL?
 
     /// Hay un documento activo (abierto o nuevo empezado). Sentinela para no reiniciar
@@ -177,8 +172,8 @@ public final class ArchiveDocument: ObservableObject {
         discardJoinedVolumesTemp()
 
         let detection = await Task.detached(priority: .userInitiated) { () -> ArchiveOpenDetection in
-            // ¿Conjunto RAR **nativo** (part1.rar/part2.rar… o .rar+.r00…)? Se abre vía la API de
-            // volúmenes de libarchive: no se puede concatenar a pelo, cada volumen lleva su propia
+            // ¿Conjunto RAR **nativo** (part1.rar/part2.rar… o .rar+.r00…)? Se abre con unrar desde
+            // el primer volumen: no se puede concatenar a pelo, cada volumen lleva su propia
             // cabecera intercalada (a diferencia del esquema propio de FilePackr, más abajo).
             let rarVolumes = RarVolumes.parts(for: url)
             // Si no, ¿forma parte de un juego de volúmenes del esquema propio? Reunimos las partes en
@@ -212,21 +207,24 @@ public final class ArchiveDocument: ObservableObject {
         do {
             let loaded = try await Task.detached(priority: .userInitiated) { () -> (ArchiveReadResult, URL?, Bool) in
                 if let rarVolumes {
-                    // Sin fichero temporal: la lista de volúmenes ya es el "container". El nombre
-                    // reconoce una secuencia contigua, pero eso no garantiza que sea el conjunto
-                    // COMPLETO (podría faltar el último volumen) — de ahí que también miremos
-                    // `truncated` aquí, igual que en el camino de abajo. Si encima no queda ni una
-                    // entrada legible, no hay nada que mostrar: mismo trato que un `.rar` suelto sin
-                    // nada rescatable.
-                    let (entries, _, truncated) = try LibArchive.listEntries(volumes: rarVolumes, passphrase: passphrase)
+                    // Sin fichero temporal: unrar abre el primer volumen y encuentra él solo los
+                    // siguientes. El nombre reconoce una secuencia contigua, pero eso no garantiza
+                    // que sea el conjunto COMPLETO (podría faltar el último volumen) — de ahí que
+                    // también miremos `truncated`. Si encima no queda ni una entrada legible, no
+                    // hay nada que mostrar: mismo trato que un `.rar` suelto sin nada rescatable.
+                    let (entries, _, truncated) = try Unrar.listEntries(at: rarVolumes[0], passphrase: passphrase)
                     if entries.isEmpty { throw ArchiveDocumentError.rarVolumeSetIncomplete }
-                    let result = ArchiveReadResult(format: .rar, container: .rarVolumes(rarVolumes), entries: entries, truncated: truncated)
+                    let result = ArchiveReadResult(format: .rar, container: .rarFile(rarVolumes[0]), entries: entries, truncated: truncated)
                     return (result, nil, truncated)
                 }
                 // Multivolumen (esquema propio): concatenar las partes a un temporal y **mapearlo**,
                 // en vez de cargar todas las partes en RAM (Volumes.join). Mono-volumen: mapear directo.
+                // `.alwaysMapped`, no `.mappedIfSafe`: este último NO mapea en discos externos y lee
+                // el fichero entero a RAM antes de listar (medido: 780 MB en USB → 5 s y +781 MB).
+                // Contrapartida: desconectar el disco a la fuerza con el archivo abierto puede cerrar
+                // la app (SIGBUS); expulsarlo normalmente no deja mientras esté en uso.
                 let temp = parts.count == 1 ? nil : try VolumeStore.joinToTemporaryFile(parts)
-                let data = try Data(contentsOf: temp ?? parts[0], options: .mappedIfSafe)
+                let data = try Data(contentsOf: temp ?? parts[0], options: .alwaysMapped)
                 // .rar suelto cuya propia cabecera dice pertenecer a un conjunto multivolumen
                 // (nombre no reconocido por `RarVolumes`, o hueco en la secuencia): distingue más
                 // abajo entre "falló del todo" (nada que mostrar) y "abrió parcial" (aviso suave).
@@ -236,15 +234,25 @@ public final class ArchiveDocument: ObservableObject {
                 // definición falta el resto del conjunto.
                 let isVolumePart = detected == .rar && RarVolumes.isMultiVolumePart(data)
                 do {
-                    let r = try detected.codec.open(data, fallbackName: fallbackName,
+                    let r: ArchiveReadResult
+                    if detected == .rar {
+                        // unrar solo abre ficheros: se le pasa el `.rar` real (o el temporal unido).
+                        let rarURL = temp ?? parts[0]
+                        let (entries, _, truncated) = try Unrar.listEntries(at: rarURL, passphrase: passphrase)
+                        r = ArchiveReadResult(format: .rar, container: .rarFile(rarURL), entries: entries, truncated: truncated)
+                    } else {
+                        r = try detected.codec.open(data, fallbackName: fallbackName,
                                                     passphrase: passphrase, progress: nil)
+                    }
                     // Sin ni una entrada legible: nada que mostrar, tratarlo igual que si hubiera
                     // lanzado (el `catch` de abajo limpia el temporal y lo convierte en el error
                     // adecuado).
                     if isVolumePart, r.entries.isEmpty { throw ArchiveDocumentError.rarVolumeSetIncomplete }
-                    return (r, temp, isVolumePart)
+                    return (r, temp, isVolumePart || r.truncated)
                 } catch {
                     if let temp { try? FileManager.default.removeItem(at: temp) }
+                    // Problema de contraseña: no es un volumen incompleto ni un formato desconocido.
+                    if let e = error as? UnrarError, e == .passphraseRequired || e == .wrongPassword { throw error }
                     if isVolumePart { throw ArchiveDocumentError.rarVolumeSetIncomplete }
                     if explicitFormat == nil { throw ArchiveDocumentError.unrecognizedFormat }
                     throw error
@@ -254,10 +262,11 @@ public final class ArchiveDocument: ObservableObject {
             joinedTemp = loaded.1
             incompleteVolumesResult = loaded.2
         } catch let error as LibArchiveError where error == .passphraseRequired {
-            // RAR con cabeceras cifradas: libarchive NO descifra RAR (ni con la clave correcta),
-            // así que pedir contraseña sería un bucle sin salida. Avisar de que no se soporta.
-            if detected == .rar { throw ArchiveDocumentError.encryptionUnsupported(format: detected) }
-            // 7z con cabeceras cifradas: sí sabemos descifrar → pedir contraseña para abrir.
+            // 7z con cabeceras cifradas → pedir contraseña para abrir.
+            lockState = .needsOpenPassword(url)
+            return
+        } catch let error as UnrarError where error == .passphraseRequired {
+            // RAR con cabeceras cifradas → pedir contraseña para abrir.
             lockState = .needsOpenPassword(url)
             return
         }
@@ -272,7 +281,7 @@ public final class ArchiveDocument: ObservableObject {
         documentName = baseURL.lastPathComponent
         hasActiveDocument = true
         entryPassword = passphrase
-        // ZIP y 7z pueden tener entradas cifradas; si no dimos contraseña al abrir,
+        // ZIP, 7z y RAR pueden tener entradas cifradas; si no dimos contraseña al abrir,
         // se pedirá al extraer/previsualizar. tar/gz/xz/bz2 nunca cifran.
         let entriesLocked = passphrase == nil
             && (result.format == .zip || result.format.usesLibArchive)
@@ -320,7 +329,7 @@ public final class ArchiveDocument: ObservableObject {
         return true
     }
 
-    /// Da la contraseña para **abrir** un 7z con cabeceras cifradas. Reintenta la
+    /// Da la contraseña para **abrir** un 7z/RAR con cabeceras cifradas. Reintenta la
     /// apertura; devuelve `false` si es incorrecta (sigue pidiéndola).
     public func provideOpenPassword(_ password: String) async -> Bool {
         guard case .needsOpenPassword(let url) = lockState else { return false }
@@ -603,11 +612,6 @@ public final class ArchiveDocument: ObservableObject {
                     Task { @MainActor in self.progress?.fraction = fraction }
                 }, isCancelled: { token.isCancelled })
             }.value
-        } catch let e as LibArchiveError where format == .rar && (e == .wrongPassword || e == .passphraseRequired) {
-            // RAR con solo los datos cifrados (cabeceras en claro): se abrió y listó sin señal de
-            // cifrado, pero libarchive no descifra RAR → falla aquí. Mensaje claro en vez de
-            // "contraseña incorrecta" (que confunde: el usuario nunca escribió ninguna).
-            throw ArchiveDocumentError.encryptionUnsupported(format: format)
         }
     }
 
