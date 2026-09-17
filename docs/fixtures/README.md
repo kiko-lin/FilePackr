@@ -41,10 +41,9 @@ de RARLAB (contraseña real `clave123` donde aplica):
 | `enc-rar5-headers.rar`   | `rar a -ma5 -hpclave123`                | cifrado de datos **y** cabeceras    |
 | `enc-rar5-data.rar`      | `rar a -ma5 -pclave123`                 | cifrado de solo datos               |
 
-> **Limitación verificada**: la libarchive del sistema **no descifra RAR** (ni RAR4 ni RAR5), solo
-> el `unrar` propietario. Un RAR5 cifrado con la clave **correcta** sigue fallando en el motor,
-> mientras que `unrar -pclave123` sí lo extrae. Los tests `testRar5Encrypted*` fijan esta conducta.
-> RAR **sin cifrar** (incl. RAR5 comprimido) sí se lee y extrae.
+> **libarchive no descifra RAR** (ni RAR4 ni RAR5, ni con la clave correcta): los tests
+> `LibArchiveFixtureTests.testRar5Encrypted*` fijan esa limitación. Por eso la app lee RAR con
+> unrar vendorizado (`UnrarTests`, `RarEncryptionTests`), que sí los descifra con `clave123`.
 >
 > Nota: RAR 7 ya **no crea** archivos RAR4 (`-ma4` retirado); por eso el fixture RAR4 se fabrica
 > a mano. Y crear estos requiere el `rar` de RARLAB (no viene con macOS, no reproducible del todo
@@ -55,7 +54,7 @@ de RARLAB (contraseña real `clave123` donde aplica):
 | Fixture                              | Cómo                                | Qué prueba                                   |
 |---------------------------------------|--------------------------------------|-----------------------------------------------|
 | `volumes.part1.rar`/`volumes.part2.rar` | `docs/fixtures/make_rar_volumes.py` | esquema moderno (`nombre.partN.rar`)          |
-| `volumes.rar`/`volumes.r00`           | mismos bytes, renombrados            | esquema legado (`nombre.rar`+`.r00`…)         |
+| `volumes.rar`/`volumes.r00`           | mismo script, sin `--new-numbering`  | esquema legado (`nombre.rar`+`.r00`…)         |
 
 RAR 4.x (*storing*, 0x30) fabricado a mano igual que `sample.rar`, pero partido en **2
 volúmenes**: `partido.txt` queda partido entre ambos (banderas `LHD_SPLIT_AFTER`/
@@ -66,11 +65,15 @@ intercalada, que es justo lo que `archive_read_open_filenames` (y no `Volumes.jo
 saltar. Verificado leyendo con `LibArchive.listEntries(volumes:)`/`extractEntries(volumes:)`
 antes de fijar el fixture — ver `LibArchiveFixtureTests.testRarVolumes*`.
 
+Las dos parejas solo difieren en `MHD_NEWNUMBERING` (0x0010) del `MAIN_HEAD`: WinRAR lo pone
+con nombres `partN`, y **unrar** lo usa para deducir el nombre del siguiente volumen (sin él
+buscaría `volumes.part1.r00`). libarchive lo ignora porque recibe la lista de ficheros. Ver
+`UnrarTests.testVolumes*`.
+
 Regenerar:
 ```sh
-python3 docs/fixtures/make_rar_volumes.py Tests/ArchiveBrowserTests/Fixtures/volumes.part1.rar Tests/ArchiveBrowserTests/Fixtures/volumes.part2.rar
-cp Tests/ArchiveBrowserTests/Fixtures/volumes.part1.rar Tests/ArchiveBrowserTests/Fixtures/volumes.rar
-cp Tests/ArchiveBrowserTests/Fixtures/volumes.part2.rar Tests/ArchiveBrowserTests/Fixtures/volumes.r00
+python3 docs/fixtures/make_rar_volumes.py --new-numbering Tests/ArchiveBrowserTests/Fixtures/volumes.part1.rar Tests/ArchiveBrowserTests/Fixtures/volumes.part2.rar
+python3 docs/fixtures/make_rar_volumes.py Tests/ArchiveBrowserTests/Fixtures/volumes.rar Tests/ArchiveBrowserTests/Fixtures/volumes.r00
 ```
 (y copiar los cuatro ficheros también a `Tests/FilePackrModelTests/Fixtures/`, que tiene su
 propio target de recursos — ver `Package.swift`).

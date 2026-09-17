@@ -647,22 +647,6 @@
         }
       }
     },
-    "error.encryptionUnsupported": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "FilePackr can’t currently read encrypted %@ archives."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Actualmente FilePackr no puede leer archivos cifrados de tipo %@."
-          }
-        }
-      }
-    },
     "error.entryNotFound": {
       "localizations": {
         "en": {

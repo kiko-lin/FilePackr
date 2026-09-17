@@ -4,14 +4,24 @@ lectura multivolumen nativa de libarchive (`archive_read_open_filenames`). Un fi
 ("partido.txt") queda partido entre los dos volumenes (LHD_SPLIT_BEFORE/AFTER); un segundo
 fichero ("entero.txt") vive entero en el segundo volumen, para ejercitar varias entradas.
 
-Uso: make_rar_volumes.py <vol1.rar> <vol2.rar>
+Uso: make_rar_volumes.py [--new-numbering] <vol1.rar> <vol2.rar>
+
+`--new-numbering` marca MHD_NEWNUMBERING en la cabecera principal, como hace WinRAR con los
+nombres `nombre.part1.rar`: unrar lo usa para deducir el nombre del siguiente volumen (sin el
+flag buscaria `nombre.part1.r00`). libarchive lo ignora (recibe la lista de ficheros).
 """
 import struct, sys, binascii
+
+args = sys.argv[1:]
+NEW_NUMBERING = "--new-numbering" in args
+args = [a for a in args if a != "--new-numbering"]
+MAIN_FLAGS_EXTRA = 0x0010 if NEW_NUMBERING else 0
 
 def crc32(data: bytes) -> int:
     return binascii.crc32(data) & 0xFFFFFFFF
 
 MHD_VOLUME = 0x0001
+MHD_NEWNUMBERING = 0x0010
 LHD_SPLIT_BEFORE = 0x0001
 LHD_SPLIT_AFTER = 0x0002
 LONG_BLOCK = 0x8000
@@ -61,20 +71,20 @@ assert part1 and part2
 
 # --- Volumen 1: marcador + MAIN_HEAD(MHD_VOLUME) + FILE_HEAD(partido.txt, SPLIT_AFTER) + ENDARC ---
 vol1 = marker()
-vol1 += main_head(MHD_VOLUME)
+vol1 += main_head(MHD_VOLUME | MAIN_FLAGS_EXTRA)
 vol1 += file_head(SPLIT_NAME, LHD_SPLIT_AFTER, len(part1), len(SPLIT_CONTENT), SPLIT_CONTENT) + part1
 vol1 += endarc(0x4000 | 0x0001)   # end-of-volume, no es el ultimo volumen (0x0001 = EARC_NEXT_VOLUME)
 
 # --- Volumen 2: marcador + MAIN_HEAD(MHD_VOLUME) + FILE_HEAD(partido.txt, SPLIT_BEFORE) + resto
 #     + FILE_HEAD(entero.txt) + ENDARC (ultimo volumen) ---
 vol2 = marker()
-vol2 += main_head(MHD_VOLUME)
+vol2 += main_head(MHD_VOLUME | MAIN_FLAGS_EXTRA)
 vol2 += file_head(SPLIT_NAME, LHD_SPLIT_BEFORE, len(part2), len(SPLIT_CONTENT), SPLIT_CONTENT) + part2
 vol2 += file_head(WHOLE_NAME, 0, len(WHOLE_CONTENT), len(WHOLE_CONTENT), WHOLE_CONTENT) + WHOLE_CONTENT
 vol2 += endarc(0x4000)
 
-with open(sys.argv[1], "wb") as f:
+with open(args[0], "wb") as f:
     f.write(vol1)
-with open(sys.argv[2], "wb") as f:
+with open(args[1], "wb") as f:
     f.write(vol2)
-print(f"escrito {sys.argv[1]} ({len(vol1)} bytes) y {sys.argv[2]} ({len(vol2)} bytes)")
+print(f"escrito {args[0]} ({len(vol1)} bytes) y {args[1]} ({len(vol2)} bytes)")

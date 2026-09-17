@@ -1,17 +1,16 @@
 import Foundation
 
 /// Origen de los bytes de un contenedor ya abierto, a conservar para extraer entradas después.
-/// Casi siempre son bytes en memoria (`.data`, mapeados o cargados); un conjunto RAR nativo
-/// multivolumen (`.rarVolumes`) no se puede representar como un único `Data` — cada volumen
-/// lleva su propia cabecera intercalada — así que se conserva como la lista de ficheros y se
-/// reabre con `archive_read_open_filenames` cada vez que hace falta leer de él.
+/// Casi siempre son bytes en memoria (`.data`, mapeados o cargados). RAR es la excepción
+/// (`.rarFile`): unrar solo abre ficheros, así que se conserva la URL del `.rar` en disco (el
+/// primer volumen si es multivolumen; unrar encuentra solo los siguientes) y se reabre cada vez.
 public enum ArchiveContainer: Sendable {
     case data(Data)
-    case rarVolumes([URL])
+    case rarFile(URL)
 }
 
-/// Un codec recibió un `ArchiveContainer` que no sabe interpretar. Solo `LibArchiveCodec`
-/// produce y consume `.rarVolumes`; el resto de codecs solo ven `.data` en la práctica.
+/// Un codec recibió un `ArchiveContainer` que no sabe interpretar. Solo `RarCodec` consume
+/// `.rarFile`; el resto de codecs solo ven `.data` en la práctica.
 struct UnsupportedContainerError: Error {}
 
 /// Resultado de abrir un contenedor: el formato (posiblemente **refinado** —p. ej. un
@@ -65,7 +64,7 @@ public protocol ArchiveCodec: Sendable {
     /// `streamEntries`) y `LibArchiveCodec` (7z sólido y compañía, un pase con `extractEntries`).
     ///
     /// `onSkip`, si se da, recibe el tamaño sin comprimir de cada entrada que el recorrido tiene
-    /// que atravesar sin extraerla (no pedida): solo lo usa `LibArchiveCodec`, cuyo iterador es
+    /// que atravesar sin extraerla (no pedida): solo lo usan `LibArchiveCodec` y `RarCodec`, cuyo iterador es
     /// secuencial y sin acceso aleatorio, así que ese recorrido tiene coste real aunque no emita
     /// bytes de salida — sin la señal, extraer solo un par de ficheros de un RAR grande deja la
     /// barra de progreso congelada mientras se salta el resto.
@@ -136,7 +135,9 @@ public extension ArchiveFormat {
                                    decompress: { try Bzip2.decompress($0) },
                                    streamDecompress: { try Bzip2.decompress($0, sink: $1) },
                                    entries: { Bzip2.entries(in: $0, fallbackName: $1) })
-        case .sevenZip, .rar, .iso, .cpio, .xar, .lha, .cab:
+        case .rar:
+            return RarCodec()
+        case .sevenZip, .iso, .cpio, .xar, .lha, .cab:
             return LibArchiveCodec(format: self)
         }
     }
@@ -289,7 +290,7 @@ struct SingleFileCodec: ArchiveCodec {
     }
 }
 
-/// Formatos que pasan por la libarchive del sistema (7z/rar/iso/cpio/xar/lha/cab).
+/// Formatos que pasan por la libarchive del sistema (7z/iso/cpio/xar/lha/cab).
 struct LibArchiveCodec: ArchiveCodec {
     let format: ArchiveFormat
 
@@ -300,24 +301,14 @@ struct LibArchiveCodec: ArchiveCodec {
     }
 
     func entryData(for entry: ArchiveEntry, in container: ArchiveContainer, password: String?) throws -> Data {
-        switch container {
-        case .data(let data):
-            return try LibArchive.extractEntry(path: entry.path, in: data, passphrase: password)
-        case .rarVolumes(let volumes):
-            var out = Data()
-            try LibArchive.extractEntry(path: entry.path, volumes: volumes, passphrase: password) { out.append($0) }
-            return out
-        }
+        guard case .data(let data) = container else { throw UnsupportedContainerError() }
+        return try LibArchive.extractEntry(path: entry.path, in: data, passphrase: password)
     }
 
     func extract(_ entry: ArchiveEntry, in container: ArchiveContainer, password: String?,
                  sink: (Data) throws -> Void) throws {
-        switch container {
-        case .data(let data):
-            try LibArchive.extractEntry(path: entry.path, in: data, passphrase: password, sink: sink)
-        case .rarVolumes(let volumes):
-            try LibArchive.extractEntry(path: entry.path, volumes: volumes, passphrase: password, sink: sink)
-        }
+        guard case .data(let data) = container else { throw UnsupportedContainerError() }
+        try LibArchive.extractEntry(path: entry.path, in: data, passphrase: password, sink: sink)
     }
 
     /// Un **solo recorrido** para todo el lote. libarchive es un iterador secuencial (no acceso
@@ -327,16 +318,45 @@ struct LibArchiveCodec: ArchiveCodec {
     func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
                     onSkip: ((Int64) -> Void)?,
                     place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
+        guard case .data(let data) = container else { throw UnsupportedContainerError() }
         let byPath = Dictionary(entries.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
-        func resolve(_ path: String) throws -> ((Data) throws -> Void)? {
+        try LibArchive.extractEntries(Array(byPath.keys), in: data, passphrase: password, onSkip: onSkip) { path in
             guard let entry = byPath[path] else { return nil }
             return try place(entry)
         }
-        switch container {
-        case .data(let data):
-            try LibArchive.extractEntries(Array(byPath.keys), in: data, passphrase: password, onSkip: onSkip, place: resolve)
-        case .rarVolumes(let volumes):
-            try LibArchive.extractEntries(Array(byPath.keys), volumes: volumes, passphrase: password, onSkip: onSkip, place: resolve)
+    }
+}
+
+/// RAR vía unrar (vendorizado): a diferencia de libarchive, **descifra**. Trabaja sobre el fichero
+/// en disco (`.rarFile`), no sobre bytes: `open(_ data:)` no aplica y el documento abre con
+/// `Unrar.listEntries(at:)` directamente.
+struct RarCodec: ArchiveCodec {
+    func open(_ data: Data, fallbackName: String, passphrase: String?,
+              progress: ((Double) -> Void)?) throws -> ArchiveReadResult {
+        throw UnsupportedContainerError()
+    }
+
+    func entryData(for entry: ArchiveEntry, in container: ArchiveContainer, password: String?) throws -> Data {
+        var out = Data()
+        try extract(entry, in: container, password: password) { out.append($0) }
+        return out
+    }
+
+    func extract(_ entry: ArchiveEntry, in container: ArchiveContainer, password: String?,
+                 sink: (Data) throws -> Void) throws {
+        guard case .rarFile(let url) = container else { throw UnsupportedContainerError() }
+        try Unrar.extractEntry(path: entry.path, at: url, passphrase: password, sink: sink)
+    }
+
+    /// Un **solo recorrido** (RAR sólido: mismo motivo que `LibArchiveCodec.extractAll`).
+    func extractAll(_ entries: [ArchiveEntry], in container: ArchiveContainer, password: String?,
+                    onSkip: ((Int64) -> Void)?,
+                    place: (ArchiveEntry) throws -> ((Data) throws -> Void)?) throws {
+        guard case .rarFile(let url) = container else { throw UnsupportedContainerError() }
+        let byPath = Dictionary(entries.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+        try Unrar.extractEntries(Array(byPath.keys), at: url, passphrase: password, onSkip: onSkip) { path in
+            guard let entry = byPath[path] else { return nil }
+            return try place(entry)
         }
     }
 }

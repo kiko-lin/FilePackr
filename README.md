@@ -41,7 +41,8 @@ Proyecto Final del Máster — Francisco Javier Linares (`kikolincor@gmail.com`)
 | ZIP | `.zip` | propio (Swift) | ✅ (+ZIP64, cifrado) | ✅ |
 | tar y compresores | `.tar` `.tar.gz` `.tar.xz` `.tar.bz2` `.gz` `.xz` `.bz2` | Swift puro / `Compression` / `libbz2` | ✅ | ✅ |
 | libarchive | `.7z` `.iso` `.xar`/`.pkg` | libarchive del sistema | ✅ | ✅ |
-| libarchive (solo lectura) | `.rar` `.cpio` `.lha`/`.lzh` `.cab` | libarchive del sistema | ✅ | — |
+| RAR (solo lectura) | `.rar` | unrar de RARLAB (vendorizado) | ✅ (cifrado, multivolumen) | — |
+| libarchive (solo lectura) | `.cpio` `.lha`/`.lzh` `.cab` | libarchive del sistema | ✅ | — |
 
 Abrir un archivo en un formato y **guardarlo en otro** reconstruye el contenido.
 
@@ -93,7 +94,8 @@ FilePackr/                            (raíz del repo; remoto: github.com/kiko-l
 │   │   ├── ArchiveEntry.swift         entrada neutral (+ bloque ZIP opcional)
 │   │   ├── ZipReader / ZipExtractor / ZipWriter / ZipCrypto / ZipAES / Deflate / CRC32
 │   │   ├── Tar / Gzip / Xz / Bzip2    tar y compresores (Swift puro / Compression / libbz2)
-│   │   ├── LibArchive.swift           puente a la libarchive del sistema (7z/rar/iso/…)
+│   │   ├── LibArchive.swift           puente a la libarchive del sistema (7z/iso/xar/…)
+│   │   ├── Unrar.swift                puente a unrar (RAR, incluido cifrado)
 │   │   ├── RarVolumes.swift           detecta volúmenes RAR nativos (WinRAR/`rar`, no concatenables)
 │   │   └── Volumes / VolumeStore      troceado propio por bytes (en memoria / en disco)
 │   ├── FilePackrModel/               capa de modelo de la app (sin vistas; testeable por CLI)
@@ -103,6 +105,7 @@ FilePackr/                            (raíz del repo; remoto: github.com/kiko-l
 │   │   ├── OperationCoordinators.swift  coordinadores de añadir / extraer / guardar
 │   │   └── AppSettings.swift          ajustes (tema, formato/cifrado por defecto; idioma = el del sistema)
 │   └── Cbz2 / Carchive / Cz / Clzma  systemLibrary → libbz2 / libarchive / zlib / liblzma del sistema
+│   └── CUnrar                        unrar de RARLAB vendorizado (unrar/) + capa C fp_unrar
 ├── Tests/
 │   ├── ArchiveBrowserTests/          tests del motor (swift test; interop opcional zip/unzip, pyzipper)
 │   └── FilePackrModelTests/          tests del modelo (documento + coordinadores; los corre `swift test`)
@@ -163,6 +166,12 @@ El hardened runtime ya está activado y el pipeline listo. Guía paso a paso en
 ## Licencia
 
 [GPL-3.0-or-later](LICENSE) © 2026 Francisco Javier Linares.
+
+Con una **excepción de enlace** (GPL v3, §7) que permite distribuirlo junto con
+**unrar** de RARLAB ([`LICENSE-EXCEPTION`](LICENSE-EXCEPTION)), cuya licencia
+([`Sources/CUnrar/unrar/license.txt`](Sources/CUnrar/unrar/license.txt)) no es
+compatible con la GPL. unrar se usa solo para **leer** RAR; su licencia prohíbe usarlo
+para crear un compresor RAR.
 
 ## Estado y pendientes
 

@@ -2,11 +2,9 @@ import XCTest
 import ArchiveBrowser
 @testable import FilePackrModel
 
-/// La libarchive del sistema **no descifra RAR** (verificado: ni con la clave correcta; ver
-/// `docs/fixtures/`). Estos tests fijan la UX que el modelo ofrece ante un RAR cifrado: en vez de
-/// pedir una contraseña que nunca funcionará (bucle sin salida) o fallar con "contraseña
-/// incorrecta", se lanza `ArchiveDocumentError.encryptionUnsupported`, que la vista traduce a un
-/// mensaje claro. Un RAR **sin** cifrar debe seguir abriéndose y extrayéndose con normalidad.
+/// RAR cifrado vía unrar: el modelo ofrece el mismo flujo de contraseña que ZIP/7z. Con cabeceras
+/// cifradas pide la clave **al abrir**; con solo los datos cifrados abre, marca las entradas como
+/// bloqueadas y pide la clave **al extraer**. Clave real de los fixtures: "clave123".
 @MainActor
 final class RarEncryptionTests: XCTestCase {
 
@@ -40,39 +38,41 @@ final class RarEncryptionTests: XCTestCase {
         return nil
     }
 
-    // MARK: - Caso A: cabeceras cifradas → falla al ABRIR (sin pedir contraseña)
+    // MARK: - Caso A: cabeceras cifradas → contraseña al ABRIR
 
-    func testEncryptedHeadersThrowsUnsupportedOnOpen() async throws {
+    func testEncryptedHeadersAsksPasswordOnOpenAndDecrypts() async throws {
         let doc = ArchiveDocument()
         let url = try fixtureURL("enc-rar5-headers")
-        do {
-            try await doc.openArchive(url)
-            XCTFail("debería lanzar encryptionUnsupported")
-        } catch ArchiveDocumentError.encryptionUnsupported(let fmt) {
-            XCTAssertEqual(fmt, .rar)
-        }
-        // No debe quedar pidiendo contraseña de apertura (evita el bucle sin salida).
+        try await doc.openArchive(url)
+        XCTAssertTrue(doc.requiresOpenPassword)
+
+        let wrong = await doc.provideOpenPassword("mala")
+        XCTAssertFalse(wrong)
+        let right = await doc.provideOpenPassword("clave123")
+        XCTAssertTrue(right)
         XCTAssertFalse(doc.requiresOpenPassword)
+
+        let node = try XCTUnwrap(firstFile(in: doc.roots) { $0.name == "hola.txt" })
+        let dest = tempDir.appendingPathComponent("hola.txt")
+        try await doc.performExtraction(of: doc.exportPlan(for: node), to: dest, overwrite: true)
+        XCTAssertEqual(try Data(contentsOf: dest), Data("Hola mundo rar".utf8))
     }
 
-    // MARK: - Caso B: solo datos cifrados → abre y lista, falla al EXTRAER
+    // MARK: - Caso B: solo datos cifrados → abre y lista, contraseña al EXTRAER
 
-    func testEncryptedDataThrowsUnsupportedOnExtract() async throws {
+    func testEncryptedDataAsksEntryPasswordAndExtracts() async throws {
         let doc = ArchiveDocument()
         let url = try fixtureURL("enc-rar5-data")
-        // Se abre sin señal de cifrado (libarchive no lo marca) → no pide contraseña.
         try await doc.openArchive(url)
-        XCTAssertFalse(doc.requiresEntryPassword)
-        let node = try XCTUnwrap(firstFile(in: doc.roots))
+        XCTAssertTrue(doc.requiresEntryPassword)
 
-        let plan = doc.exportPlan(for: node)
-        let dest = tempDir.appendingPathComponent(node.name)
-        do {
-            try await doc.performExtraction(of: plan, to: dest, overwrite: true)
-            XCTFail("debería lanzar encryptionUnsupported")
-        } catch ArchiveDocumentError.encryptionUnsupported(let fmt) {
-            XCTAssertEqual(fmt, .rar)
-        }
+        XCTAssertFalse(doc.provideEntryPassword("mala"))
+        XCTAssertTrue(doc.provideEntryPassword("clave123"))
+
+        let node = try XCTUnwrap(firstFile(in: doc.roots) { $0.name == "hola.txt" })
+        let dest = tempDir.appendingPathComponent("hola.txt")
+        try await doc.performExtraction(of: doc.exportPlan(for: node), to: dest, overwrite: true)
+        XCTAssertEqual(try Data(contentsOf: dest), Data("Hola mundo rar".utf8))
     }
 
     // MARK: - Control: un RAR SIN cifrar no se ve afectado por el mapeo

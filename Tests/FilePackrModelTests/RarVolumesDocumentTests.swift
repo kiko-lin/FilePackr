@@ -6,7 +6,7 @@ import ArchiveBrowser
 /// conjunto **multivolumen nativo** (creado por WinRAR/`rar`, no por FilePackr) debía fallar
 /// con "No se pudo leer el archivo." porque `VolumeStore` solo reconocía el esquema propio
 /// (`nombre_001.ext`). Ahora `ArchiveDocument.openArchive` detecta también los esquemas nativos
-/// de RAR (`RarVolumes`) y los abre vía `archive_read_open_filenames`.
+/// de RAR (`RarVolumes`) y los abre con unrar desde el primer volumen.
 @MainActor
 final class RarVolumesDocumentTests: XCTestCase {
 
@@ -68,7 +68,7 @@ final class RarVolumesDocumentTests: XCTestCase {
     }
 
     /// El camino real de "Extraer"/"Extraer todo"/arrastrar al Finder (`ExportPlan.writeContents`
-    /// → `LibArchiveCodec.extractAll`) también debe funcionar, incluida la entrada que cruza el
+    /// → `RarCodec.extractAll`) también debe funcionar, incluida la entrada que cruza el
     /// límite de volumen — es el que fallaba en el bug original (no solo listar).
     /// Si falta el segundo volumen (nombre no reconocido al lado, o borrado, o lo que sea), el
     /// documento no debe fingir que está completo: `incompleteVolumes` avisa y `roots` refleja
