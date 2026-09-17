@@ -129,7 +129,6 @@ final class FileOutlineView: NSOutlineView {
         panel.dataSource = coordinator
         panel.delegate = coordinator
         panel.reloadData()
-        panel.currentPreviewItemIndex = coordinator?.qlStartIndex ?? 0
     }
     override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {}
 }
@@ -140,7 +139,8 @@ extension ArchiveOutlineView {
     // Xcode 26 lo infiere del SDK; Xcode 16 (CI) no, y sin esto la app no compila allí.
     @MainActor
     final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate,
-                             NSFilePromiseProviderDelegate, QLPreviewPanelDataSource, NSTextFieldDelegate {
+                             NSFilePromiseProviderDelegate, QLPreviewPanelDataSource, QLPreviewPanelDelegate,
+                             NSTextFieldDelegate {
         var doc: ArchiveDocument
         var onExtract: (FileNode) -> Void
         var onNeedPassword: () -> Void
@@ -153,15 +153,34 @@ extension ArchiveOutlineView {
         private var draggedNodes: [FileNode] = []
         private var isSyncingSelection = false
 
-        // Quick Look
+        // Quick Look: el panel muestra los **ficheros seleccionados** (como Finder en vista de
+        // lista) y se rehace al cambiar la selección.
         private var qlPlans: [ExportPlan] = []
         private var qlCache: [Int: URL] = [:]
         /// Índices que se están materializando en segundo plano (evita relanzar el trabajo si
         /// Quick Look vuelve a pedir el mismo elemento mientras se descomprime).
         private var qlMaterializing: Set<Int> = []
         /// Umbral para materializar en el acto (rápido, sin parpadeo) vs. en segundo plano.
-        private let qlInlineLimit: Int64 = 16 * 1024 * 1024
-        var qlStartIndex = 0
+        private let qlInlineLimit: Int64 = 1024 * 1024
+        /// Tamaño fijo del panel mientras un elemento **tarda** en cargar (más de 0,6 s). Sin
+        /// contenido, Quick Look conserva el tamaño de lo último que mostró, así que el mismo
+        /// fichero salía cada vez con uno distinto.
+        private let qlLoadingSize = NSSize(width: 720, height: 480)
+        /// Elemento cuyo panel de carga ya se dimensionó (para no pelear con Quick Look ni con el
+        /// usuario si redimensiona mientras espera).
+        private var qlLoadingSized: (generation: Int, index: Int)?
+        /// Sube cada vez que se rehace la lista: una materialización en segundo plano de una lista
+        /// anterior no debe colarse en la actual (los índices ya no corresponden).
+        private var qlGeneration = 0
+        /// Cola propia para descomprimir previsualizaciones: al cambiar la selección se cancelan
+        /// las pendientes y la que está en curso (navegar deprisa con ↑/↓ no debe encolar la
+        /// descompresión de cada fila por la que se pasa).
+        private let qlQueue: OperationQueue = {
+            let queue = OperationQueue()
+            queue.qualityOfService = .userInitiated
+            queue.maxConcurrentOperationCount = 1
+            return queue
+        }()
 
         /// Cola **de fondo** para cumplir las promesas de fichero del Finder (extraer al
         /// soltar). Antes era `.main`, lo que descomprimía en el hilo principal y bloqueaba la
@@ -382,6 +401,12 @@ extension ArchiveOutlineView {
             guard !isSyncingSelection, let outline else { return }
             let ids = outline.selectedRowIndexes.compactMap { (outline.item(atRow: $0) as? FileNode)?.id }
             doc.selectedIDs = Set(ids)
+            // Con Quick Look abierto, la previsualización sigue a la selección (↑/↓ en la lista).
+            if QLPreviewPanel.sharedPreviewPanelExists(), let panel = QLPreviewPanel.shared(),
+               panel.isVisible, panel.dataSource === self {
+                loadQuickLookItems()
+                panel.reloadData()
+            }
         }
 
         func syncSelection(_ outline: NSOutlineView) {
@@ -655,45 +680,115 @@ extension ArchiveOutlineView {
                 panel.orderOut(nil)
                 return
             }
-            guard let outline, outline.selectedRow >= 0,
-                  let node = outline.item(atRow: outline.selectedRow) as? FileNode, !node.isDirectory else { return }
+            guard let outline, outline.selectedRowIndexes.contains(where: {
+                (outline.item(atRow: $0) as? FileNode)?.isDirectory == false
+            }) else { return }
             // Si el archivo está cifrado y aún no tenemos la contraseña, pídela.
             if doc.requiresEntryPassword { onNeedPassword(); return }
-            let siblings = doc.siblingFiles(of: node)
-            qlPlans = siblings.map { doc.exportPlan(for: $0) }
-            qlCache = [:]
-            qlStartIndex = siblings.firstIndex { $0.id == node.id } ?? 0
-            // El índice se fija al tomar el control (beginPreviewPanelControl), para
-            // que el panel no muestre primero otro elemento.
+            loadQuickLookItems()
             panel.makeKeyAndOrderFront(nil)
+        }
+
+        /// Rehace la lista del panel con los ficheros seleccionados, en el orden de la tabla.
+        /// Con varios, ←/→ los recorren dentro del panel.
+        private func loadQuickLookItems() {
+            guard let outline else { return }
+            let files = outline.selectedRowIndexes
+                .compactMap { outline.item(atRow: $0) as? FileNode }
+                .filter { !$0.isDirectory }
+            qlPlans = files.map { doc.exportPlan(for: $0) }
+            qlCache = [:]
+            qlMaterializing = []
+            qlLoadingSized = nil
+            qlGeneration += 1
+            qlQueue.cancelAllOperations()
+        }
+
+        /// ↑/↓ con el panel delante: se reenvían a la tabla, que cambia la selección y con ella
+        /// la previsualización. El resto de teclas (←/→ entre varios seleccionados, espacio…)
+        /// las gestiona el propio panel.
+        func previewPanel(_ panel: QLPreviewPanel!, handle event: NSEvent!) -> Bool {
+            guard let outline, let event, event.type == .keyDown,
+                  event.keyCode == 125 || event.keyCode == 126 else { return false }   // ↓ / ↑
+            outline.keyDown(with: event)
+            return true
         }
 
         func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int { qlPlans.count }
 
         func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
-            if let url = qlCache[index] { return url as NSURL }
             let plan = qlPlans[index]
-            // Ficheros pequeños: materializar al momento (preview instantáneo, sin parpadeo).
-            // Grandes: descomprimir en segundo plano para no bloquear el hilo principal,
-            // devolviendo un marcador y recargando el panel al terminar.
-            if plan.byteCount() <= qlInlineLimit {
+            if let url = qlCache[index] { return QuickLookItem(url: url, title: plan.name) }
+            // En el hilo principal solo lo trivial: ficheros pequeños de formatos de **acceso
+            // directo** (ZIP/tar…). En 7z/RAR sacar un fichero pequeño puede obligar a descomprimir
+            // todo lo anterior (bloques sólidos) → bola de colores; esos, y los grandes, van en
+            // segundo plano. Mientras, el elemento va sin URL y Quick Look pinta su propio
+            // indicador de carga; al terminar se recarga el panel.
+            if !doc.format.usesLibArchive, plan.byteCount() <= qlInlineLimit {
                 let url = (try? plan.materialize()) ?? URL(fileURLWithPath: "/dev/null")
                 qlCache[index] = url
-                return url as NSURL
+                return QuickLookItem(url: url, title: plan.name)
             }
             if !qlMaterializing.contains(index) {
                 qlMaterializing.insert(index)
-                promiseQueue.addOperation {
-                    let url = (try? plan.materialize()) ?? URL(fileURLWithPath: "/dev/null")
+                let generation = qlGeneration
+                let operation = BlockOperation()
+                operation.addExecutionBlock { [unowned operation] in
+                    guard !operation.isCancelled else { return }
+                    let materialized = try? plan.materialize(isCancelled: { operation.isCancelled })
+                    guard !operation.isCancelled else { return }
+                    let url = materialized ?? URL(fileURLWithPath: "/dev/null")
                     Task { @MainActor in
+                        guard generation == self.qlGeneration else { return }
                         self.qlCache[index] = url
                         self.qlMaterializing.remove(index)
                         QLPreviewPanel.shared()?.reloadData()
                     }
                 }
+                qlQueue.addOperation(operation)
             }
-            return URL(fileURLWithPath: "/dev/null") as NSURL
+            if panel.currentPreviewItemIndex == index,
+               qlLoadingSized.map({ $0.generation != qlGeneration || $0.index != index }) ?? true {
+                qlLoadingSized = (qlGeneration, index)
+                // Solo si de verdad tarda: una carga rápida no debe pasar por el tamaño de carga y
+                // saltar enseguida al del contenido (dos cambios de tamaño seguidos).
+                let generation = qlGeneration
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    guard generation == self.qlGeneration, self.qlCache[index] == nil,
+                          panel.currentPreviewItemIndex == index else { return }
+                    self.applyLoadingSize(to: panel)
+                }
+            }
+            return QuickLookItem(url: nil, title: plan.name)
+        }
+
+        /// Pone el panel al tamaño de carga, centrado donde estaba y dentro de la pantalla.
+        private func applyLoadingSize(to panel: QLPreviewPanel) {
+            guard panel.isVisible else { return }
+            let old = panel.frame
+            var frame = NSRect(x: old.midX - qlLoadingSize.width / 2, y: old.midY - qlLoadingSize.height / 2,
+                               width: qlLoadingSize.width, height: qlLoadingSize.height)
+            if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame {
+                frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+                frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+            }
+            panel.setFrame(frame, display: true, animate: false)
         }
     }
 }
 
+/// Elemento de Quick Look con **título propio**: el nombre del fichero dentro del archivo, no el
+/// del temporal. `url` es `nil` mientras el fichero se descomprime (Quick Look muestra entonces
+/// su propio indicador de carga).
+final class QuickLookItem: NSObject, QLPreviewItem {
+    private let url: URL?
+    private let title: String
+
+    init(url: URL?, title: String) {
+        self.url = url
+        self.title = title
+    }
+
+    var previewItemURL: URL! { url }
+    var previewItemTitle: String! { title }
+}

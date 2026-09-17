@@ -26,12 +26,17 @@ public struct ExportPlan: Sendable {
     }
 
     /// Extrae el contenido a una carpeta temporal y devuelve la URL resultante.
-    nonisolated public func materialize() throws -> URL {
+    nonisolated public func materialize(isCancelled: @escaping () -> Bool = { false }) throws -> URL {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("FilePackrExport-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         let destination = base.appendingPathComponent(name)
-        try writeContents(to: destination)
+        do {
+            try writeContents(to: destination, isCancelled: isCancelled)
+        } catch {
+            try? FileManager.default.removeItem(at: base)
+            throw error
+        }
         return destination
     }
 

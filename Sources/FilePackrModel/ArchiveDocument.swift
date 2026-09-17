@@ -750,12 +750,6 @@ public final class ArchiveDocument: ObservableObject {
     /// Todos los nodos seleccionados (para borrado/extracción en lote).
     public func selectedNodes() -> [FileNode] { selectedIDs.compactMap { node(with: $0) } }
 
-    /// Ficheros (no carpetas) hermanos de `node`, en orden, para navegar en Quick Look.
-    public func siblingFiles(of node: FileNode) -> [FileNode] {
-        let siblings = node.parent?.children ?? roots
-        return siblings.filter { !$0.isDirectory }
-    }
-
     public func node(with id: FileNode.ID?) -> FileNode? {
         guard let id else { return nil }
         func search(_ nodes: [FileNode]) -> FileNode? {
