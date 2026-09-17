@@ -96,6 +96,10 @@ struct SaveOptionsSheet: View {
                 }
             }
             .formStyle(.grouped)
+            // Alto natural, sin scroll: un Form agrupado se encoge al alto de la ventana principal
+            // y saca barra de desplazamiento si esta es baja. Así la hoja pide siempre lo que ocupa.
+            .scrollDisabled(true)
+            .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button(loc("button.cancel"), role: .cancel, action: onCancel).keyboardShortcut(.cancelAction)
