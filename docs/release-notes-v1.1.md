@@ -25,6 +25,8 @@ Interfaz nativa (SwiftUI + AppKit) con un navegador de ficheros tipo Finder.
   Mientras un fichero grande se descomprime se muestra un indicador de carga (antes salía
   «null») y la app no se queda bloqueada.
 - **Nueva ventana «Acerca de»** — más ancha y con los créditos y licencias de terceros.
+- **Opciones de exportar/guardar sin scroll** — la hoja muestra todas las opciones aunque la
+  ventana principal sea baja.
 
 ---
 
@@ -39,7 +41,7 @@ Interfaz nativa (SwiftUI + AppKit) con un navegador de ficheros tipo Finder.
 **SHA-256** del DMG (para verificar la descarga):
 
 ```
-39af108012ac213c385c6bd8796dfbe20a0c5676167c4c9f9818629794dc215f
+b303a15d681e9b4f3b0764d5930d2dc002ce911890146770c77e5e14b16726e6
 ```
 
 Verifícalo tras descargar con:

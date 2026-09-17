@@ -787,8 +787,9 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
       `docs/release-notes-v1.0.md`. Sigue pendiente la vía notarizada (arriba).
       **Release v1.1 (2026-09-17)**: `MARKETING_VERSION` 1.1, `.dmg --unsigned` universal (5,3 MB),
       notas en `docs/release-notes-v1.1.md`; README apunta a v1.1. **Republicada** el mismo día
-      (build 3) para incluir Quick Look tipo Finder y la validación rápida de contraseña: se borró
-      la release y el tag `v1.1` y se recrearon sobre el commit nuevo con el `.dmg` regenerado. Para la siguiente:
+      (build 3) para incluir Quick Look tipo Finder y la validación rápida de contraseña, y otra vez
+      (build 4) con la hoja de exportar sin scroll: cada vez se borró la release y el tag `v1.1` y se
+      recrearon sobre el commit nuevo con el `.dmg` regenerado. Para la siguiente:
       subir versión en el pbxproj (4 configs), `scripts/release.sh --unsigned`, notas con SHA-256,
       actualizar enlaces del README, tag + `gh release create` con el `.dmg`.
 
