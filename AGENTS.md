@@ -22,7 +22,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
 
 - **Tests**: `swift test` (rápido, sin Xcode) corre la **suite completa**: motor
   (`ArchiveBrowserTests`) + modelo (`FilePackrModelTests`, el documento/coordinadores, en SPM
-  tras la 4ª auditoría). 248 tests. Ya **no** existe el target `FilePackrTests` en el `.pbxproj`.
+  tras la 4ª auditoría). 262 tests. Ya **no** existe el target `FilePackrTests` en el `.pbxproj`.
   - Las clases @MainActor de `FilePackrModelTests` usan `setUp`/`tearDown` **`async`** (no
     síncronos) y **no llaman a `super`**: así compilan tanto en Xcode 26 como en el XCTest del
     runner de CI (Xcode 16), donde esos métodos son `nonisolated` y enviar `self` no-Sendable da
@@ -72,7 +72,7 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     `ZipWriter` (escribe; `build` en memoria y `write` en streaming a `FileHandle`;
     ZIP64; `ZipEncryption .none/.zipCrypto/.aes256`), `ZipCrypto`, `ZipAES`,
     `Deflate` (framework Compression), `CRC32`. También `Tar`, `Gzip`, `Xz`,
-    `Bzip2`, `LibArchive`, `Volumes`.
+    `Bzip2`, `LibArchive`, `Unrar`, `Volumes`.
   - **`CancellationCheck`** (`Cancellation.swift`): señal cooperativa de cancelación de la
     **compresión**. Cada escritor la consulta en sus bucles (por entrada/por trozo) y lanza
     `CancellationError`. Entra por **parámetro** donde hay bucle interno por entrada
@@ -90,19 +90,24 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     **leer** (`open` → `ArchiveReadResult`, refina `.gz`→`.tar.gz`) y **extraer una
     entrada** (`entryData`) de cada formato, y **extraer varias** (`extractAll`, un solo
     recorrido con `onSkip` opcional para reportar el tamaño de las entradas saltadas —
-    solo lo usa `LibArchiveCodec`, cuyo iterador es secuencial). Antes era un `switch`
+    solo lo usan `LibArchiveCodec` y `RarCodec`, de iterador secuencial). Antes era un `switch`
     repetido por el documento. Codecs: `ZipCodec`, `TarCodec`, `SingleFileCodec`,
-    `LibArchiveCodec`. La **escritura** no va por aquí (rutas dispares: ver `ArchiveSaver`).
-  - **`ArchiveContainer`** (`.data(Data)` / `.rarVolumes([URL])`): el contenedor de un
-    archivo abierto, generalizado más allá de `Data` para los volúmenes RAR **nativos**
-    (WinRAR/`rar`, ver `RarVolumes`) — a diferencia del esquema propio de FilePackr, esos
-    no se pueden concatenar (cada volumen lleva su cabecera intercalada), así que se abren
-    con `archive_read_open_filenames` de libarchive. `RAR5TrailingServiceBlock` recorta un
-    bloque de servicio QuickOpen obsoleto que si no desincroniza el lector.
+    `LibArchiveCodec`, `RarCodec`. La **escritura** no va por aquí (rutas dispares: ver `ArchiveSaver`).
+  - **`ArchiveContainer`** (`.data(Data)` / `.rarFile(URL)`): el contenedor de un archivo
+    abierto. RAR va aparte porque unrar **solo abre ficheros**: se guarda la URL del `.rar` en
+    disco (primer volumen si es multivolumen nativo —unrar encuentra solo los siguientes— o el
+    temporal unido del esquema propio). `RarCodec.open(data)` no aplica: el documento abre RAR
+    con `Unrar.listEntries(at:)` directamente.
+  - **`Unrar`** + target **`CUnrar`**: unrar 7.3.1 de RARLAB **vendorizado** sin modificar en
+    `Sources/CUnrar/unrar/` (ver su README: origen, SHA-256, cómo actualizar) tras una capa C
+    propia (`fp_unrar.h/.cpp`: sin structs empaquetadas ni `wchar_t` hacia Swift). Datos en modo
+    *test* por callback → unrar **nunca escribe a disco** (el ZIP-Slip lo siguen decidiendo las
+    defensas del modelo). Acceso serializado con un lock (unrar guarda errores en un global).
+    Rechaza diccionarios por encima del máximo por defecto (`UCM_LARGEDICT`).
   - **`VolumeStore`**: volúmenes **propios** de FilePackr sobre disco (`parts`/`gather`/
     `removeContinuations`/`split(file:)` y `joinToTemporaryFile` —concatena las partes a un
     temporal mapeado sin cargarlas en RAM), sobre el esquema de nombres de `Volumes`. No
-    confundir con `RarVolumes`/`ArchiveContainer.rarVolumes` (volúmenes RAR nativos, arriba).
+    confundir con `RarVolumes` (volúmenes RAR nativos, arriba).
   - Detección de formato en `ArchiveFormat`: `detectByExtension` (por nombre),
     `detectByMagic` (por firma) y `detect(from:contents:)` (extensión y, si no decide,
     firma). `openArchive` y la decisión abrir-vs-añadir caen a la firma si la extensión falla.
@@ -140,6 +145,30 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
     (`archiveBaseName`, `localizedErrorMessage`).
 
 ## Hecho
+
+- **Sesión 2026-09-17 (b) — abrir en disco externo tardaba mucho**: `Data(contentsOf:options:
+  .mappedIfSafe)` **no mapea** fuera del disco interno y copia el fichero entero a RAM antes de listar
+  (medido en USB: 780 MB → 5 s, +781 MB). Cambiado a `.alwaysMapped` en `ArchiveDocument.openArchive`,
+  `ZipReader.listEntries(at:)` y `VolumeStore.joinToTemporaryFile`. Tras el cambio, listar ZIP de
+  780 MB / 7z de 505 MB / RAR de 275 MB en ese disco: 0,01–0,03 s. Riesgo aceptado: arrancar el
+  cable con el archivo abierto puede dar SIGBUS.
+
+- **Sesión 2026-09-17 — RAR cifrado soportado vía unrar vendorizado** (rama
+  `feat/rar-cifrado-unrar`): libarchive no descifra RAR, así que **todo RAR** (no solo el cifrado:
+  en RAR5 con solo datos cifrados libarchive ni lo marca) pasa a `Unrar`/`RarCodec`. Flujo de
+  contraseña igual que 7z/ZIP: cabeceras cifradas → `needsOpenPassword`; solo datos → entradas
+  marcadas `isEncrypted` → `needsEntryPassword`. Eliminado `ArchiveDocumentError.
+  encryptionUnsupported` y su cadena. `ArchiveContainer.rarVolumes([URL])` → `.rarFile(URL)`.
+  Fixture `volumes.part1/part2.rar` regenerado con `MHD_NEWNUMBERING` (sin él unrar busca
+  `.part1.r00`); `volumes.rar/.r00` intactos. Tests: `UnrarTests` (motor, 14) y
+  `RarEncryptionTests` reescrito (clave correcta/incorrecta al abrir y al extraer). 262 verdes +
+  build de la app. El API de volúmenes de `LibArchive` (`listEntries(volumes:)`, `RARVolumeStream`,
+  `RAR5TrailingServiceBlock`) queda sin uso en la app; se conserva con sus tests.
+  **Licencia**: la de unrar no es compatible con la GPL → añadida excepción de enlace GPL v3 §7
+  en `LICENSE-EXCEPTION` (+ README y cabecera de `fp_unrar.h`). `LICENSE` (texto GPL) intacto.
+  Aviso en la app: `App/FilePackr/Credits.rtf` (bilingüe, con el párrafo literal que exige la
+  licencia de unrar), mostrado en una ventana **Acerca de propia** (`AboutView`, 580 pt, texto con
+  margen interior) que sustituye al panel estándar (ancho fijo, texto pegado a los bordes).
 
 - **Sesión 2026-08-12 — el progreso ya no se congela al extraer un subconjunto de RAR/7z**
   (commit `fix(progreso)` + `docs`): bug real, no solo teórico — arrastrar al Finder o
@@ -796,17 +825,16 @@ sistema; escritura solo 7z/iso/xar). Ver `README.md` para la visión general.
   extraer una entrada concreta se re-abre desde memoria y se itera hasta su ruta
   (no hay acceso aleatorio). 7z firma `37 7A BC AF 27 1C`. Riesgo bajo (API 3.x
   estable; Apple la actualiza). NO soportado: multivolumen nativo 7z (`.7z.001`).
-  **RAR cifrado NO soportado** (verificado 2026-07-01): libarchive lee/descomprime RAR4/RAR5
-  **sin cifrar**, pero **no descifra** RAR con contraseña —ni con la clave correcta— porque no
-  incorpora el `unrar` propietario de RARLAB. Sí descifra ZIP (ZipCrypto/AES) y 7z. En RAR5 con
-  solo datos cifrados libarchive ni siquiera indica `isEncrypted`. Ver `docs/fixtures/README.md`.
+  **RAR ya no va por libarchive** (2026-09-17): libarchive lee RAR sin cifrar pero **no descifra**
+  (ni con la clave correcta; en RAR5 con solo datos cifrados ni indica `isEncrypted`). Todo RAR
+  pasa por `Unrar` (unrar de RARLAB vendorizado). Ver `docs/fixtures/README.md`.
   **Volúmenes RAR nativos SÍ soportados** (2026-08-08): además del esquema propio de FilePackr
   (`Volumes`/`VolumeStore`, división por bytes concatenable), se reconocen los volúmenes que
   crean WinRAR/`rar` — `RarVolumes.parts(for:)` detecta el esquema moderno
   (`nombre.part1.rar…`, separador punto **o** guion bajo) y el legado (`nombre.rar`+`.r00…`).
   A diferencia del esquema propio, estos **no** se concatenan (cada volumen lleva su propia
-  cabecera intercalada): se abren con `archive_read_open_filenames`, expuesto como el caso
-  `.rarVolumes` de `ArchiveContainer` (junto a `.data`). Un conjunto incompleto (falta la
+  cabecera intercalada): originalmente con `archive_read_open_filenames`; desde 2026-09-17 unrar
+  abre el primer volumen (`.rarFile`) y encuentra solo los siguientes. Un conjunto incompleto (falta la
   última parte) no se descarta entero: `listEntries` devuelve lo leído hasta el corte
   (`truncated`) y la app avisa en vez de fingir que está completo. **Bug real hallado y
   corregido** (2026-08-09): un volumen RAR5 editado por WinRAR puede dejar en el bloque de
